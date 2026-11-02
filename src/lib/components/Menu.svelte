@@ -11,9 +11,15 @@
   }: { label: string; children: Snippet; size?: number; open?: boolean } = $props();
   let root: HTMLDivElement;
 
-  function onWindowPointer(e: PointerEvent) {
-    if (open && !root.contains(e.target as Node)) open = false;
-  }
+  // Only an open menu listens for taps outside it; a long list of closed menus costs nothing.
+  $effect(() => {
+    if (!open) return;
+    const outside = (e: PointerEvent) => {
+      if (!root.contains(e.target as Node)) open = false;
+    };
+    window.addEventListener("pointerdown", outside);
+    return () => window.removeEventListener("pointerdown", outside);
+  });
 
   function onKey(e: KeyboardEvent) {
     if (!open) return;
@@ -35,8 +41,6 @@
     if (open) queueMicrotask(() => root.querySelector<HTMLElement>('[role="menuitem"]')?.focus());
   });
 </script>
-
-<svelte:window onpointerdown={onWindowPointer} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="menu" bind:this={root} onkeydown={onKey}>
