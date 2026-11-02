@@ -39,6 +39,8 @@ pub struct App {
     pub secrets: Secrets,
     pub settings: Mutex<Settings>,
     pub sync_lock: tokio::sync::Mutex<()>,
+    /// Set to stop the running sync at its next file.
+    pub sync_cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
     pub index: Mutex<Index>,
     pub pending: Mutex<Option<Pending>>,
 }
@@ -61,6 +63,7 @@ impl App {
             data,
             settings: Mutex::new(settings),
             sync_lock: tokio::sync::Mutex::new(()),
+            sync_cancel: Default::default(),
             index: Mutex::new(Index::default()),
             pending: Mutex::new(None),
         }

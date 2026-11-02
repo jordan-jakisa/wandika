@@ -12,7 +12,7 @@ use crate::vault::{self, TMP_SUFFIX};
 use chrono::Local;
 use futures::{stream, StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -62,6 +62,27 @@ pub struct SyncReport {
     pub head: Option<String>,
     pub at: i64,
 }
+
+/// What a running sync tells the interface, and how it is asked to stop.
+pub struct Ctl {
+    pub cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// (phase, done, total): "checking", "downloading", "uploading", "saving".
+    pub progress: Box<dyn Fn(&str, usize, usize) + Send + Sync>,
+}
+
+impl Ctl {
+    fn check(&self) -> Result<()> {
+        if self.cancel.load(std::sync::atomic::Ordering::Relaxed) {
+            return Err(crate::error::Error::Cancelled);
+        }
+        Ok(())
+    }
+}
+
+/// Text files up to this size go into the tree request itself, saving one request each.
+const INLINE_MAX: usize = 256 * 1024;
+/// Inline text per tree request; larger change sets are sent as a chain of trees.
+const TREE_BATCH_BYTES: usize = 2 * 1024 * 1024;
 
 pub struct Paths {
     pub files: PathBuf,
@@ -219,10 +240,10 @@ async fn fetch_many(gh: &GitHub, t: &Target, head: &str, items: &[(String, Strin
         .await
 }
 
-pub async fn sync(gh: &GitHub, t: &Target, p: &Paths) -> Result<SyncReport> {
+pub async fn sync(gh: &GitHub, t: &Target, p: &Paths, ctl: &Ctl) -> Result<SyncReport> {
     let mut state = load_state(p);
     for _ in 0..4 {
-        let outcome = sync_once(gh, t, p, &mut state).await;
+        let outcome = sync_once(gh, t, p, &mut state, ctl).await;
         save_state(p, &state)?;
         if let Some(report) = outcome? {
             return Ok(report);
@@ -232,8 +253,9 @@ pub async fn sync(gh: &GitHub, t: &Target, p: &Paths) -> Result<SyncReport> {
 }
 
 /// `Ok(None)` means the branch moved under us; the caller runs it again.
-async fn sync_once(gh: &GitHub, t: &Target, p: &Paths, state: &mut SyncState) -> Result<Option<SyncReport>> {
+async fn sync_once(gh: &GitHub, t: &Target, p: &Paths, state: &mut SyncState, ctl: &Ctl) -> Result<Option<SyncReport>> {
     let mut report = SyncReport::default();
+    (ctl.progress)("checking", 0, 0);
     let Some(remote_head) = gh.head(&t.owner, &t.repo, &t.branch).await? else {
         gh.put_file(&t.owner, &t.repo, &t.branch, "Welcome.md", WELCOME.as_bytes(), "Start Wandika vault")
             .await?;
@@ -247,7 +269,9 @@ async fn sync_once(gh: &GitHub, t: &Target, p: &Paths, state: &mut SyncState) ->
     // at the same path, the GitHub version is kept beside the local one.
     if state.head.is_none() {
         let tree = gh.tree(&t.owner, &t.repo, &tree_sha).await?;
+        (ctl.progress)("downloading", 0, 0);
         let files = untar(&gh.tarball(&t.owner, &t.repo, &remote_head).await?, None)?;
+        ctl.check()?;
         let (local, _) = scan(&p.files, &BTreeMap::new(), &ignored)?;
         let mut remote = BTreeMap::new();
         for e in tree.iter().filter(|e| e.kind == "blob" && e.mode != "120000" && !ignored.file(&e.path)) {
@@ -325,6 +349,9 @@ async fn sync_once(gh: &GitHub, t: &Target, p: &Paths, state: &mut SyncState) ->
         }
     }
 
+    if !downloads.is_empty() {
+        (ctl.progress)("downloading", 0, downloads.len());
+    }
     for (path, bytes) in fetch_many(gh, t, &remote_head, &downloads).await? {
         vault::write_atomic(&vault::safe(&p.files, &path)?, &bytes)?;
         report.pulled.push(path);
@@ -389,13 +416,35 @@ async fn sync_once(gh: &GitHub, t: &Target, p: &Paths, state: &mut SyncState) ->
             uploads.push(path.clone());
         }
     }
-    let created: Vec<(String, String)> = stream::iter(uploads)
-        .map(|path| async move {
-            let bytes = std::fs::read(vault::safe(&p.files, &path)?)?;
-            let sha = gh.create_blob(&t.owner, &t.repo, &bytes).await?;
-            Ok::<_, crate::error::Error>((path, sha))
+    // Small text files (notes) travel inside the tree requests; images and other files are
+    // uploaded one by one first. Nothing on GitHub changes until the commit at the end, so a
+    // stopped sync leaves the branch as it was.
+    ctl.check()?;
+    let total = uploads.len();
+    let done = std::sync::atomic::AtomicUsize::new(0);
+    let tick = |n: usize| (ctl.progress)("uploading", n, total);
+    tick(0);
+    let mut inline: Vec<(String, String)> = Vec::new();
+    let mut binary: Vec<String> = Vec::new();
+    for path in uploads {
+        let bytes = std::fs::read(vault::safe(&p.files, &path)?)?;
+        match String::from_utf8(bytes) {
+            Ok(text) if text.len() <= INLINE_MAX => inline.push((path, text)),
+            _ => binary.push(path),
+        }
+    }
+    let created: Vec<(String, String)> = stream::iter(binary)
+        .map(|path| {
+            let (done, tick) = (&done, &tick);
+            async move {
+                ctl.check()?;
+                let bytes = std::fs::read(vault::safe(&p.files, &path)?)?;
+                let sha = gh.create_blob(&t.owner, &t.repo, &bytes).await?;
+                tick(done.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1);
+                Ok::<_, crate::error::Error>((path, sha))
+            }
         })
-        .buffer_unordered(6)
+        .buffer_unordered(8)
         .try_collect()
         .await?;
     for (path, sha) in &created {
@@ -404,6 +453,13 @@ async fn sync_once(gh: &GitHub, t: &Target, p: &Paths, state: &mut SyncState) ->
         pushed_files.insert(path.clone(), sha.clone());
         report.pushed.push(path.clone());
     }
+    let mut inline_entries: Vec<(usize, Value)> = Vec::new();
+    for (path, text) in inline {
+        let mode = modes.get(&path).cloned().unwrap_or_else(|| "100644".into());
+        pushed_files.insert(path.clone(), blob_sha(text.as_bytes()));
+        inline_entries.push((text.len(), json!({ "path": path, "mode": mode, "type": "blob", "content": text })));
+        report.pushed.push(path);
+    }
     for (path, mode) in &modes {
         if remote.contains_key(path) && !final_local.contains_key(path) {
             entries.push(json!({ "path": path, "mode": mode, "type": "blob", "sha": null }));
@@ -411,11 +467,33 @@ async fn sync_once(gh: &GitHub, t: &Target, p: &Paths, state: &mut SyncState) ->
         }
     }
 
-    if entries.is_empty() {
+    if entries.is_empty() && inline_entries.is_empty() {
         state.head = Some(remote_head.clone());
         state.files = pushed_files;
     } else {
-        let new_tree = gh.create_tree(&t.owner, &t.repo, &tree_sha, entries).await?;
+        // Trees are chained in batches, each built on the last, so a big first sync stays within
+        // GitHub's request size.
+        let mut new_tree = tree_sha.clone();
+        let mut batch = entries;
+        let mut size = 0;
+        let mut sent = done.load(std::sync::atomic::Ordering::Relaxed);
+        for (len, entry) in inline_entries {
+            if size + len > TREE_BATCH_BYTES && !batch.is_empty() {
+                ctl.check()?;
+                new_tree = gh.create_tree(&t.owner, &t.repo, &new_tree, std::mem::take(&mut batch)).await?;
+                tick(sent);
+                size = 0;
+            }
+            size += len;
+            sent += 1;
+            batch.push(entry);
+        }
+        if !batch.is_empty() {
+            ctl.check()?;
+            new_tree = gh.create_tree(&t.owner, &t.repo, &new_tree, batch).await?;
+        }
+        tick(total);
+        (ctl.progress)("saving", 0, 0);
         let n = report.pushed.len();
         let message = format!(
             "Update {n} {} from Wandika on {}",

@@ -114,13 +114,13 @@ async fn remote_for(app: &App, owner: String, repo: String) -> Result<Target> {
 
 /// Opens a GitHub repository as a vault, downloading it on first use.
 #[tauri::command]
-pub async fn vault_open(app: S<'_>, owner: String, repo: String) -> Result<SyncReport> {
+pub async fn vault_open(app: S<'_>, handle: AppHandle, owner: String, repo: String) -> Result<SyncReport> {
     let target = remote_for(&app, owner, repo).await?;
     let id = format!("github/{}/{}", target.owner, target.repo);
     let existing = app.settings().known.into_iter().find(|k| k.id == id);
     let vault = existing.unwrap_or(VaultConfig { id, name: target.repo.clone(), folder: None, remote: None });
     app.update_settings(|s| s.vault = Some(VaultConfig { remote: Some(target), ..vault }))?;
-    sync_now(app).await
+    sync_now(app, handle).await
 }
 
 /// A vault that lives only on this device: in the app's storage, or in a folder chosen on the Mac.
@@ -177,15 +177,22 @@ pub async fn vault_close(app: S<'_>) -> Result<()> {
 
 /// Connects the open local vault to a GitHub repository. The first sync keeps both sides.
 #[tauri::command]
-pub async fn vault_connect_remote(app: S<'_>, owner: String, repo: String) -> Result<SyncReport> {
+pub async fn vault_connect_remote(app: S<'_>, handle: AppHandle, owner: String, repo: String) -> Result<SyncReport> {
     let mut vault = app.vault()?;
     if vault.remote.is_some() {
         return Err(msg("This vault already syncs with GitHub. Disconnect it first."));
     }
+    let local = vault.clone();
     vault.remote = Some(remote_for(&app, owner, repo).await?);
     let _ = std::fs::remove_file(app.paths()?.state);
     app.update_settings(|s| s.vault = Some(vault))?;
-    sync_now(app).await
+    let result = sync_now(app.clone(), handle).await;
+    // Stopped or failed before the first sync finished: the vault stays local, as it was.
+    if result.is_err() {
+        let _ = std::fs::remove_file(app.paths()?.state);
+        app.update_settings(|s| s.vault = Some(local))?;
+    }
+    result
 }
 
 /// Stops syncing. The files stay; the vault carries on as a local one.
@@ -198,16 +205,37 @@ pub async fn vault_disconnect_remote(app: S<'_>) -> Result<()> {
 }
 
 #[tauri::command]
-pub async fn sync_now(app: S<'_>) -> Result<SyncReport> {
+pub async fn sync_now(app: S<'_>, handle: AppHandle) -> Result<SyncReport> {
     let target = app.target()?;
     let gh = app.github()?;
     let paths = app.paths()?;
     let Ok(_guard) = app.sync_lock.try_lock() else {
         return Err(crate::error::Error::SyncBusy);
     };
-    let report = sync::sync(&gh, &target, &paths).await;
+    app.sync_cancel.store(false, std::sync::atomic::Ordering::Relaxed);
+    // Progress goes to the interface at most ten times a second, plus every phase change.
+    let last = std::sync::Mutex::new((String::new(), std::time::Instant::now()));
+    let ctl = sync::Ctl {
+        cancel: app.sync_cancel.clone(),
+        progress: Box::new(move |phase, done, total| {
+            let mut l = last.lock().unwrap();
+            if l.0 == phase && l.1.elapsed() < std::time::Duration::from_millis(100) && done < total {
+                return;
+            }
+            *l = (phase.to_string(), std::time::Instant::now());
+            let _ = handle.emit("sync-progress", json!({ "phase": phase, "done": done, "total": total }));
+        }),
+    };
+    let report = sync::sync(&gh, &target, &paths, &ctl).await;
     changed(&app);
     report
+}
+
+/// Stops the running sync at its next file. Nothing on GitHub changes until a sync commits.
+#[tauri::command]
+pub async fn sync_cancel(app: S<'_>) -> Result<()> {
+    app.sync_cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+    Ok(())
 }
 
 // Notes

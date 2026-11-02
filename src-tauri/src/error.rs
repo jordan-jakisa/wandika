@@ -19,6 +19,8 @@ pub enum Error {
     Locked,
     #[error("A sync is already running.")]
     SyncBusy,
+    #[error("Sync stopped.")]
+    Cancelled,
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
@@ -46,6 +48,10 @@ impl Error {
             Error::Offline => ("offline", self.to_string()),
             Error::Locked => ("locked", self.to_string()),
             Error::SyncBusy => ("sync_busy", self.to_string()),
+            Error::Cancelled => (
+                "cancelled",
+                "Sync stopped. Nothing changed on GitHub; the next sync picks up from here.".into(),
+            ),
             Error::GitHub { status, message } => {
                 let lower = message.to_lowercase();
                 match status {
