@@ -22,7 +22,8 @@ export function setLines(view: EditorView, kind: LineKind) {
     const end = tx.changes.mapPos(c.to, 1);
     return EditorSelection.range(start, end);
   });
-  view.dispatch(tx, { selection: EditorSelection.create(ranges) });
+  // One spec: the selection then refers to the changed document and is not mapped a second time.
+  view.dispatch({ changes, selection: EditorSelection.create(ranges) });
   view.focus();
   return true;
 }
