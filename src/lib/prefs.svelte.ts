@@ -92,6 +92,8 @@ class PrefsState {
     for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
       meta.content = mode === "dark" ? "#151917" : "#F2F3EF";
     }
+    // Android's status and navigation bar icons follow the page (see MainActivity.kt).
+    (window as { WandikaAndroid?: { setDark(dark: boolean): void } }).WandikaAndroid?.setDark(mode === "dark");
     // Native menus and dialogs follow too.
     if ("__TAURI_INTERNALS__" in window) {
       const theme = this.value.theme === "system" ? null : this.value.theme;
