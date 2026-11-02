@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { Maximize } from "@lucide/svelte";
+  import { Maximize, SlidersHorizontal } from "@lucide/svelte";
   import { onDestroy, untrack } from "svelte";
   import { app } from "../app.svelte";
   import { buildGraph, type GLink, type GNode } from "../graph";
+  import { ACCENTS, prefs } from "../prefs.svelte";
 
   let canvas: HTMLCanvasElement;
   let box: HTMLDivElement;
@@ -10,7 +11,17 @@
   // svelte-ignore state_referenced_locally
   let local = $state(app.graphLocal && !!app.graphFocus);
   let ghosts = $state(false);
+  let orphans = $state(true);
+  let byFolder = $state(true);
+  let panel = $state(false);
+  /** Display settings, like Obsidian's graph sliders. */
+  let dotSize = $state(1);
+  let linkDistance = $state(50);
+  let repel = $state(110);
   let depth = $state(1);
+  /** Folders in colour order, biggest first; the legend and the dots share it. */
+  let groups = $state<{ name: string; count: number; color: string }[]>([]);
+  let spotlight = $state<string | null>(null);
   let counts = $state({ nodes: 0, links: 0 });
   let loadError = $state<string | null>(null);
 
@@ -23,6 +34,8 @@
   let sim: { stop(): void; alpha(a: number): any; alphaTarget(a: number): any; restart(): any } | null = null;
   let frame = 0;
   let colors = { node: "", ghost: "", line: "", accent: "", text: "", bg: "", dim: "" };
+  let groupColor = new Map<string, string>();
+  let hubs = new Set<string>();
   let width = 0;
   let height = 0;
   let fitted = false;
@@ -33,9 +46,30 @@
     const css = getComputedStyle(document.documentElement);
     const v = (n: string) => css.getPropertyValue(n).trim();
     colors = { node: v("--graphite"), ghost: v("--rule"), line: v("--rule"), accent: v("--papyrus"), text: v("--ink"), bg: v("--sheet"), dim: v("--rule") };
+    colourGroups();
   }
 
-  const radius = (n: GNode) => 3.5 + Math.sqrt(n.degree) * 1.8;
+  /** The eight biggest folders get the accent palette plus amber and red; the rest stay grey. */
+  function colourGroups() {
+    const css = getComputedStyle(document.documentElement);
+    const dark = prefs.mode === "dark";
+    const palette = [
+      ...ACCENTS.filter((a) => a.id !== "graphite").map((a) => (dark ? a.dark : a.light)),
+      css.getPropertyValue("--amber").trim(),
+      css.getPropertyValue("--alarm").trim(),
+    ];
+    const counts = new Map<string, number>();
+    for (const n of nodes) if (!n.ghost) counts.set(n.group, (counts.get(n.group) ?? 0) + 1);
+    const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+    groupColor = new Map();
+    groups = ranked.slice(0, palette.length).map(([name, count], i) => {
+      groupColor.set(name, palette[i]);
+      return { name, count, color: palette[i] };
+    });
+  }
+
+  const radius = (n: GNode) => (3 + Math.sqrt(n.degree) * 1.7) * dotSize;
+  const fillOf = (n: GNode) => (byFolder ? (groupColor.get(n.group) ?? colors.node) : colors.node);
 
   function draw() {
     frame = 0;
@@ -49,7 +83,7 @@
 
     const lit = hover ? neighbours.get(hover.id) ?? new Set<string>() : null;
     const q = filter.trim().toLowerCase();
-    const matches = (n: GNode) => !q || n.title.toLowerCase().includes(q);
+    const matches = (n: GNode) => (!q || n.title.toLowerCase().includes(q)) && (spotlight === null || n.group === spotlight);
 
     ctx.lineWidth = 1 / view.k;
     for (const l of links) {
@@ -75,23 +109,41 @@
         ctx.strokeStyle = colors.node;
         ctx.stroke();
       } else {
-        ctx.fillStyle = n.id === app.current || n.id === app.graphFocus || n === hover ? colors.accent : colors.node;
+        const focus = n.id === app.current || n.id === app.graphFocus;
+        ctx.fillStyle = n === hover ? colors.accent : fillOf(n);
         ctx.fill();
+        if (focus) {
+          // The note you came from gets a ring, so it stands out in any colour scheme.
+          ctx.lineWidth = 2 / view.k;
+          ctx.strokeStyle = colors.text;
+          ctx.beginPath();
+          ctx.arc(n.x, n.y!, radius(n) + 3 / view.k, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.lineWidth = 1 / view.k;
+        }
       }
     }
 
-    // Labels: everyone when zoomed in, otherwise the hovered note and its neighbours.
+    // Labels: the most-linked notes always, everyone else fading in as you zoom, plus whatever is
+    // hovered or matched. A halo in the background colour keeps them readable over lines.
     ctx.font = `${12 / view.k}px ${getComputedStyle(document.documentElement).getPropertyValue("--font-ui")}`;
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
+    ctx.lineJoin = "round";
+    const zoomFade = Math.min(1, Math.max(0, (view.k - 0.9) / 0.6));
     for (const n of nodes) {
       if (n.x == null) continue;
-      const show = view.k > 1.3 || n === hover || lit?.has(n.id) || (q && matches(n)) || nodes.length < 25;
-      if (!show) continue;
+      const pinned = n === hover || lit?.has(n.id) || (q && matches(n)) || nodes.length < 25 || n.id === app.graphFocus;
+      const base = pinned ? 1 : hubs.has(n.id) && view.k > 0.45 ? 0.85 : zoomFade;
+      if (base <= 0.02) continue;
       const faded = (lit && n !== hover && !lit.has(n.id)) || !matches(n);
-      ctx.globalAlpha = faded ? 0.25 : 1;
+      ctx.globalAlpha = faded ? Math.min(base, 0.2) : base;
+      const y = n.y! + radius(n) + 3 / view.k;
+      ctx.lineWidth = 3 / view.k;
+      ctx.strokeStyle = colors.bg;
+      ctx.strokeText(n.title, n.x, y);
       ctx.fillStyle = colors.text;
-      ctx.fillText(n.title, n.x, n.y! + radius(n) + 3 / view.k);
+      ctx.fillText(n.title, n.x, y);
     }
     ctx.globalAlpha = 1;
   }
@@ -114,7 +166,7 @@
   async function rebuild() {
     sim?.stop();
     const focus = local ? app.graphFocus : null;
-    const g = buildGraph(app.titles, { ghosts, focus, depth });
+    const g = buildGraph(app.titles, { ghosts, orphans: local || orphans, focus, depth });
     // Keep positions of notes already on screen so the graph doesn't jump when it changes.
     const old = new Map(nodes.map((n) => [n.id, n]));
     for (const n of g.nodes) {
@@ -124,6 +176,8 @@
     nodes = g.nodes;
     links = g.links;
     counts = { nodes: nodes.length, links: links.length };
+    hubs = new Set([...nodes].sort((a, b) => b.degree - a.degree).slice(0, 12).filter((n) => n.degree > 2).map((n) => n.id));
+    colourGroups();
     neighbours = new Map();
     for (const l of links) {
       const [s, t] = [l.source as string, l.target as string];
@@ -142,8 +196,8 @@
     touched = false;
     const simulation = d3
       .forceSimulation(nodes)
-      .force("link", d3.forceLink<GNode, GLink>(links).id((d) => d.id).distance(50).strength(0.6))
-      .force("charge", d3.forceManyBody<GNode>().strength(-110).distanceMax(400))
+      .force("link", d3.forceLink<GNode, GLink>(links).id((d) => d.id).distance(linkDistance).strength(0.6))
+      .force("charge", d3.forceManyBody<GNode>().strength(-repel).distanceMax(500))
       .force("center", d3.forceCenter(0, 0).strength(0.05))
       .force("x", d3.forceX<GNode>(0).strength(0.04))
       .force("y", d3.forceY<GNode>(0).strength(0.04))
@@ -169,6 +223,7 @@
     void app.titles;
     void local;
     void ghosts;
+    void orphans;
     void depth;
     void app.graphFocus;
     untrack(() => void rebuild());
@@ -176,7 +231,23 @@
 
   $effect(() => {
     void filter;
+    void spotlight;
+    void byFolder;
+    void dotSize;
     untrack(redraw);
+  });
+
+  // Moving a force slider re-heats the layout instead of rebuilding it.
+  $effect(() => {
+    const [distance, strength] = [linkDistance, repel];
+    untrack(() => {
+      const s = sim as unknown as { force(name: string): any; alpha(a: number): { restart(): void } } | null;
+      if (!s) return;
+      s.force("link")?.distance(distance);
+      s.force("charge")?.strength(-strength);
+      touched = false;
+      s.alpha(0.4).restart();
+    });
   });
 
   $effect(() => {
@@ -348,7 +419,9 @@
         </select>
       </label>
     {/if}
-    <label class="opt"><input type="checkbox" bind:checked={ghosts} /> Notes not written yet</label>
+    <button class="btn small-btn" class:on={panel} aria-expanded={panel} aria-controls="graph-display" onclick={() => (panel = !panel)}>
+      <SlidersHorizontal size={15} /> Display
+    </button>
     <button class="icon-btn" onclick={() => { touched = false; fit(); }} aria-label="Fit the graph to the window"><Maximize size={17} /></button>
   </header>
   <div class="stage" bind:this={box}>
@@ -372,6 +445,31 @@
     {:else if counts.nodes === 0}
       <p class="empty muted">{local ? "This note has no links yet." : "No notes yet. Link notes with [[ ]] to see them connect here."}</p>
     {/if}
+    {#if panel}
+      <div class="panel" id="graph-display" role="group" aria-label="Graph display">
+        <label class="check"><input type="checkbox" bind:checked={byFolder} /> Colour by folder</label>
+        <label class="check"><input type="checkbox" bind:checked={orphans} disabled={local} /> Notes without links</label>
+        <label class="check"><input type="checkbox" bind:checked={ghosts} /> Notes not written yet</label>
+        <label class="slider">Dot size <input type="range" min="0.5" max="2.5" step="0.1" bind:value={dotSize} /></label>
+        <label class="slider">Link distance <input type="range" min="20" max="200" step="5" bind:value={linkDistance} /></label>
+        <label class="slider">Spacing <input type="range" min="30" max="400" step="10" bind:value={repel} /></label>
+      </div>
+    {/if}
+    {#if byFolder && groups.length > 1}
+      <div class="groups" role="group" aria-label="Folders">
+        {#each groups as g (g.name)}
+          <button
+            class="group"
+            class:dim={spotlight !== null && spotlight !== g.name}
+            aria-pressed={spotlight === g.name}
+            onclick={() => (spotlight = spotlight === g.name ? null : g.name)}
+          >
+            <span class="dot" style="background: {g.color}"></span>{g.name || "Vault root"}
+            <span class="n">{g.count}</span>
+          </button>
+        {/each}
+      </div>
+    {/if}
     <p class="legend muted">{counts.nodes} notes, {counts.links} links</p>
   </div>
 </section>
@@ -392,9 +490,9 @@
   }
   h2 {
     margin: 0 8px 0 0;
-    font-family: var(--font-note);
-    font-size: 1.4rem;
-    font-weight: 600;
+    font-size: 1.3rem;
+    font-weight: 650;
+    letter-spacing: -0.01em;
   }
   header .field {
     width: 200px;
@@ -432,9 +530,6 @@
     font-size: var(--small);
     color: var(--graphite);
   }
-  .opt input {
-    accent-color: var(--papyrus);
-  }
   .opt select {
     border: 1px solid var(--rule);
     border-radius: var(--radius-sm);
@@ -462,6 +557,82 @@
     padding: 24px;
     text-align: center;
     pointer-events: none;
+  }
+  .small-btn {
+    min-height: 34px;
+    padding: 0 12px;
+    font-size: var(--small);
+  }
+  .small-btn.on {
+    border-color: var(--papyrus);
+    color: var(--papyrus);
+  }
+  .panel {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 2;
+    display: grid;
+    gap: 10px;
+    width: 240px;
+    padding: 14px;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    background: var(--sheet);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.14);
+    font-size: var(--small);
+  }
+  .check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .check input,
+  .slider input {
+    accent-color: var(--papyrus);
+  }
+  .slider {
+    display: grid;
+    gap: 4px;
+    color: var(--graphite);
+  }
+  .groups {
+    position: absolute;
+    left: 12px;
+    top: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    max-height: calc(100% - 60px);
+    overflow-y: auto;
+  }
+  .group {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 26px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--sheet) 80%, transparent);
+    color: var(--ink);
+    font-size: 12px;
+  }
+  .group:hover {
+    background: var(--papyrus-wash);
+  }
+  .group.dim {
+    opacity: 0.45;
+  }
+  .group .dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+  }
+  .group .n {
+    color: var(--graphite);
+    font-variant-numeric: tabular-nums;
   }
   .legend {
     position: absolute;

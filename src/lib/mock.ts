@@ -56,6 +56,21 @@ const notes = new Map<string, string>([
   ],
   ["Private/Passport renewal.md.age", "# Passport renewal\n\nAppointment reference and documents list.\n"],
 ]);
+// `?mock=big` adds 300 linked notes in folders, for judging the graph at a realistic size.
+if (typeof location !== "undefined" && new URLSearchParams(location.search).has("big")) {
+  const folders = ["00_Inbox", "01_Atlas", "02_Projects", "03_Sources", "04_Articles", "07_Areas", "09_Topics", "Daily"];
+  let seed = 7;
+  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const titles: string[] = [];
+  for (let i = 0; i < 300; i++) titles.push(`${folders[Math.floor(rand() * rand() * folders.length)]}/Note ${i}`);
+  titles.forEach((t, i) => {
+    const hub = i % 37 === 0;
+    const n = rand() < 0.35 ? 0 : hub ? 12 : Math.ceil(rand() * 3);
+    const links = Array.from({ length: n }, () => `[[${titles[Math.floor(rand() * (hub ? 300 : Math.min(300, i + 40)))].split("/")[1]}]]`);
+    notes.set(`${t}.md`, `Linked: ${links.join(" ")}`);
+  });
+}
+
 let encryption = { set_up: true, unlocked: false, folders: ["Private"] };
 // `?mock=vault` opens straight into a vault, for checking screens after a reload.
 const startInVault = typeof location !== "undefined" && new URLSearchParams(location.search).get("mock") === "vault";

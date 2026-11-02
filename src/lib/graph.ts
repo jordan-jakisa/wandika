@@ -15,6 +15,8 @@ export interface GNode {
   /** A link target with no note yet. */
   ghost: boolean;
   board: boolean;
+  /** Top-level folder, for colouring; "" for notes at the vault root. */
+  group: string;
   x?: number;
   y?: number;
   vx?: number;
@@ -54,11 +56,12 @@ export function resolver(notes: GraphNote[]) {
 
 export function buildGraph(
   notes: GraphNote[],
-  opts: { ghosts?: boolean; focus?: string | null; depth?: number } = {},
+  opts: { ghosts?: boolean; orphans?: boolean; focus?: string | null; depth?: number } = {},
 ): { nodes: GNode[]; links: GLink[] } {
   const resolve = resolver(notes);
   const nodes = new Map<string, GNode>();
-  for (const n of notes) nodes.set(n.path, { id: n.path, title: n.title, degree: 0, ghost: false, board: !!n.board });
+  const groupOf = (p: string) => (p.includes("/") ? p.slice(0, p.indexOf("/")) : "");
+  for (const n of notes) nodes.set(n.path, { id: n.path, title: n.title, degree: 0, ghost: false, board: !!n.board, group: groupOf(n.path) });
   const seen = new Set<string>();
   const links: { source: string; target: string }[] = [];
   for (const n of notes) {
@@ -67,7 +70,7 @@ export function buildGraph(
       if (!target) {
         if (!opts.ghosts) continue;
         target = `ghost:${raw.trim().toLowerCase()}`;
-        if (!nodes.has(target)) nodes.set(target, { id: target, title: raw.trim(), degree: 0, ghost: true, board: false });
+        if (!nodes.has(target)) nodes.set(target, { id: target, title: raw.trim(), degree: 0, ghost: true, board: false, group: "" });
       }
       if (target === n.path) continue;
       const key = n.path < target ? `${n.path}\n${target}` : `${target}\n${n.path}`;
@@ -98,5 +101,6 @@ export function buildGraph(
       links: links.filter((l) => keep.has(l.source) && keep.has(l.target)),
     };
   }
-  return { nodes: [...nodes.values()], links };
+  const all = [...nodes.values()];
+  return { nodes: opts.orphans === false ? all.filter((n) => n.degree > 0) : all, links };
 }

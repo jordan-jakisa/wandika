@@ -31,3 +31,9 @@ test("local graph keeps the focus and its neighbours", () => {
   const g = buildGraph(notes, { focus: "Projects/Plan.md", depth: 1 });
   assert.deepEqual(g.nodes.map((n) => n.id).sort(), ["Home.md", "Projects/Plan.md"]);
 });
+
+test("orphans can be hidden and notes carry their top folder", () => {
+  const g = buildGraph(notes, { orphans: false });
+  assert.ok(!g.nodes.some((n) => n.id === "Lonely.md"));
+  assert.equal(g.nodes.find((n) => n.id === "Projects/Plan.md")!.group, "Projects");
+});
