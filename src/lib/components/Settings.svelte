@@ -78,11 +78,52 @@
     else phoneSection = null;
   }
 
+  /**
+   * Phones: Settings is a bottom sheet that slides up, drags down to dismiss, and slides away on
+   * close. iOS gets a page sheet (grabber, the app shrinking behind it); Android a Material 3 modal
+   * bottom sheet (28dp corners, 32x4dp drag handle, scrim).
+   */
+  const sheet = $derived(phone && (isIOS || isAndroid));
+  const reduceMotion = typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let closing = $state(false);
+  let dragY = $state(0);
+  let dragFrom = $state<number | null>(null);
+  let dragAt = 0;
+
+  function sheetDown(e: PointerEvent) {
+    if (!sheet || (e.target as HTMLElement).closest("button, input, select, a, textarea")) return;
+    dragFrom = e.clientY;
+    dragAt = performance.now();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+  function sheetMove(e: PointerEvent) {
+    if (dragFrom === null) return;
+    dragY = Math.max(0, e.clientY - dragFrom);
+  }
+  function sheetUp() {
+    if (dragFrom === null) return;
+    const speed = dragY / Math.max(1, performance.now() - dragAt);
+    dragFrom = null;
+    // A long drag or a quick flick dismisses; anything less springs back.
+    if (dragY > 140 || speed > 0.6) close();
+    else dragY = 0;
+  }
+
   function closeNow() {
     clearTimeout(pollTimer);
     connecting = false;
     device = null;
     waiting = null;
+    if (sheet && !reduceMotion && app.settingsOpen) {
+      closing = true;
+      setTimeout(() => {
+        closing = false;
+        dragY = 0;
+        app.settingsOpen = false;
+      }, 260);
+      return;
+    }
+    dragY = 0;
     app.settingsOpen = false;
   }
 
@@ -287,13 +328,35 @@
   </div>
 {/snippet}
 
-<dialog bind:this={dialogEl} oncancel={close} aria-labelledby="settings-title" class="settings" class:phone>
+<dialog
+  bind:this={dialogEl}
+  oncancel={(e) => {
+    e.preventDefault();
+    close();
+  }}
+  onclick={(e) => {
+    // A tap on the dimmed area outside a sheet dismisses it.
+    if (sheet && e.target === dialogEl) close();
+  }}
+  aria-labelledby="settings-title"
+  class="settings"
+  class:phone
+  class:sheet
+  class:m3={sheet && isAndroid}
+  class:closing
+  class:dragging={dragY > 0 && dragFrom !== null}
+  style={dragY ? `--drag: ${dragY}px` : undefined}
+>
+  {#if sheet}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="grabber-zone" onpointerdown={sheetDown} onpointermove={sheetMove} onpointerup={sheetUp} onpointercancel={sheetUp}>
+      <span class="grabber"></span>
+    </div>
+  {/if}
   {#if !phone || section === null}
     <nav class="sections" aria-label="Settings sections">
-      <header class="nav-head">
-        {#if phone && isAndroid}
-          <button class="icon-btn" onclick={close} aria-label="Close settings"><ArrowLeft size={24} /></button>
-        {/if}
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <header class="nav-head" onpointerdown={sheetDown} onpointermove={sheetMove} onpointerup={sheetUp} onpointercancel={sheetUp}>
         <h2 id="settings-title">Settings</h2>
         {#if phone && isIOS}
           <button class="done" onclick={close}>Done</button>
@@ -320,7 +383,8 @@
 
   {#if section}
     <div class="pane">
-      <header class="pane-head">
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <header class="pane-head" onpointerdown={sheetDown} onpointermove={sheetMove} onpointerup={sheetUp} onpointercancel={sheetUp}>
         {#if phone && isAndroid}
           <button class="icon-btn" onclick={back} aria-label="All settings"><ArrowLeft size={24} /></button>
         {:else if phone && isIOS}
@@ -593,6 +657,87 @@
     background: rgb(0 0 0 / 0.35);
   }
 
+  /* iOS sheet: rounded top, grabber, slides up from the bottom, follows a drag down. */
+  .settings.sheet[open] {
+    top: auto;
+    bottom: 0;
+    height: calc(100dvh - var(--safe-top) - 10px);
+    max-height: none;
+    border-radius: 38px 38px 0 0;
+    background: var(--paper);
+    transform: translateY(var(--drag, 0px));
+    transition: transform 280ms cubic-bezier(0.32, 0.72, 0, 1);
+    animation: sheet-in 380ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .settings.sheet.dragging {
+    transition: none;
+  }
+  .settings.sheet.closing {
+    transform: translateY(100%);
+    transition: transform 260ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .settings.sheet::backdrop {
+    background: rgb(0 0 0 / 0.4);
+  }
+  @keyframes sheet-in {
+    from {
+      transform: translateY(100%);
+    }
+  }
+  .grabber-zone {
+    display: grid;
+    place-items: center;
+    height: 18px;
+    flex: none;
+    touch-action: none;
+  }
+  .grabber {
+    width: 36px;
+    height: 5px;
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--graphite) 45%, transparent);
+  }
+  .sheet .nav-head,
+  .sheet .pane-head {
+    touch-action: none;
+  }
+  .sheet .nav-head {
+    padding-top: 6px;
+  }
+  .sheet .pane-head {
+    padding-top: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .settings.sheet[open] {
+      animation: none;
+    }
+  }
+
+  /* Android: Material 3 modal bottom sheet. */
+  .settings.sheet.m3[open] {
+    height: calc(100dvh - var(--safe-top) - 24px);
+    border-radius: 28px 28px 0 0;
+    background: color-mix(in srgb, var(--papyrus) 7%, var(--sheet));
+    animation-duration: 300ms;
+    animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  }
+  .settings.sheet.m3::backdrop {
+    background: rgb(0 0 0 / 0.32);
+  }
+  .m3 .grabber-zone {
+    height: 36px;
+  }
+  .m3 .grabber {
+    width: 32px;
+    height: 4px;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--graphite) 70%, transparent);
+  }
+  .settings.m3 .sections,
+  .settings.m3 .pane-body {
+    background: transparent;
+  }
+
   .sections {
     background: var(--paper);
     border-right: 1px solid var(--rule);
@@ -611,6 +756,9 @@
   }
   .phone .nav-head {
     padding: calc(14px + var(--safe-top)) 12px 10px 20px;
+  }
+  .sheet .nav-head {
+    padding: 6px 12px 10px 20px;
   }
   h2 {
     margin: 0;
@@ -705,6 +853,9 @@
   }
   .phone .pane-head {
     padding: calc(10px + var(--safe-top)) 8px 4px 4px;
+  }
+  .sheet .pane-head {
+    padding: 2px 8px 4px 4px;
   }
   .pane-head h3 {
     flex: 1;

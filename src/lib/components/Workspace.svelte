@@ -337,6 +337,7 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="phone"
+    class:behind-sheet={isIOS && app.settingsOpen}
     class:typing
     ontouchstart={swipeStart}
     ontouchmove={swipeMove}
@@ -706,6 +707,26 @@
     flex-direction: column;
     background: var(--paper);
     overflow: hidden;
+  }
+  /* iOS: the screen behind a sheet shrinks back with rounded corners, as when UIKit presents one. */
+  .phone {
+    transition:
+      transform 380ms cubic-bezier(0.32, 0.72, 0, 1),
+      border-radius 380ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .phone.behind-sheet {
+    transform: scale(0.93) translateY(calc(var(--safe-top) * 0.4));
+    border-radius: 38px;
+  }
+  :global(html:has(.phone.behind-sheet)),
+  :global(html:has(.phone.behind-sheet) body) {
+    background: #000;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .phone.behind-sheet {
+      transform: none;
+      border-radius: 0;
+    }
   }
   .note-host {
     flex: 1;
