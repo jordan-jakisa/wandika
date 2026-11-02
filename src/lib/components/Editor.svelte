@@ -9,6 +9,7 @@
   import { isBoard } from "../kanban";
   import type { SearchHit } from "../types";
   import Board from "./Board.svelte";
+  import KeyboardBar from "./KeyboardBar.svelte";
   import Menu from "./Menu.svelte";
   import Unlock from "./Unlock.svelte";
 
@@ -29,6 +30,8 @@
   let boardKey = $state(0);
   let showSource = $state(false);
   const encrypted = $derived(path.endsWith(".age"));
+  /** On phones the writing toolbar shows while the note's text has focus. */
+  let writing = $state(false);
 
   async function save() {
     clearTimeout(saveTimer);
@@ -292,7 +295,14 @@
       {/key}
     {/if}
 
-    <div class="cm-host" bind:this={host} hidden={locked || !!error || boardText !== null}></div>
+    <div
+      class="cm-host"
+      class:writing
+      bind:this={host}
+      hidden={locked || !!error || boardText !== null}
+      onfocusin={() => (writing = compact)}
+      onfocusout={() => (writing = false)}
+    ></div>
 
     {#if backlinks.length && !locked}
       <section class="backlinks" aria-labelledby="backlinks-h">
@@ -311,6 +321,9 @@
     {/if}
     </div>
   </div>
+  {#if writing}
+    <KeyboardBar view={() => view} />
+  {/if}
 </article>
 
 <style>
@@ -337,6 +350,10 @@
   }
   .spacer {
     flex: 1;
+  }
+  /* Room for the writing toolbar, so the last line can scroll above it. */
+  .cm-host.writing {
+    padding-bottom: 64px;
   }
   .back {
     display: inline-flex;

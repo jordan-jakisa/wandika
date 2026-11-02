@@ -72,3 +72,10 @@ export function toggleWrap(text: string, mark: string): string {
   const core = text.slice(lead.length, text.length - trail.length);
   return core ? `${lead}${mark}${core}${mark}${trail}` : text;
 }
+
+/** Cycles a line through plain text, `# `, `## ` and `### `, keeping any indent. */
+export function cycleHeading(line: string): string {
+  const m = /^(\s*)(#{1,6}) (.*)$/.exec(line);
+  if (!m) return "# " + line.trimStart();
+  return m[2].length >= 3 ? m[1] + m[3] : m[1] + "#".repeat(m[2].length + 1) + " " + m[3];
+}

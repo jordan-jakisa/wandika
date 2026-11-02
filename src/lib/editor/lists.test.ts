@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { convertLines, toggleWrap } from "./lists.ts";
+import { convertLines, cycleHeading, toggleWrap } from "./lists.ts";
 
 const numberedWithDescriptions = [
   "12. Onboarding Emails",
@@ -41,4 +41,11 @@ test("wrapping toggles and keeps spaces outside the marks", () => {
   assert.equal(toggleWrap("bold", "**"), "**bold**");
   assert.equal(toggleWrap("**bold**", "**"), "bold");
   assert.equal(toggleWrap(" word ", "*"), " *word* ");
+});
+
+test("the heading button cycles a line through three levels and back", () => {
+  assert.equal(cycleHeading("Plan"), "# Plan");
+  assert.equal(cycleHeading("# Plan"), "## Plan");
+  assert.equal(cycleHeading("## Plan"), "### Plan");
+  assert.equal(cycleHeading("### Plan"), "Plan");
 });
