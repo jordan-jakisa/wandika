@@ -3,6 +3,8 @@
   import { api, openUrl } from "../api";
   import { ago, app } from "../app.svelte";
   import type { AppleAccess } from "../types";
+  import GitHubSignIn from "./GitHubSignIn.svelte";
+  import RepoPicker from "./RepoPicker.svelte";
   import Unlock from "./Unlock.svelte";
 
   let dialogEl: HTMLDialogElement;
@@ -15,8 +17,38 @@
     if (!app.settingsOpen && dialogEl.open) dialogEl.close();
   });
 
+  let connecting = $state(false);
+
+  async function disconnectRemote() {
+    const r = app.vault?.remote;
+    const ok = await app.ask({
+      title: `Stop syncing with ${r?.owner}/${r?.repo}?`,
+      message: "Your notes stay on this device and on GitHub. You can connect again later.",
+      confirm: "Disconnect",
+    });
+    if (ok === null) return;
+    await app.flush();
+    await api.vaultDisconnectRemote();
+    await app.enterVault();
+    app.say("This vault is now only on this device.");
+  }
+
+  async function signOut() {
+    const synced = !!app.vault?.remote;
+    const ok = await app.ask({
+      title: "Sign out of GitHub?",
+      message: synced
+        ? "This vault syncs with GitHub, so it closes. Your notes stay on this device and on GitHub."
+        : "Your vault stays open on this device.",
+      confirm: "Sign out",
+    });
+    if (ok === null) return;
+    await app.signOut();
+  }
+
   function close() {
     clearTimeout(pollTimer);
+    connecting = false;
     device = null;
     waiting = null;
     app.settingsOpen = false;
@@ -99,18 +131,42 @@
     <section aria-labelledby="vault-h">
       <h3 id="vault-h">Vault</h3>
       <div class="row">
-        {#if s?.user?.avatar_url}<img src={s.user.avatar_url} alt="" width="36" height="36" />{/if}
         <div class="grow">
-          <div>{app.vaultName}</div>
-          <div class="muted small">Signed in as {s?.user?.login}. Synced {ago(app.lastSync)}.</div>
+          <div>{app.vault?.name}</div>
+          <div class="muted small">
+            {#if app.vault?.remote}
+              Syncs with {app.vault.remote.owner}/{app.vault.remote.repo}. Synced {ago(app.lastSync)}.
+            {:else if app.vault?.folder}
+              Only on this device, in {app.vault.folder}.
+            {:else}
+              Only on this device.
+            {/if}
+          </div>
         </div>
       </div>
-      <div class="buttons">
-        <button class="btn" onclick={() => app.sync()} disabled={app.syncing}>{app.syncing ? "Syncing…" : "Sync now"}</button>
-        <button class="btn" onclick={() => app.switchRepo()}>Switch repository</button>
-        <button class="btn danger" onclick={() => app.signOut()}>Sign out</button>
-      </div>
-      {#if app.syncError}<p class="error small">Last sync: {app.syncError}</p>{/if}
+
+      {#if connecting}
+        <div class="connect">
+          {#if !s?.user}
+            <p>Sign in with GitHub, then choose the repository to sync this vault with.</p>
+            <GitHubSignIn />
+          {:else}
+            <RepoPicker mode="connect" ondone={() => (connecting = false)} />
+          {/if}
+          <button class="btn" onclick={() => (connecting = false)}>Cancel</button>
+        </div>
+      {:else}
+        <div class="buttons">
+          {#if app.vault?.remote}
+            <button class="btn" onclick={() => app.sync()} disabled={app.syncing}>{app.syncing ? "Syncing…" : "Sync now"}</button>
+            <button class="btn" onclick={disconnectRemote}>Disconnect from GitHub</button>
+          {:else}
+            <button class="btn primary" onclick={() => (connecting = true)}>Connect to GitHub</button>
+          {/if}
+          <button class="btn" onclick={() => app.switchVault()}>Switch vault</button>
+        </div>
+      {/if}
+      {#if app.syncError && app.vault?.remote}<p class="error small">Last sync: {app.syncError}</p>{/if}
     </section>
 
     <section aria-labelledby="enc-h">
@@ -165,6 +221,16 @@
       {@render connection("Apple Calendar", appleText[c?.apple_calendar ?? "unsupported"], c?.apple_calendar === "granted", "apple_calendar", c?.apple_calendar === "not_asked" || c?.apple_calendar === "granted", false)}
       {@render connection("Apple Reminders", appleText[c?.apple_reminders ?? "unsupported"], c?.apple_reminders === "granted", "apple_reminders", c?.apple_reminders === "not_asked" || c?.apple_reminders === "granted", false)}
     </section>
+    {#if s?.user}
+      <section aria-labelledby="gh-h">
+        <h3 id="gh-h">GitHub</h3>
+        <div class="row">
+          {#if s.user.avatar_url}<img src={s.user.avatar_url} alt="" width="36" height="36" />{/if}
+          <div class="grow">Signed in as {s.user.login}</div>
+          <button class="btn danger" onclick={signOut}>Sign out</button>
+        </div>
+      </section>
+    {/if}
   </div>
 </dialog>
 
@@ -251,6 +317,14 @@
     flex-wrap: wrap;
     gap: 8px;
     margin-top: 14px;
+  }
+  .connect {
+    display: grid;
+    gap: 12px;
+    justify-items: start;
+  }
+  .connect > :global(.picker) {
+    width: 100%;
   }
   .device {
     margin: 4px 0 10px;

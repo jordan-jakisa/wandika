@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { RefreshCw } from "@lucide/svelte";
+  import { HardDrive, RefreshCw } from "@lucide/svelte";
   import { ago, app } from "../app.svelte";
 
   let now = $state(Date.now());
@@ -20,6 +20,12 @@
   );
 </script>
 
+{#if !app.synced}
+  <button class="sync" onclick={() => (app.settingsOpen = true)} title="Connect this vault to GitHub in Settings">
+    <span class="icon"><HardDrive size={13} /></span>
+    <span>On this device only</span>
+  </button>
+{:else}
 <button
   class="sync"
   class:warn={offline}
@@ -32,6 +38,7 @@
   <span class="icon" class:spin={app.syncing}><RefreshCw size={13} /></span>
   <span>{text}</span>
 </button>
+{/if}
 
 <style>
   .sync {

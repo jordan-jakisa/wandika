@@ -3,6 +3,8 @@
   import { app } from "../app.svelte";
   import type { DeviceCode } from "../types";
 
+  let { onsignedin }: { onsignedin?: () => void } = $props();
+
   let code = $state<DeviceCode | null>(null);
   let error = $state<string | null>(null);
   let starting = $state(false);
@@ -31,6 +33,7 @@
       if (r?.user) {
         code = null;
         await app.refreshStatus();
+        onsignedin?.();
         return;
       }
       if (r?.slow_down) interval += 5;
@@ -60,71 +63,42 @@
   $effect(() => () => clearTimeout(timer));
 </script>
 
-<main class="onboarding">
-  <div class="column">
-    <h1 class="wordmark">Wandika</h1>
-
-    {#if !code}
-      <p class="lead">Your notes, as Markdown files in a GitHub repository you choose. Every device you sign in on stays in sync.</p>
-      <button class="btn primary big" onclick={start} disabled={starting}>
-        {starting ? "Contacting GitHub…" : "Sign in with GitHub"}
-      </button>
-      {#if error}<p class="error" role="alert">{error}</p>{/if}
-      <p class="muted small">Wandika asks GitHub for access to your repositories so it can read and save your notes. Your notes go only to GitHub.</p>
-    {:else}
-      <p class="lead">Enter this code on GitHub to finish signing in.</p>
-      <p class="code" aria-label={`Code ${code.user_code.split("").join(" ")}`}>{code.user_code}</p>
-      <button class="btn primary big" onclick={copyAndOpen}>
-        {copied ? "Code copied. Open GitHub again" : "Copy code and open GitHub"}
-      </button>
-      <p class="muted small waiting" role="status">Waiting for GitHub. This page moves on by itself once you approve.</p>
-      <button class="btn quiet" onclick={cancel}>Cancel</button>
-    {/if}
-  </div>
-</main>
+<div class="signin">
+  {#if !code}
+    <button class="btn primary big" onclick={start} disabled={starting}>
+      {starting ? "Contacting GitHub…" : "Sign in with GitHub"}
+    </button>
+    {#if error}<p class="error" role="alert">{error}</p>{/if}
+    <p class="muted small">Wandika asks GitHub for access to your repositories so it can read and save your notes there.</p>
+  {:else}
+    <p>Enter this code on GitHub to finish signing in.</p>
+    <p class="code" aria-label={`Code ${code.user_code.split("").join(" ")}`}>{code.user_code}</p>
+    <button class="btn primary big" onclick={copyAndOpen}>
+      {copied ? "Code copied. Open GitHub again" : "Copy code and open GitHub"}
+    </button>
+    <p class="muted small" role="status">Waiting for GitHub. This moves on by itself once you approve.</p>
+    <button class="btn quiet" onclick={cancel}>Cancel</button>
+  {/if}
+</div>
 
 <style>
-  .onboarding {
-    min-height: 100dvh;
+  .signin {
     display: grid;
-    align-items: center;
-    padding: calc(32px + var(--safe-top)) max(24px, var(--safe-right)) calc(32px + var(--safe-bottom))
-      max(24px, var(--safe-left));
-  }
-  .column {
-    width: 100%;
-    max-width: 440px;
-    margin: 0 auto;
-    display: grid;
-    gap: 18px;
+    gap: 14px;
     justify-items: start;
   }
-  .wordmark {
-    margin: 0 0 8px;
-    font-family: var(--font-note);
-    font-size: clamp(3rem, 12vw, 4.5rem);
-    font-weight: 640;
-    letter-spacing: -0.02em;
-    line-height: 1;
-  }
-  .lead {
+  p {
     margin: 0;
-    font-family: var(--font-note);
-    font-size: 1.2rem;
-    line-height: 1.55;
   }
   .big {
     min-height: 50px;
     padding: 0 22px;
-    font-size: 1rem;
   }
   .small {
     font-size: var(--small);
-    margin: 0;
-    max-width: 38ch;
+    max-width: 44ch;
   }
   .code {
-    margin: 0;
     font-family: var(--font-note);
     font-size: clamp(2.2rem, 10vw, 3rem);
     font-weight: 600;
@@ -136,8 +110,5 @@
     background: none;
     padding: 0;
     color: var(--graphite);
-  }
-  .error {
-    margin: 0;
   }
 </style>

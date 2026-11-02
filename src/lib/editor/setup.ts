@@ -7,6 +7,7 @@ import { EditorState, type Extension } from "@codemirror/state";
 import { drawSelection, EditorView, keymap, placeholder } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
 import type { NoteMeta } from "../types";
+import { diagrams, diagramTheme } from "./diagrams";
 import { livePreview } from "./livePreview";
 
 const highlight = HighlightStyle.define([
@@ -124,7 +125,9 @@ export function extensions(opts: {
     keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
     placeholder("Start writing. Type [[ to link a note."),
     livePreview(opts.onOpenLink, opts.onTag),
+    diagrams,
     theme,
+    diagramTheme,
     EditorView.contentAttributes.of({ spellcheck: "true", autocorrect: "on", autocapitalize: "sentences" }),
     EditorView.updateListener.of((u) => {
       if (u.docChanged) opts.onChange(u.state.doc.toString());

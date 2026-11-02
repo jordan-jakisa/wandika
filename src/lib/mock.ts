@@ -33,6 +33,10 @@ const notes = new Map<string, string>([
     "Projects/Wandika.md",
     "# Wandika\n\nNotes app on **Mac, iPhone and Android**, synced through GitHub.\n\n## Next\n\n- [ ] Test sync with two phones\n- [ ] Encrypt the *Private* folder\n\n> Plain files first. Nothing that Obsidian couldn't open.\n\n```rust\nfn main() { println!(\"#notatag [[notalink]]\"); }\n```\n",
   ],
+  [
+    "Projects/Sync design.md",
+    "How a change travels between devices.\n\n```mermaid\nflowchart LR\n  A[Edit on Mac] --> B[Save to disk]\n  B --> C{Changed on GitHub too?}\n  C -- no --> D[Push commit]\n  C -- yes --> E[Three-way merge]\n  E --> D\n  D --> F[Phone pulls]\n```\n\n```mermaid\npie title Notes by folder\n  \"Daily\" : 42\n  \"Projects\" : 18\n  \"Mail\" : 9\n```\n",
+  ],
   ["Reading list.md", "# Reading list\n\n- The Elements of Typographic Style\n- [[Projects/Wandika]] notes on sync #reading\n"],
   [
     "Daily/" + iso(today) + ".md",
@@ -52,7 +56,15 @@ let encryption = { set_up: true, unlocked: false, folders: ["Private"] };
 // `?mock=vault` opens straight into a vault, for checking screens after a reload.
 const startInVault = typeof location !== "undefined" && new URLSearchParams(location.search).get("mock") === "vault";
 let signedIn = startInVault;
-let target: Status["target"] = startInVault ? { owner: "jordan-jakisa", repo: "notes", branch: "main" } : null;
+type Vault = NonNullable<Status["vault"]>;
+const githubVault: Vault = { id: "github/jordan-jakisa/notes", name: "notes", folder: null, remote: { owner: "jordan-jakisa", repo: "notes", branch: "main" } };
+let vault: Vault | null = startInVault ? githubVault : null;
+const known: Vault[] = startInVault ? [githubVault] : [];
+const remember = (v: Vault) => {
+  const i = known.findIndex((k) => k.id === v.id);
+  if (i >= 0) known[i] = v;
+  else known.push(v);
+};
 let polls = 0;
 let lastSync: number | null = null;
 
@@ -114,9 +126,10 @@ const handlers: Record<string, (a: Args) => unknown> = {
   status: () => ({
     configured: { github: true, google: true, microsoft: true, apple: true },
     user: signedIn ? { login: "jordan-jakisa", name: "Jordan", avatar_url: "" } : null,
-    target,
+    vault,
+    known,
     last_sync: lastSync,
-    encryption: target ? encryption : null,
+    encryption: vault ? encryption : null,
     connectors: { google: "jordan@example.com", microsoft: null, apple_calendar: "granted", apple_reminders: "not_asked" },
   }),
   github_start_login: () => ({ device_code: "d", user_code: "WDKA-2611", verification_uri: "https://github.com/login/device", expires_in: 900, interval: 1 }),
@@ -127,7 +140,7 @@ const handlers: Record<string, (a: Args) => unknown> = {
   },
   github_sign_out: () => {
     signedIn = false;
-    target = null;
+    if (vault?.remote) vault = null;
   },
   repos_list: async () => {
     await sleep(400);
@@ -140,12 +153,35 @@ const handlers: Record<string, (a: Args) => unknown> = {
   repo_create: ({ name }) => ({ name, full_name: `jordan-jakisa/${name}`, owner: { login: "jordan-jakisa" }, private: true, default_branch: "main", description: null, pushed_at: null }),
   vault_open: async ({ owner, repo }) => {
     await sleep(900);
-    target = { owner, repo, branch: "main" };
+    vault = { id: `github/${owner}/${repo}`, name: repo, folder: null, remote: { owner, repo, branch: "main" } };
+    remember(vault);
     lastSync = Date.now();
     return { pulled: [...notes.keys()], pushed: [], removed: [], merged: [], conflicts: [], too_big: [], head: "abc", at: lastSync };
   },
   vault_close: () => {
-    target = null;
+    vault = null;
+  },
+  vault_create_local: ({ name, folder }) => {
+    vault = { id: `local/${Date.now()}`, name: name || String(folder).split("/").pop(), folder: folder ?? null, remote: null };
+    remember(vault);
+  },
+  vault_switch: ({ id }) => {
+    vault = known.find((k) => k.id === id) ?? null;
+  },
+  vault_forget: ({ id }) => {
+    known.splice(known.findIndex((k) => k.id === id), 1);
+    if (vault?.id === id) vault = null;
+  },
+  vault_connect_remote: async ({ owner, repo }) => {
+    await sleep(800);
+    vault = { ...vault!, remote: { owner, repo, branch: "main" } };
+    remember(vault);
+    lastSync = Date.now();
+    return { pulled: [], pushed: [...notes.keys()], removed: [], merged: [], conflicts: [], too_big: [], head: "abc", at: lastSync };
+  },
+  vault_disconnect_remote: () => {
+    vault = { ...vault!, remote: null };
+    remember(vault);
   },
   sync_now: async () => {
     await sleep(700);

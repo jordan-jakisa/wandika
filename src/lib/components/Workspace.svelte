@@ -110,7 +110,7 @@
     <aside class="sidebar" aria-label="Vault">
       <div class="side-head" data-tauri-drag-region>
         <div class="vault" data-tauri-drag-region>
-          <span class="vault-name" title={app.vaultName}>{app.status?.target?.repo}</span>
+          <span class="vault-name" title={app.vaultName}>{app.vault?.name}</span>
           <SyncStatus />
         </div>
         <button class="icon-btn" onclick={() => (app.settingsOpen = true)} aria-label="Settings"><SettingsIcon size={18} /></button>
@@ -189,7 +189,7 @@
         {#if app.tab === "notes"}
           <header class="phone-head">
             <div class="vault">
-              <span class="vault-name">{app.status?.target?.repo}</span>
+              <span class="vault-name">{app.vault?.name}</span>
               <SyncStatus />
             </div>
             <button class="icon-btn" onclick={() => (app.settingsOpen = true)} aria-label="Settings"><SettingsIcon size={20} /></button>

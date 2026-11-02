@@ -1,9 +1,8 @@
 <script lang="ts">
   import { app } from "$lib/app.svelte";
   import Dialog from "$lib/components/Dialog.svelte";
-  import RepoPicker from "$lib/components/RepoPicker.svelte";
   import Settings from "$lib/components/Settings.svelte";
-  import SignIn from "$lib/components/SignIn.svelte";
+  import Start from "$lib/components/Start.svelte";
   import Workspace from "$lib/components/Workspace.svelte";
   import { onMount } from "svelte";
 
@@ -19,10 +18,8 @@
   </main>
 {:else if !app.status}
   <main class="boot" aria-busy="true"></main>
-{:else if !app.status.user}
-  <SignIn />
-{:else if !app.status.target}
-  <RepoPicker />
+{:else if !app.status.vault}
+  <Start />
 {:else}
   <Workspace />
   <Settings />

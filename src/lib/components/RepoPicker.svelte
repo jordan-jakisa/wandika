@@ -4,6 +4,9 @@
   import { ago, app } from "../app.svelte";
   import type { Repo } from "../types";
 
+  /** `open`: use a repository as a vault. `connect`: sync the open local vault with one. */
+  let { mode = "open", ondone }: { mode?: "open" | "connect"; ondone?: () => void } = $props();
+
   let repos = $state<Repo[] | null>(null);
   let filter = $state("");
   let error = $state<string | null>(null);
@@ -26,7 +29,14 @@
     opening = `${owner}/${repo}`;
     error = null;
     try {
-      await app.enterVault(await api.vaultOpen(owner, repo));
+      if (mode === "open") {
+        await app.enterVault(await api.vaultOpen(owner, repo));
+      } else {
+        await app.enterVault(await api.vaultConnectRemote(owner, repo));
+        app.say(`Syncing with ${owner}/${repo}.`);
+      }
+      opening = null;
+      ondone?.();
     } catch (e) {
       error = (e as Error).message;
       opening = null;
@@ -48,76 +58,68 @@
   }
 </script>
 
-<main class="picker">
-  <div class="column">
-    {#if opening}
-      <h1>Opening {opening}</h1>
-      <p class="muted" role="status">Downloading your notes. Large vaults take a minute the first time.</p>
-    {:else}
-      <h1>Choose a repository for your notes</h1>
-      <p class="muted">Wandika keeps every note as a Markdown file in this repository. A private one is best.</p>
+<div class="picker">
+  {#if opening}
+    <p class="lead">{mode === "open" ? `Opening ${opening}` : `Connecting to ${opening}`}</p>
+    <p class="muted" role="status">
+      {mode === "open"
+        ? "Downloading your notes. Large vaults take a minute the first time."
+        : "Merging your notes with the repository. Where both have a different file with the same name, both are kept."}
+    </p>
+  {:else}
+    <p class="muted">
+      {mode === "open"
+        ? "Wandika keeps every note as a Markdown file in the repository. A private one is best."
+        : "Your notes and the repository's files are merged on the first sync. Nothing is deleted on either side."}
+    </p>
 
-      <form class="create" onsubmit={create}>
-        <label for="new-repo">New private repository</label>
-        <div class="create-row">
-          <input id="new-repo" class="field" bind:value={newName} autocapitalize="off" spellcheck="false" />
-          <button class="btn primary" disabled={creating || !newName.trim()}>
-            <Plus size={16} />
-            {creating ? "Creating…" : "Create and open"}
-          </button>
-        </div>
-      </form>
+    <form class="create" onsubmit={create}>
+      <label for="new-repo">New private repository</label>
+      <div class="create-row">
+        <input id="new-repo" class="field" bind:value={newName} autocapitalize="off" spellcheck="false" />
+        <button class="btn primary" disabled={creating || !newName.trim()}>
+          <Plus size={16} />
+          {creating ? "Creating…" : mode === "open" ? "Create and open" : "Create and connect"}
+        </button>
+      </div>
+    </form>
 
-      <label class="sr-only" for="repo-filter">Filter repositories</label>
-      <input id="repo-filter" class="field" type="search" bind:value={filter} placeholder="Filter your repositories" />
+    <label class="sr-only" for="repo-filter">Filter repositories</label>
+    <input id="repo-filter" class="field" type="search" bind:value={filter} placeholder="Or pick one of your repositories" />
 
-      {#if error}<p class="error" role="alert">{error}</p>{/if}
+    {#if error}<p class="error" role="alert">{error}</p>{/if}
 
-      {#if repos === null && !error}
-        <p class="muted" role="status">Loading your repositories…</p>
-      {:else if repos}
-        <ul>
-          {#each shown as r (r.full_name)}
-            <li>
-              <button onclick={() => open(r.owner.login, r.name)}>
-                <span class="name">
-                  {#if r.private}<Lock size={14} aria-label="Private" />{:else}<Globe size={14} aria-label="Public" />{/if}
-                  {r.full_name}
-                </span>
-                {#if r.description}<span class="desc">{r.description}</span>{/if}
-                {#if !r.private}<span class="warn">Public: anyone can read notes kept here.</span>{/if}
-                {#if r.pushed_at}<span class="when">Updated {ago(Date.parse(r.pushed_at))}</span>{/if}
-              </button>
-            </li>
-          {:else}
-            <li class="muted none">No repositories match “{filter}”.</li>
-          {/each}
-        </ul>
-      {/if}
-
-      <button class="btn quiet" onclick={() => app.signOut()}>Sign out of GitHub</button>
+    {#if repos === null && !error}
+      <p class="muted" role="status">Loading your repositories…</p>
+    {:else if repos}
+      <ul>
+        {#each shown as r (r.full_name)}
+          <li>
+            <button onclick={() => open(r.owner.login, r.name)}>
+              <span class="name">
+                {#if r.private}<Lock size={14} aria-label="Private" />{:else}<Globe size={14} aria-label="Public" />{/if}
+                {r.full_name}
+              </span>
+              {#if r.description}<span class="desc">{r.description}</span>{/if}
+              {#if !r.private}<span class="warn">Public: anyone can read notes kept here.</span>{/if}
+              {#if r.pushed_at}<span class="when">Updated {ago(Date.parse(r.pushed_at))}</span>{/if}
+            </button>
+          </li>
+        {:else}
+          <li class="muted none">No repositories match “{filter}”.</li>
+        {/each}
+      </ul>
     {/if}
-  </div>
-</main>
+  {/if}
+</div>
 
 <style>
   .picker {
-    min-height: 100dvh;
-    padding: calc(40px + var(--safe-top)) max(20px, var(--safe-right)) calc(32px + var(--safe-bottom))
-      max(20px, var(--safe-left));
-  }
-  .column {
-    max-width: 560px;
-    margin: 0 auto;
     display: grid;
     gap: 14px;
   }
-  h1 {
-    margin: 0;
-    font-family: var(--font-note);
-    font-size: clamp(1.6rem, 6vw, 2.1rem);
-    font-weight: 620;
-    line-height: 1.2;
+  .lead {
+    font-weight: 600;
   }
   p {
     margin: 0;
@@ -179,12 +181,5 @@
   }
   .none {
     padding: 12px 8px;
-  }
-  .quiet {
-    justify-self: start;
-    border-color: transparent;
-    background: none;
-    padding: 0;
-    color: var(--graphite);
   }
 </style>

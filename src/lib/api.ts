@@ -46,6 +46,18 @@ export async function openUrl(url: string) {
   }
 }
 
+/** Mac only: the system folder picker. Null when cancelled or unavailable. */
+export async function pickFolder(): Promise<string | null> {
+  if (!native) return "/Users/jordan/Documents/Obsidian";
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const picked = await open({ directory: true, multiple: false, title: "Choose a folder for your notes" });
+  return typeof picked === "string" ? picked : null;
+}
+
+/** Folder vaults need a real file system to point at, which only the Mac app has. */
+export const canPickFolder =
+  typeof navigator !== "undefined" && /Mac/.test(navigator.platform) && !("ontouchend" in document);
+
 /** Subscribes to an event from the Rust core. Returns the unsubscribe function. */
 export async function listen<T>(event: string, handler: (payload: T) => void): Promise<() => void> {
   if (!native) {
@@ -67,6 +79,11 @@ export const api = {
   repoCreate: (name: string) => call<Repo>("repo_create", { name }),
   vaultOpen: (owner: string, repo: string) => call<SyncReport>("vault_open", { owner, repo }),
   vaultClose: () => call<void>("vault_close"),
+  vaultCreateLocal: (name: string, folder?: string) => call<void>("vault_create_local", { name, folder }),
+  vaultSwitch: (id: string) => call<void>("vault_switch", { id }),
+  vaultForget: (id: string) => call<void>("vault_forget", { id }),
+  vaultConnectRemote: (owner: string, repo: string) => call<SyncReport>("vault_connect_remote", { owner, repo }),
+  vaultDisconnectRemote: () => call<void>("vault_disconnect_remote"),
   syncNow: () => call<SyncReport>("sync_now"),
 
   tree: () => call<Entry[]>("tree"),

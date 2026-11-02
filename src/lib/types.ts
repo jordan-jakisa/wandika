@@ -18,10 +18,20 @@ export interface CryptoStatus {
   folders: string[];
 }
 
+export interface VaultConfig {
+  id: string;
+  name: string;
+  /** A folder chosen on the Mac; null when the vault lives in the app's own storage. */
+  folder: string | null;
+  /** The GitHub repository it syncs with; null for a vault on this device only. */
+  remote: Target | null;
+}
+
 export interface Status {
   configured: { github: boolean; google: boolean; microsoft: boolean; apple: boolean };
   user: User | null;
-  target: Target | null;
+  vault: VaultConfig | null;
+  known: VaultConfig[];
   last_sync: number | null;
   encryption: CryptoStatus | null;
   connectors: {

@@ -50,9 +50,19 @@ class AppState {
   #interval: ReturnType<typeof setInterval> | undefined;
   #toastTimer: ReturnType<typeof setTimeout> | undefined;
 
+  get vault() {
+    return this.status?.vault ?? null;
+  }
+
+  /** True when the open vault syncs with a GitHub repository. */
+  get synced() {
+    return !!this.status?.vault?.remote;
+  }
+
   get vaultName() {
-    const t = this.status?.target;
-    return t ? `${t.owner}/${t.repo}` : "";
+    const v = this.status?.vault;
+    if (!v) return "";
+    return v.remote ? `${v.remote.owner}/${v.remote.repo}` : v.name;
   }
 
   #started = false;
@@ -65,9 +75,9 @@ class AppState {
       const status = await api.status();
       this.lastSync = status.last_sync;
       // Load the files before showing the workspace so it never flashes an empty vault.
-      if (status.target && status.user) await this.refreshFiles();
+      if (status.vault) await this.refreshFiles();
       this.status = status;
-      if (status.target && status.user) {
+      if (status.vault?.remote) {
         this.startAutoSync();
         void this.sync();
       }
@@ -84,12 +94,16 @@ class AppState {
     this.status = await api.status();
   }
 
-  /** After the first download of a vault: show it, then keep it in sync. */
-  async enterVault(report: SyncReport) {
-    this.apply(report);
+  /** Shows a vault just opened, created or connected; GitHub vaults then keep syncing. */
+  async enterVault(report?: SyncReport) {
+    if (report) this.apply(report);
+    const before = this.status?.vault?.id;
     await this.refreshFiles();
     await this.refreshStatus();
-    this.startAutoSync();
+    // Connecting or disconnecting GitHub keeps the open note; a different vault starts fresh.
+    if (this.status?.vault?.id !== before) this.current = null;
+    this.stopAutoSync();
+    if (this.synced) this.startAutoSync();
   }
 
   async refreshFiles() {
@@ -113,11 +127,12 @@ class AppState {
   /** Called after every local save: sync once typing has paused for a while. */
   edited() {
     clearTimeout(this.#editTimer);
+    if (!this.synced) return;
     this.#editTimer = setTimeout(() => void this.sync(), SYNC_AFTER_EDIT_MS);
   }
 
   async sync() {
-    if (this.syncing || !this.status?.target) return;
+    if (this.syncing || !this.status?.vault?.remote) return;
     this.syncing = true;
     clearTimeout(this.#editTimer);
     try {
@@ -244,7 +259,7 @@ class AppState {
     this.#toastTimer = setTimeout(() => (this.toast = null), 4000);
   }
 
-  async switchRepo() {
+  async switchVault() {
     await this.flush();
     this.stopAutoSync();
     await api.vaultClose();
@@ -255,11 +270,13 @@ class AppState {
     await this.refreshStatus();
   }
 
+  /** Local vaults stay open; a GitHub vault closes with the sign-in. */
   async signOut() {
     await this.flush();
+    const closes = this.synced;
     this.stopAutoSync();
     await api.githubSignOut();
-    this.current = null;
+    if (closes) this.current = null;
     this.settingsOpen = false;
     await this.refreshStatus();
   }
