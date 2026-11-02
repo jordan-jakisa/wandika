@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { renderLite, section } from "./noteText.ts";
+import { parseProperties, renderLite, section } from "./noteText.ts";
 
 const note = "---\ntags: [a]\n---\n# Plan\nIntro\n## Goals\n- Ship\n### Detail\nmore\n## Risks\nRain ^r1\n";
 
@@ -21,4 +21,15 @@ test("embedded Markdown is escaped before it becomes HTML", () => {
 
 test("an embedded callout keeps its title", () => {
   assert.ok(renderLite("> [!tip]\n> Long-press a note").html.includes(">Tip<"));
+});
+
+test("frontmatter reads as properties: scalars, inline lists and dash lists", () => {
+  const yaml = 'title: "Kampala trip"\ntags: [travel, uganda]\naliases:\n  - Trip\n  - Safari\ndue: 2026-11-20\nempty:';
+  assert.deepEqual(parseProperties(yaml), [
+    { key: "title", values: ["Kampala trip"] },
+    { key: "tags", values: ["travel", "uganda"] },
+    { key: "aliases", values: ["Trip", "Safari"] },
+    { key: "due", values: ["2026-11-20"] },
+    { key: "empty", values: [] },
+  ]);
 });

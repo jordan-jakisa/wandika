@@ -41,7 +41,7 @@ const notes = new Map<string, string>([
     "START_HERE.md",
     "The dashboard is [[Welcome]]. Open that.\n\n## Vault layout (PARA-ish)\n\n| Folder | Purpose | When to add here |\n|---|---|---|\n| `00_Inbox/` | Capture | Anything you don't want to think about right now. **Triage to empty weekly.** |\n| `01_Atlas/` | Knowledge base + MOCs | Cross-cutting maps, journals |\n| `02_Projects/` | Active work | When you start something with a clear \"done\" #para |\n\n## Conventions\n\nOne concept per file.\n",
   ],
-  ["Reading list.md", "# Reading list\n\n- The Elements of Typographic Style\n- [[Projects/Wandika]] notes on sync #reading\n\n![[Projects/Wandika#Next]]\n"],
+  ["Reading list.md", "---\ntags: [reading, books]\nstatus: ongoing\nsource: \"[[Projects/Wandika]]\"\n---\n# Reading list\n\n- The Elements of Typographic Style\n- [[Projects/Wandika]] notes on sync #reading\n\n![[Projects/Wandika#Next]]\n"],
   [
     "Daily/" + iso(today) + ".md",
     "# " +

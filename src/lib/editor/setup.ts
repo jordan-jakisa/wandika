@@ -11,6 +11,7 @@ import { diagrams, diagramTheme } from "./diagrams";
 import { embedTheme, embeds, fileDrops } from "./embeds";
 import { formatting } from "./format";
 import { livePreview } from "./livePreview";
+import { properties, propertiesTheme } from "./properties";
 import { tables, tableTheme } from "./tables";
 
 const highlight = HighlightStyle.define([
@@ -146,11 +147,13 @@ export function extensions(opts: {
     fileDrops(opts.onFiles),
     livePreview(opts.onOpenLink, opts.onTag),
     diagrams,
+    properties,
     tables(opts.onOpenLink),
     theme,
     diagramTheme,
     tableTheme,
     embedTheme,
+    propertiesTheme,
     EditorView.contentAttributes.of({ spellcheck: "true", autocorrect: "on", autocapitalize: "sentences" }),
     EditorView.updateListener.of((u) => {
       if (u.docChanged) opts.onChange(u.state.doc.toString());

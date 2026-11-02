@@ -1,5 +1,5 @@
-// Plain helpers for embedded notes: pick the part of a note an embed asks for, and turn a few
-// lines of Markdown into safe, simple HTML for reading in place.
+// Plain helpers for reading notes in place: the part of a note an embed asks for, a few lines of
+// Markdown as safe, simple HTML, and frontmatter as properties.
 
 /** `Note#Heading` gives that section; `Note#^id` the line carrying that block id. */
 export function section(text: string, sub: string | undefined): string {
@@ -63,4 +63,32 @@ export function renderLite(md: string, max = 40): { html: string; more: boolean 
     else out.push(`<p>${inline(line)}</p>`);
   }
   return { html: out.join(""), more: lines.length > max };
+}
+
+export interface Property {
+  key: string;
+  values: string[];
+}
+
+/** Reads the simple YAML Obsidian writes: `key: value`, `key: [a, b]` and `key:` with `- item` lines. */
+export function parseProperties(yaml: string): Property[] {
+  const out: Property[] = [];
+  const unquote = (v: string) => v.trim().replace(/^(["'])(.*)\1$/, "$2");
+  for (const line of yaml.split("\n")) {
+    const item = /^\s+-\s*(.*)$/.exec(line);
+    if (item && out.length) {
+      if (item[1].trim()) out[out.length - 1].values.push(unquote(item[1]));
+      continue;
+    }
+    const kv = /^([^\s:#][^:]*):\s*(.*)$/.exec(line);
+    if (!kv) continue;
+    const raw = kv[2].trim();
+    const values = /^\[.*\]$/.test(raw)
+      ? raw.slice(1, -1).split(",").map(unquote).filter(Boolean)
+      : raw
+        ? [unquote(raw)]
+        : [];
+    out.push({ key: kv[1].trim(), values });
+  }
+  return out;
 }
