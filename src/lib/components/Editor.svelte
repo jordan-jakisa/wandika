@@ -1,7 +1,7 @@
 <script lang="ts">
   import { EditorState } from "@codemirror/state";
   import { EditorView } from "@codemirror/view";
-  import { ChevronLeft, Code, ImagePlus, Columns3, Lock, LockOpen, Network, Trash2, Link2 } from "@lucide/svelte";
+  import { ChevronLeft, Code, ImagePlus, LayoutTemplate, Columns3, Lock, LockOpen, Network, Trash2, Link2 } from "@lucide/svelte";
   import { onDestroy } from "svelte";
   import { api, openUrl } from "../api";
   import { app, titleOf } from "../app.svelte";
@@ -32,6 +32,9 @@
   let showSource = $state(false);
   const encrypted = $derived(path.endsWith(".age"));
   let picker: HTMLInputElement;
+  /** Until the note has been tapped into, inserts go to its end rather than before its title. */
+  let cursorPlaced = false;
+  const insertAt = (v: EditorView) => (cursorPlaced ? v.state.selection.main.head : v.state.doc.length);
   let pickAt = 0;
 
   /** Saves files as attachments and embeds them, each on its own line, at `pos`. */
@@ -55,8 +58,31 @@
     v.focus();
   }
 
+  async function insertTemplate() {
+    const list = await api.templatesList().catch(() => []);
+    if (!list.length) {
+      app.say("Put notes in a Templates folder to insert them here.");
+      return;
+    }
+    const pick = await app.ask({
+      title: "Insert template",
+      confirm: "",
+      choices: list.map((p) => ({ label: titleOf(p), value: p })),
+    });
+    if (!pick || !view) return;
+    try {
+      let text = await api.templateRender(pick, title);
+      const pos = insertAt(view);
+      if (pos > 0 && view.state.sliceDoc(pos - 1, pos) !== "\n") text = "\n\n" + text;
+      view.dispatch({ changes: { from: pos, insert: text }, selection: { anchor: pos + text.length } });
+      view.focus();
+    } catch (e) {
+      app.say((e as Error).message);
+    }
+  }
+
   function pickImages() {
-    pickAt = view?.state.selection.main.head ?? 0;
+    pickAt = view ? insertAt(view) : 0;
     picker.click();
   }
 
@@ -110,6 +136,7 @@
     locked = false;
     title = titleOf(p);
     loadedPath = p;
+    cursorPlaced = false;
     let text = "";
     try {
       text = await api.noteRead(p);
@@ -285,6 +312,7 @@
       {/if}
       {#if boardText === null && !locked && !error}
         <button role="menuitem" onclick={pickImages}><ImagePlus size={16} /> Add image</button>
+        <button role="menuitem" onclick={insertTemplate}><LayoutTemplate size={16} /> Insert template</button>
       {/if}
       <button role="menuitem" onclick={async () => { await save(); app.showGraph(true); }}><Network size={16} /> Show in graph</button>
       <button role="menuitem" onclick={toggleEncryption}>
@@ -335,7 +363,10 @@
       class:writing
       bind:this={host}
       hidden={locked || !!error || boardText !== null}
-      onfocusin={() => (writing = compact)}
+      onfocusin={() => {
+        writing = compact;
+        cursorPlaced = true;
+      }}
       onfocusout={() => (writing = false)}
     ></div>
 

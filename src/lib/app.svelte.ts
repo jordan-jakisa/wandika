@@ -13,6 +13,8 @@ export interface Ask {
   confirm: string;
   danger?: boolean;
   input?: { label: string; value: string };
+  /** A list to pick from instead of a confirm button; resolves with the picked value. */
+  choices?: { label: string; value: string }[];
   resolve: (value: string | null) => void;
 }
 

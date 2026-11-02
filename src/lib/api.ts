@@ -98,6 +98,8 @@ export const api = {
       : call<string>("attachment_save", { note, name, bytes });
   },
   attachmentRead: (target: string, from: string) => call<ArrayBuffer>("attachment_read", { target, from }),
+  templatesList: () => call<string[]>("templates_list"),
+  templateRender: (path: string, title: string) => call<string>("template_render", { path, title }),
   noteRead: (path: string) => call<string>("note_read", { path }),
   noteWrite: (path: string, content: string) => call<void>("note_write", { path, content }),
   noteCreate: (folder: string, title: string, body?: string) =>

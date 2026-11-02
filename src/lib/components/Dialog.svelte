@@ -33,11 +33,20 @@
         <!-- svelte-ignore a11y_autofocus -->
         <input id="dialog-input" class="field" bind:value placeholder={app.dialog.input.label} autofocus />
       {/if}
-      <div class="buttons">
+      {#if app.dialog.choices}
+        <ul class="choices">
+          {#each app.dialog.choices as c (c.value)}
+            <li><button type="button" onclick={() => app.dialog?.resolve(c.value)}>{c.label}</button></li>
+          {/each}
+        </ul>
+      {/if}
+      <div class="buttons" class:single={!!app.dialog.choices}>
         <button type="button" class="btn" onclick={() => app.dialog?.resolve(null)}>Cancel</button>
-        <button class="btn" class:primary={!app.dialog.danger} class:danger-fill={app.dialog.danger}>
-          {app.dialog.confirm}
-        </button>
+        {#if !app.dialog.choices}
+          <button class="btn" class:primary={!app.dialog.danger} class:danger-fill={app.dialog.danger}>
+            {app.dialog.confirm}
+          </button>
+        {/if}
       </div>
     </form>
   {/if}
@@ -73,6 +82,32 @@
     display: flex;
     justify-content: flex-end;
     gap: 10px;
+  }
+  .choices {
+    list-style: none;
+    margin: 0 -8px;
+    padding: 0;
+    max-height: 50dvh;
+    overflow-y: auto;
+  }
+  .choices button {
+    width: 100%;
+    min-height: var(--target);
+    padding: 0 8px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--ink);
+    font: inherit;
+    text-align: left;
+  }
+  .choices button:active {
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
+  }
+  @media (hover: hover) {
+    .choices button:hover {
+      background: color-mix(in srgb, var(--ink) 6%, transparent);
+    }
   }
   .danger-fill {
     background: var(--alarm);

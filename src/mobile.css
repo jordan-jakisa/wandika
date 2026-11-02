@@ -44,6 +44,9 @@
       grid-template-columns: 1fr 1fr;
       gap: 8px;
     }
+    dialog[aria-labelledby="dialog-title"] .buttons.single {
+      grid-template-columns: 1fr;
+    }
     dialog[aria-labelledby="dialog-title"] .buttons .danger-fill {
       background: var(--alarm);
       color: var(--sheet);

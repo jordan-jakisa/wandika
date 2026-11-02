@@ -41,6 +41,7 @@ const notes = new Map<string, string>([
     "START_HERE.md",
     "The dashboard is [[Welcome]]. Open that.\n\n## Vault layout (PARA-ish)\n\n| Folder | Purpose | When to add here |\n|---|---|---|\n| `00_Inbox/` | Capture | Anything you don't want to think about right now. **Triage to empty weekly.** |\n| `01_Atlas/` | Knowledge base + MOCs | Cross-cutting maps, journals |\n| `02_Projects/` | Active work | When you start something with a clear \"done\" #para |\n\n## Conventions\n\nOne concept per file.\n",
   ],
+  ["Templates/Meeting.md", "## {{title}}\n\n{{date:dddd D MMMM}}, {{time}}\n\n### Attendees\n\n- \n\n### Notes\n\n### Actions\n\n- [ ] \n"],
   ["Reading list.md", "---\ntags: [reading, books]\nstatus: ongoing\nsource: \"[[Projects/Wandika]]\"\n---\n# Reading list\n\n- The Elements of Typographic Style\n- [[Projects/Wandika]] notes on sync #reading\n\n![[Projects/Wandika#Next]]\n"],
   [
     "Daily/" + iso(today) + ".md",
@@ -229,6 +230,12 @@ const handlers: Record<string, (a: Args) => unknown> = {
     return { pulled: [], pushed: [], removed: [], merged: [], conflicts: [], too_big: [], head: "abc", at: lastSync };
   },
   tree: () => entries(),
+  templates_list: () => [...notes.keys()].filter((p) => p.startsWith("Templates/")),
+  template_render: ({ path, title }) =>
+    (notes.get(path) ?? "")
+      .replace(/\{\{\s*title\s*\}\}/g, title)
+      .replace(/\{\{\s*date[^}]*\}\}/g, iso(today))
+      .replace(/\{\{\s*time[^}]*\}\}/g, today.toTimeString().slice(0, 5)),
   attachment_save: ({ name, bytes }) => {
     let path = `attachments/${name}`;
     for (let n = 1; files.has(path); n++) path = `attachments/${name.replace(/(\.[^.]+)?$/, ` ${n}$1`)}`;
