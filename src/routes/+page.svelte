@@ -1,6 +1,7 @@
 <script lang="ts">
   import { app } from "$lib/app.svelte";
   import Dialog from "$lib/components/Dialog.svelte";
+  import ImageViewer from "$lib/components/ImageViewer.svelte";
   import Settings from "$lib/components/Settings.svelte";
   import Start from "$lib/components/Start.svelte";
   import Workspace from "$lib/components/Workspace.svelte";
@@ -31,6 +32,7 @@
 {/if}
 
 <Dialog />
+<ImageViewer />
 
 {#if app.toast}
   <div class="toast" role="status">{app.toast}</div>

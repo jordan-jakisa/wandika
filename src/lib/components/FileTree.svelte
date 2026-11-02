@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { ChevronRight, FileText, Folder, FolderPlus, Lock, LockOpen, Pencil, Plus, Trash2, File } from "@lucide/svelte";
+  import { ChevronRight, FileText, Folder, FolderPlus, Lock, LockOpen, Pencil, Plus, Trash2, File, Image as ImageIcon } from "@lucide/svelte";
   import { api } from "../api";
   import { app } from "../app.svelte";
+  import { isImage } from "../attachments";
   import type { Entry } from "../types";
   import Menu from "./Menu.svelte";
 
@@ -100,7 +101,7 @@
 
   function startRename(e: Entry) {
     renaming = e.path;
-    renameValue = e.name;
+    renameValue = e.name.replace(/\.age$/, "");
   }
 
   async function commitRename(e: Entry) {
@@ -185,13 +186,14 @@
                 if (swallowClick) return void (swallowClick = false);
                 if (e.kind === "folder") toggle(e.path);
                 else if (e.kind === "note") app.open(e.path);
+                else if (isImage(e.path.replace(/\.age$/, ""))) app.viewing = e.path;
               }}
               onpointerdown={(ev) => pressDown(ev, e.path)}
               onpointermove={pressMove}
               onpointerup={pressEnd}
               onpointercancel={pressEnd}
               oncontextmenu={(ev) => ev.preventDefault()}
-              disabled={e.kind === "file"}
+              aria-disabled={e.kind === "file" && !isImage(e.path.replace(/\.age$/, "")) ? true : undefined}
             >
               {#if e.kind === "folder"}
                 <span class="chev" class:open={isOpen}><ChevronRight size={14} /></span>
@@ -201,15 +203,14 @@
                 <FileText size={15} />
               {:else}
                 <span class="chev"></span>
-                <File size={15} />
+                {#if isImage(e.path.replace(/\.age$/, ""))}<ImageIcon size={15} />{:else}<File size={15} />{/if}
               {/if}
               <span class="name">{e.name}</span>
               {#if e.encrypted || (e.kind === "folder" && folderEncrypted(e.path))}
                 <Lock size={12} aria-label="Encrypted" />
               {/if}
             </button>
-            {#if e.kind !== "file"}
-              <span class="actions">
+            <span class="actions">
                 <Menu
                   label={`Actions for ${e.name}`}
                   size={16}
@@ -220,15 +221,16 @@
                     <button role="menuitem" onclick={() => newFolder(e.path)}><FolderPlus size={16} /> New folder here</button>
                   {/if}
                   <button role="menuitem" onclick={() => startRename(e)}><Pencil size={16} /> Rename</button>
-                  {#if e.kind === "folder" ? folderEncrypted(e.path) : e.encrypted}
-                    <button role="menuitem" onclick={() => encrypt(e, false)}><LockOpen size={16} /> Decrypt</button>
-                  {:else}
-                    <button role="menuitem" onclick={() => encrypt(e, true)}><Lock size={16} /> Encrypt</button>
+                  {#if e.kind !== "file"}
+                    {#if e.kind === "folder" ? folderEncrypted(e.path) : e.encrypted}
+                      <button role="menuitem" onclick={() => encrypt(e, false)}><LockOpen size={16} /> Decrypt</button>
+                    {:else}
+                      <button role="menuitem" onclick={() => encrypt(e, true)}><Lock size={16} /> Encrypt</button>
+                    {/if}
                   {/if}
                   <button role="menuitem" class="danger" onclick={() => trash(e)}><Trash2 size={16} /> Move to trash</button>
                 </Menu>
               </span>
-            {/if}
           {/if}
         </div>
         {#if e.kind === "folder" && isOpen}
