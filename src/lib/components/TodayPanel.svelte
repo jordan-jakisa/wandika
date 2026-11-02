@@ -3,6 +3,7 @@
   import { untrack } from "svelte";
   import { api, openUrl } from "../api";
   import { app } from "../app.svelte";
+  import { clock } from "../clock.svelte";
   import type { CalEvent, MailItem } from "../types";
   import Menu from "./Menu.svelte";
   import TaskRow from "./TaskRow.svelte";
@@ -10,14 +11,14 @@
   const data = $derived(app.today);
   let loading = $state(!app.today);
   let busy = $state<string | null>(null);
-  const todayIso = new Date().toLocaleDateString("en-CA");
 
   const c = $derived(app.status?.connectors);
   const calendarConnected = $derived(!!c && (!!c.google || !!c.microsoft || c.apple_calendar === "granted"));
   const mailConnected = $derived(!!c && (!!c.google || !!c.microsoft));
-  const isDue = (t: { due: string | null }) => !!t.due && t.due <= todayIso;
+  const isDue = (t: { due: string | null }) => !!t.due && t.due <= clock.today;
   const dueTasks = $derived((data?.tasks ?? []).filter(isDue));
   const remoteDue = $derived((data?.remote_tasks ?? []).filter(isDue));
+  const hasOverdue = $derived([...dueTasks, ...remoteDue].some((t) => t.due! < clock.today));
   // One line per problem, not per service: Gmail, Calendar and Tasks share one Google sign-in.
   const errors = $derived.by(() => {
     const byMessage = new Map<string, { code: string; message: string }>();
@@ -73,7 +74,7 @@
   const saveMail = (m: MailItem) => run(`mail-${m.id}`, () => api.mailToNote(m.source, m.id));
   const addAgenda = () => run("agenda", () => api.agendaToDaily(data?.events ?? []));
 
-  const heading = new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
+  const heading = $derived(clock.heading);
 </script>
 
 <section class="today" aria-labelledby="today-h">
@@ -150,7 +151,7 @@
 
   <section aria-labelledby="tasks-h">
     <div class="section-head">
-      <h3 id="tasks-h">Due today</h3>
+      <h3 id="tasks-h">{hasOverdue ? "Due and overdue" : "Due today"}</h3>
       <button class="link" onclick={() => (app.tab = "tasks")}>All tasks</button>
     </div>
     {#if dueTasks.length || remoteDue.length}

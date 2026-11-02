@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { app } from "../app.svelte";
+  import { clock } from "../clock.svelte";
   let {
     text,
     done,
@@ -16,7 +18,10 @@
   } = $props();
 
   let busy = $state(false);
-  const today = new Date().toLocaleDateString("en-CA");
+  /** Ticks at once; a failed change puts the box back and says why. */
+  let shown = $state<boolean | null>(null);
+  const checked = $derived(shown ?? done);
+  const today = $derived(clock.today);
   const overdue = $derived(!!due && due < today && !done);
   // Plain words for the list: dates move to the meta line, Markdown marks go.
   const label = $derived(
@@ -32,16 +37,25 @@
 
   async function toggle() {
     busy = true;
+    shown = !checked;
     try {
       await onToggle();
+    } catch (e) {
+      shown = null;
+      app.say(`Couldn't update that task. ${(e as Error).message}`);
     } finally {
       busy = false;
     }
   }
+  // Once the list reloads with the new state, the row follows it again.
+  $effect(() => {
+    void done;
+    shown = null;
+  });
 </script>
 
-<li class="task" class:done>
-  <input type="checkbox" checked={done} disabled={busy} onchange={toggle} aria-label={label} />
+<li class="task" class:done={checked}>
+  <input type="checkbox" {checked} disabled={busy} onchange={toggle} aria-label={label} />
   <div class="body">
     <span class="text">{label}</span>
     <span class="meta">

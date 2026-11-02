@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { clock } from "../clock.svelte";
   import { ArrowRight, FilePlus, Pencil, Plus, Trash2, CircleCheck, X } from "@lucide/svelte";
   import { api } from "../api";
   import { app, titleOf } from "../app.svelte";
@@ -19,7 +20,7 @@
 
   const allTags = $derived([...new Set(board.lanes.flatMap((l) => l.cards.flatMap((c) => tagsOf(c.text))))].sort());
   const visible = (c: Card) => !filter || tagsOf(c.text).includes(filter);
-  const today = new Date().toLocaleDateString("en-CA");
+  const today = $derived(clock.today);
 
   function commit() {
     onchange(serialize($state.snapshot(board)));

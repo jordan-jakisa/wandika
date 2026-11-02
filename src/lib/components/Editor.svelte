@@ -97,11 +97,20 @@
     try {
       await api.noteWrite(loadedPath, text);
       app.edited();
+      saveError = null;
+      saveTries = 0;
     } catch (e) {
+      // The text stays in the editor and in `pending`; keep trying, more slowly each time.
       pending ??= text;
-      error = `Couldn't save: ${(e as Error).message}`;
+      saveError = (e as Error).message;
+      saveTries++;
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(save, Math.min(30_000, 2_000 * 2 ** (saveTries - 1)));
     }
   }
+
+  let saveError = $state<string | null>(null);
+  let saveTries = 0;
 
   let statsTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -346,6 +355,12 @@
     {#if error}
       <p class="error">{error}</p>
     {/if}
+    {#if saveError}
+      <div class="save-error" role="alert">
+        <p>Couldn't save. {saveError} Your text is safe here, and Wandika keeps trying.</p>
+        <button class="btn" onclick={save}>Try again</button>
+      </div>
+    {/if}
 
     {#if locked}
       <Unlock onunlocked={() => load(path)} />
@@ -545,5 +560,21 @@
   }
   [hidden] {
     display: none !important;
+  }
+  .save-error {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    margin: 0 0 12px;
+    padding: 10px 14px;
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--alarm) 10%, transparent);
+    color: var(--ink);
+    font-size: var(--small);
+  }
+  .save-error p {
+    flex: 1 1 16em;
+    margin: 0;
   }
 </style>
