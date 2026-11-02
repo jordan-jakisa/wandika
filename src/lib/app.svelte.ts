@@ -47,6 +47,8 @@ class AppState {
   /** The last sync failure, in plain words; `code` "offline" is shown as offline, not failed. */
   syncError = $state<{ code: string; message: string } | null>(null);
   lastSync = $state<number | null>(null);
+  /** How far the running sync is, from the Rust core's "sync-progress" events. */
+  syncProgress = $state<SyncProgress | null>(null);
   conflicts = $state<string[]>([]);
   tooBig = $state<string[]>([]);
   /** Paths changed on disk by the last sync, so an open editor can reload them. */
@@ -143,6 +145,7 @@ class AppState {
     } catch (e) {
       this.bootError = (e as Error).message;
     }
+    listen<SyncProgress>("sync-progress", (p) => (this.syncProgress = p));
     listen<{ provider: string; error: string | null }>("connectors-changed", async (p) => {
       this.status = await api.status();
       this.say(p.error ?? `${p.provider === "google" ? "Google" : p.provider} is connected.`);
@@ -230,6 +233,7 @@ class AppState {
       if (code !== "sync_busy") this.syncError = { code, message: (e as Error).message };
     } finally {
       this.syncing = false;
+      this.syncProgress = null;
     }
   }
 
@@ -449,6 +453,21 @@ class AppState {
 }
 
 export const app = new AppState();
+
+export interface SyncProgress {
+  phase: "checking" | "downloading" | "uploading" | "saving";
+  done: number;
+  total: number;
+}
+
+/** A running sync in a few words: "Uploading 312 of 2,597 files". */
+export function progressText(p: SyncProgress | null) {
+  const n = (x: number) => x.toLocaleString();
+  if (!p || p.phase === "checking") return "Comparing your notes with GitHub…";
+  if (p.phase === "saving") return "Saving to GitHub…";
+  const verb = p.phase === "downloading" ? "Downloading" : "Uploading";
+  return p.total ? `${verb} ${n(p.done)} of ${n(p.total)} files` : `${verb} your notes…`;
+}
 
 /** One line for a sync you started yourself. */
 export function syncSummary(r: SyncReport) {

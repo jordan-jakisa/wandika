@@ -1,6 +1,6 @@
 <script lang="ts">
   import { HardDrive, RefreshCw } from "@lucide/svelte";
-  import { ago, app } from "../app.svelte";
+  import { ago, app, progressText } from "../app.svelte";
 
   let now = $state(Date.now());
   $effect(() => {
@@ -42,7 +42,12 @@
   }
 </script>
 
-{#if !app.synced}
+{#if app.syncing && app.syncProgress}
+  <button class="sync" disabled aria-live="polite">
+    <span class="icon spin"><RefreshCw size={13} /></span>
+    <span>{progressText(app.syncProgress)}</span>
+  </button>
+{:else if !app.synced}
   <button class="sync" onclick={() => (app.openSettings("vault"))} title="Connect this vault to GitHub in Settings">
     <span class="icon"><HardDrive size={13} /></span>
     <span>On this device only</span>

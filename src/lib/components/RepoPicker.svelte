@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Lock, Globe, Plus } from "@lucide/svelte";
   import { api } from "../api";
-  import { ago, app } from "../app.svelte";
+  import { ago, app, progressText } from "../app.svelte";
   import type { Repo } from "../types";
 
   /** `open`: use a repository as a vault. `connect`: sync the open local vault with one. */
@@ -41,6 +41,10 @@
   async function open(owner: string, repo: string) {
     opening = `${owner}/${repo}`;
     error = null;
+    stopping = false;
+    // The whole app shows this sync: the status bar carries on if Settings is closed.
+    app.syncing = true;
+    app.syncProgress = null;
     try {
       if (mode === "open") {
         await app.enterVault(await api.vaultOpen(owner, repo));
@@ -53,8 +57,21 @@
     } catch (e) {
       error = (e as Error).message;
       opening = null;
+      await app.refreshStatus();
+    } finally {
+      app.syncing = false;
+      app.syncProgress = null;
     }
   }
+
+  let stopping = $state(false);
+  async function stop() {
+    stopping = true;
+    await api.syncCancel().catch(() => {});
+  }
+
+  const p = $derived(app.syncProgress);
+  const fraction = $derived(p && p.total ? p.done / p.total : null);
 
   async function create(e: SubmitEvent) {
     e.preventDefault();
@@ -74,11 +91,19 @@
 <div class="picker">
   {#if opening}
     <p class="lead">{mode === "open" ? `Opening ${opening}` : `Connecting to ${opening}`}</p>
-    <p class="muted" role="status">
+    <div class="progress" role="progressbar" aria-label={progressText(p)} aria-valuemin={0} aria-valuemax={100} aria-valuenow={fraction === null ? undefined : Math.round(fraction * 100)}>
+      <span class:indeterminate={fraction === null} style={fraction === null ? undefined : `width: ${Math.max(2, fraction * 100)}%`}></span>
+    </div>
+    <p class="status" role="status">{stopping ? "Stopping…" : progressText(p)}</p>
+    <p class="muted">
       {mode === "open"
-        ? "Downloading your notes. Large vaults take a minute the first time."
-        : "Merging your notes with the repository. Where both have a different file with the same name, both are kept."}
+        ? "The first download of a large vault takes a few minutes."
+        : "Where both sides have a different file with the same name, both are kept. Nothing is deleted."}
+      You can close Settings; syncing carries on, and the status bar shows how far it is.
     </p>
+    <div>
+      <button class="btn quiet" onclick={stop} disabled={stopping}>Stop</button>
+    </div>
   {:else}
     <p class="muted">
       {mode === "open"
@@ -133,6 +158,37 @@
 </div>
 
 <style>
+  .progress {
+    position: relative;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--press);
+    overflow: hidden;
+  }
+  .progress span {
+    position: absolute;
+    inset: 0 auto 0 0;
+    border-radius: inherit;
+    background: var(--papyrus);
+    transition: width var(--dur-base) var(--ease-out);
+  }
+  /* Before the totals are known: a short bar that moves along (it stands still under reduced motion). */
+  .progress .indeterminate {
+    width: 30%;
+    animation: slide 1.4s var(--ease-out) infinite;
+  }
+  @keyframes slide {
+    from {
+      left: -30%;
+    }
+    to {
+      left: 100%;
+    }
+  }
+  .status {
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+  }
   .taken {
     margin-top: 6px;
     font-size: var(--small);

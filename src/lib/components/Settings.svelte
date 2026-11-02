@@ -432,7 +432,9 @@
                 {:else}
                   <RepoPicker mode="connect" ondone={() => (connecting = false)} />
                 {/if}
-                <button class="btn" onclick={() => (connecting = false)}>Cancel</button>
+                {#if !app.syncing}
+                  <button class="btn" onclick={() => (connecting = false)}>Cancel</button>
+                {/if}
               </div>
             {:else if app.vault?.remote}
               <div class="row">

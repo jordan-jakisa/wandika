@@ -109,6 +109,8 @@ export const api = {
   vaultConnectRemote: (owner: string, repo: string) => call<SyncReport>("vault_connect_remote", { owner, repo }),
   vaultDisconnectRemote: () => call<void>("vault_disconnect_remote"),
   syncNow: () => call<SyncReport>("sync_now"),
+  /** Stops the running sync at its next file; nothing on GitHub changes. */
+  syncCancel: () => call<void>("sync_cancel"),
 
   tree: () => call<Entry[]>("tree"),
   /** Saves a file next to `note` (Obsidian's attachment folder) and returns its vault path. */
