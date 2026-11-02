@@ -59,6 +59,10 @@ pub struct SyncReport {
     pub conflicts: Vec<String>,
     /// Over 50 MB: kept on this device, not uploaded.
     pub too_big: Vec<String>,
+    /// Files left for a later sync: this sync's size, or GitHub's hourly limit, was reached.
+    pub waiting: usize,
+    /// Everything that syncs, in bytes, to compare with GitHub's 1 GB recommendation.
+    pub vault_bytes: u64,
     pub head: Option<String>,
     pub at: i64,
 }
@@ -78,6 +82,10 @@ impl Ctl {
         Ok(())
     }
 }
+
+/// At most this much file data goes up in one sync, so a big first sync arrives in steps (and a
+/// phone on mobile data isn't asked for hundreds of megabytes at once).
+const BYTES_PER_SYNC: u64 = 100 * 1024 * 1024;
 
 /// Text files up to this size go into the tree request itself, saving one request each.
 const INLINE_MAX: usize = 256 * 1024;
@@ -389,6 +397,7 @@ async fn sync_once(gh: &GitHub, t: &Target, p: &Paths, state: &mut SyncState, ct
     }
 
     let (final_local, stat) = scan(&p.files, &state.stat, &ignored)?;
+    report.vault_bytes = stat.values().map(|s| s.size).sum();
     state.stat = stat;
     // Everything pulled so far is now part of the base, even if the push below has to retry.
     for path in &report.pulled {
@@ -420,10 +429,7 @@ async fn sync_once(gh: &GitHub, t: &Target, p: &Paths, state: &mut SyncState, ct
     // uploaded one by one first. Nothing on GitHub changes until the commit at the end, so a
     // stopped sync leaves the branch as it was.
     ctl.check()?;
-    let total = uploads.len();
     let done = std::sync::atomic::AtomicUsize::new(0);
-    let tick = |n: usize| (ctl.progress)("uploading", n, total);
-    tick(0);
     let mut inline: Vec<(String, String)> = Vec::new();
     let mut binary: Vec<String> = Vec::new();
     for path in uploads {
@@ -433,6 +439,30 @@ async fn sync_once(gh: &GitHub, t: &Target, p: &Paths, state: &mut SyncState, ct
             _ => binary.push(path),
         }
     }
+    // GitHub allows about 450 new files an hour from us (see github.rs). A first sync with
+    // thousands of images sends what fits now, saves it, and the rest goes up on later syncs.
+    let inline_bytes: usize = inline.iter().map(|(_, t)| t.len()).sum();
+    let reserved = inline_bytes / TREE_BATCH_BYTES + 4;
+    let room = crate::github::writes_left_this_hour().saturating_sub(reserved);
+    // Smallest first, so the most files arrive in each step.
+    let size_of = |path: &String| std::fs::metadata(vault::safe(&p.files, path).unwrap_or_default()).map(|m| m.len()).unwrap_or(0);
+    binary.sort_by_key(size_of);
+    let mut bytes = inline_bytes as u64;
+    let mut fits = 0;
+    for path in &binary {
+        let size = size_of(path);
+        if fits >= room || (bytes + size > BYTES_PER_SYNC && fits > 0) {
+            break;
+        }
+        bytes += size;
+        fits += 1;
+    }
+    for path in binary.split_off(fits) {
+        pushed_files.remove(&path);
+        report.waiting += 1;
+    }
+    let total = inline.len() + binary.len();
+    let tick = |n: usize| (ctl.progress)("uploading", n, total);
     let created: Vec<(String, String)> = stream::iter(binary)
         .map(|path| {
             let (done, tick) = (&done, &tick);

@@ -8,8 +8,71 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha1::{Digest, Sha1};
+use std::collections::VecDeque;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 const API: &str = "https://api.github.com";
+
+// GitHub's secondary limits allow 80 content-creating requests a minute and 500 an hour, and warn
+// that carrying on while limited can get an integration banned. Wandika stays under both with a
+// margin, and after a limit response it sends nothing until GitHub says it may.
+// https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api
+const WRITES_PER_MINUTE: usize = 70;
+const WRITES_PER_HOUR: usize = 450;
+static WRITES: Mutex<VecDeque<Instant>> = Mutex::new(VecDeque::new());
+static BLOCKED_UNTIL: Mutex<Option<Instant>> = Mutex::new(None);
+
+fn limited() -> Error {
+    Error::GitHub { status: 429, message: "rate limit: waiting before sending more".into() }
+}
+
+/// Fails at once while GitHub has asked us to wait.
+fn guard() -> Result<()> {
+    match *BLOCKED_UNTIL.lock().unwrap() {
+        Some(until) if Instant::now() < until => Err(limited()),
+        _ => Ok(()),
+    }
+}
+
+/// Waits for a free slot for one content-creating request; fails when this hour's budget is spent.
+async fn pace() -> Result<()> {
+    loop {
+        guard()?;
+        let wait = {
+            let mut q = WRITES.lock().unwrap();
+            let now = Instant::now();
+            while q.front().is_some_and(|t| now.duration_since(*t) > Duration::from_secs(3600)) {
+                q.pop_front();
+            }
+            if q.len() >= WRITES_PER_HOUR {
+                return Err(limited());
+            }
+            let in_minute: Vec<&Instant> = q.iter().filter(|t| now.duration_since(**t) < Duration::from_secs(60)).collect();
+            if in_minute.len() >= WRITES_PER_MINUTE {
+                Some(Duration::from_secs(60).saturating_sub(now.duration_since(*in_minute[0])) + Duration::from_millis(50))
+            } else {
+                q.push_back(now);
+                None
+            }
+        };
+        match wait {
+            Some(d) => tokio::time::sleep(d).await,
+            None => return Ok(()),
+        }
+    }
+}
+
+/// Content-creating requests still allowed in the current hour.
+pub fn writes_left_this_hour() -> usize {
+    if guard().is_err() {
+        return 0;
+    }
+    let q = WRITES.lock().unwrap();
+    let now = Instant::now();
+    let used = q.iter().filter(|t| now.duration_since(**t) <= Duration::from_secs(3600)).count();
+    WRITES_PER_HOUR.saturating_sub(used)
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct User {
@@ -134,6 +197,12 @@ impl GitHub {
             return Ok(res);
         }
         let status = res.status().as_u16();
+        // A rate limit answer: stop sending until GitHub's retry-after or reset, at least a minute.
+        let header = |k: &str| res.headers().get(k).and_then(|v| v.to_str().ok()).and_then(|v| v.parse::<u64>().ok());
+        let remaining_zero = header("x-ratelimit-remaining") == Some(0);
+        let wait = header("retry-after").or_else(|| {
+            remaining_zero.then(|| header("x-ratelimit-reset").map(|reset| reset.saturating_sub(chrono::Utc::now().timestamp() as u64))).flatten()
+        });
         if status == 401 {
             return Err(msg("Your GitHub sign-in expired or was revoked. Sign out in Settings and sign in again."));
         }
@@ -142,10 +211,16 @@ impl GitHub {
             .ok()
             .and_then(|v| v["message"].as_str().map(str::to_string))
             .unwrap_or(body);
+        if matches!(status, 403 | 429) && (wait.is_some() || remaining_zero || message.to_lowercase().contains("rate limit")) {
+            let secs = wait.unwrap_or(60).max(60);
+            *BLOCKED_UNTIL.lock().unwrap() = Some(Instant::now() + Duration::from_secs(secs));
+            return Err(Error::GitHub { status: 429, message: format!("rate limit: {message}") });
+        }
         Err(Error::GitHub { status, message })
     }
 
     async fn json<T: DeserializeOwned>(rb: RequestBuilder) -> Result<T> {
+        guard()?;
         Ok(Self::check(rb.send().await?).await?.json().await?)
     }
 
@@ -171,6 +246,7 @@ impl GitHub {
     }
 
     pub async fn create_repo(&self, name: &str) -> Result<Repo> {
+        pace().await?;
         Self::json(self.req(Method::POST, "/user/repos").json(&json!({
             "name": name,
             "private": true,
@@ -187,6 +263,7 @@ impl GitHub {
 
     /// Head commit of a branch. `None` when the repository has no commits yet.
     pub async fn head(&self, owner: &str, repo: &str, branch: &str) -> Result<Option<String>> {
+        guard()?;
         let res = self
             .req(Method::GET, &format!("/repos/{owner}/{repo}/git/ref/heads/{branch}"))
             .send()
@@ -237,6 +314,7 @@ impl GitHub {
     }
 
     pub async fn create_blob(&self, owner: &str, repo: &str, bytes: &[u8]) -> Result<String> {
+        pace().await?;
         let content = base64::engine::general_purpose::STANDARD.encode(bytes);
         let v: Value = Self::json(
             self.req(Method::POST, &format!("/repos/{owner}/{repo}/git/blobs"))
@@ -253,6 +331,7 @@ impl GitHub {
         base_tree: &str,
         entries: Vec<Value>,
     ) -> Result<String> {
+        pace().await?;
         let v: Value = Self::json(
             self.req(Method::POST, &format!("/repos/{owner}/{repo}/git/trees"))
                 .json(&json!({ "base_tree": base_tree, "tree": entries })),
@@ -269,6 +348,7 @@ impl GitHub {
         tree: &str,
         parent: &str,
     ) -> Result<String> {
+        pace().await?;
         let v: Value = Self::json(
             self.req(Method::POST, &format!("/repos/{owner}/{repo}/git/commits"))
                 .json(&json!({ "message": message, "tree": tree, "parents": [parent] })),
@@ -279,6 +359,7 @@ impl GitHub {
 
     /// Fast-forward only. Returns false when the branch moved since we read it, so the caller retries.
     pub async fn update_ref(&self, owner: &str, repo: &str, branch: &str, sha: &str) -> Result<bool> {
+        pace().await?;
         let res = self
             .req(Method::PATCH, &format!("/repos/{owner}/{repo}/git/refs/heads/{branch}"))
             .json(&json!({ "sha": sha, "force": false }))
@@ -292,6 +373,7 @@ impl GitHub {
     }
 
     pub async fn tarball(&self, owner: &str, repo: &str, sha: &str) -> Result<Vec<u8>> {
+        guard()?;
         let res = self.req(Method::GET, &format!("/repos/{owner}/{repo}/tarball/{sha}")).send().await?;
         Ok(Self::check(res).await?.bytes().await?.to_vec())
     }
@@ -306,6 +388,7 @@ impl GitHub {
         content: &[u8],
         message: &str,
     ) -> Result<()> {
+        pace().await?;
         let body = json!({
             "message": message,
             "content": base64::engine::general_purpose::STANDARD.encode(content),
