@@ -184,20 +184,26 @@ pub fn create_folder(root: &Path, rel: &str) -> Result<()> {
     Ok(())
 }
 
-/// Renames a note or folder in place and rewrites `[[links]]` to a renamed note.
+/// Renames a note, file or folder in place and rewrites `[[links]]` and `![[embeds]]` to it.
 pub fn rename(root: &Path, from: &str, new_name: &str, crypto: &Crypto, index: &mut Index) -> Result<String> {
     let src = safe(root, from)?;
     let parent = from.rsplit_once('/').map(|(p, _)| p).unwrap_or("");
     let name = clean_name(new_name)?;
     let is_dir = src.is_dir();
     let suffix = if is_dir {
-        ""
+        String::new()
     } else if from.ends_with(".md.age") {
-        ".md.age"
+        ".md.age".into()
     } else if from.ends_with(".md") {
-        ".md"
+        ".md".into()
     } else {
-        ""
+        // Other files keep their type: "photo.png" renamed to "beach" stays a PNG.
+        let file = from.rsplit('/').next().unwrap_or(from);
+        let base = file.trim_end_matches(".age");
+        let ext = base.rsplit_once('.').map_or(String::new(), |(_, e)| format!(".{e}"));
+        let age = if file.ends_with(".age") { ".age" } else { "" };
+        let typed = !ext.is_empty() && name.to_lowercase().ends_with(&ext.to_lowercase());
+        format!("{}{age}", if typed { "" } else { ext.as_str() })
     };
     let to = join(parent, &format!("{name}{suffix}"));
     if to == from {
@@ -211,15 +217,19 @@ pub fn rename(root: &Path, from: &str, new_name: &str, crypto: &Crypto, index: &
     if is_dir {
         move_encrypted_folders(root, crypto, from, Some(&to))?;
     }
-    if !is_dir && is_note(from) {
+    if !is_dir {
         let (old, new) = (title_of(from), title_of(&to));
         index.refresh(root, crypto);
         for note in index.notes_linking_to(&old) {
             let Ok(text) = read_note(root, &note, crypto) else { continue };
             let updated = WIKILINK.replace_all(&text, |c: &regex::Captures| {
-                if c[1].trim().eq_ignore_ascii_case(&old) {
+                // `[[Plan]]` and `[[Projects/Plan]]` both point at Plan; keep the folder as written.
+                let target = c[1].trim();
+                let (folder, last) = target.rsplit_once('/').map_or(("", target), |(f, l)| (f, l));
+                if last.eq_ignore_ascii_case(&old) {
                     format!(
-                        "[[{new}{}{}]]",
+                        "[[{}{new}{}{}]]",
+                        if folder.is_empty() { String::new() } else { format!("{folder}/") },
                         c.get(2).map_or("", |m| m.as_str()),
                         c.get(3).map_or("", |m| m.as_str())
                     )
@@ -706,6 +716,25 @@ mod tests {
         index.mark_stale();
         index.ensure_fresh(&root, &crypto);
         assert_eq!(index.search("kampala", &crypto).len(), 2);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn rename_keeps_file_types_and_updates_links_and_embeds() {
+        let root = std::env::temp_dir().join(format!("wandika-rename-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("Projects")).unwrap();
+        std::fs::create_dir_all(root.join("attachments")).unwrap();
+        std::fs::write(root.join("Projects/Plan.md"), "Plan").unwrap();
+        std::fs::write(root.join("attachments/pic.png"), b"png").unwrap();
+        std::fs::write(root.join("Daily.md"), "See [[Projects/Plan#Goals|the plan]] and ![[pic.png|300]]\n").unwrap();
+        let crypto = Crypto::load(&root, &crate::secrets::Secrets::new(root.clone()), "test/rename");
+        let mut index = Index::default();
+
+        assert_eq!(rename(&root, "attachments/pic.png", "beach", &crypto, &mut index).unwrap(), "attachments/beach.png");
+        assert_eq!(rename(&root, "Projects/Plan.md", "Roadmap", &crypto, &mut index).unwrap(), "Projects/Roadmap.md");
+        let daily = std::fs::read_to_string(root.join("Daily.md")).unwrap();
+        assert_eq!(daily, "See [[Projects/Roadmap#Goals|the plan]] and ![[beach.png|300]]\n");
         let _ = std::fs::remove_dir_all(&root);
     }
 
