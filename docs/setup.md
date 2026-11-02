@@ -67,6 +67,15 @@ npm run tauri ios init       # once, then: npm run tauri ios dev
 npm run tauri android init   # once, then: npm run tauri android dev
 ```
 
+Sync uses libgit2. On iPhone and Android its HTTPS needs OpenSSL, which is built from source.
+For Android, point OpenSSL's build at the NDK's archive tools before building:
+
+```bash
+T="$NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/bin"
+export RANLIB_aarch64_linux_android="$T/llvm-ranlib" AR_aarch64_linux_android="$T/llvm-ar"
+npm run tauri android build -- --debug --apk --target aarch64
+```
+
 Checks: `npm run check`, `npm test`, and `cargo test` in `src-tauri`.
 
 The interface also runs in a plain browser with a stand-in backend, for design work:
