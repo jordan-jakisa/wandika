@@ -12,6 +12,16 @@
   }
 
   const OPEN_KEY = "wandika.openFolders";
+  /** Folders with thousands of files (attachment folders) list them a page at a time. */
+  const PAGE = 200;
+  let pages = $state(new Map<string, number>());
+  const keyOf = (nodes: Node[]) => nodes[0]?.entry.path.split("/").slice(0, -1).join("/") ?? "";
+  const shown = (nodes: Node[]) => (pages.get(keyOf(nodes)) ?? 1) * PAGE;
+  const moreLabel = (left: number) => (left > PAGE ? `Show ${PAGE} more of ${left}` : `Show ${left} more`);
+  function showMore(nodes: Node[]) {
+    const k = keyOf(nodes);
+    pages = new Map(pages).set(k, (pages.get(k) ?? 1) + 1);
+  }
   let openFolders = $state<Set<string>>(load());
   let renaming = $state<string | null>(null);
   /** Row whose menu is open from a touch and hold, as on iOS and Android. */
@@ -160,7 +170,7 @@
 
 {#snippet branch(nodes: Node[], depth: number)}
   <ul role={depth === 0 ? "tree" : "group"} aria-label={depth === 0 ? "Notes" : undefined}>
-    {#each nodes as node (node.entry.path)}
+    {#each nodes.slice(0, shown(nodes)) as node (node.entry.path)}
       {@const e = node.entry}
       {@const isOpen = openFolders.has(e.path)}
       <li role="treeitem" aria-expanded={e.kind === "folder" ? isOpen : undefined} aria-selected={app.current === e.path}>
@@ -238,6 +248,13 @@
         {/if}
       </li>
     {/each}
+    {#if nodes.length > shown(nodes)}
+      <li role="none">
+        <button class="more" style="--depth: {depth}" onclick={() => showMore(nodes)}>
+          {moreLabel(nodes.length - shown(nodes))}
+        </button>
+      </li>
+    {/if}
   </ul>
 {/snippet}
 
@@ -350,6 +367,15 @@
   .empty {
     padding: 8px 10px;
     margin: 0;
+  }
+  .more {
+    display: block;
+    min-height: 32px;
+    padding: 0 10px 0 calc(4px + var(--depth) * 14px + 20px);
+    border: 0;
+    background: none;
+    color: var(--graphite);
+    font-size: var(--small);
   }
   .new-folder {
     display: flex;

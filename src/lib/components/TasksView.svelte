@@ -47,6 +47,9 @@
     return [...groups.entries()];
   });
   const open = $derived(tasks.filter((t) => !t.done).length);
+  /** A big vault has thousands of tasks; notes are listed a page at a time. */
+  const PAGE = 40;
+  let notesShown = $state(PAGE);
 </script>
 
 <section class="tasks" aria-labelledby="tasks-title">
@@ -64,7 +67,7 @@
         : "No open tasks. Write - [ ] in any note to add one."}
   </p>
 
-  {#each byNote as [path, items] (path)}
+  {#each byNote.slice(0, notesShown) as [path, items] (path)}
     <section class="group">
       <h3><button onclick={() => app.open(path)}>{items[0].title}</button></h3>
       <ul>
@@ -84,6 +87,12 @@
       </ul>
     </section>
   {/each}
+  {#if byNote.length > notesShown}
+    {@const left = byNote.length - notesShown}
+    <button class="more" onclick={() => (notesShown += PAGE)}>
+      {left > PAGE ? `Show ${PAGE} more notes of ${left}` : `Show ${left} more ${left === 1 ? "note" : "notes"}`}
+    </button>
+  {/if}
 
   {#each byList as [list, items] (list)}
     <section class="group">
@@ -122,6 +131,15 @@
     font-size: var(--view-title-size);
     font-weight: var(--view-title-weight);
     letter-spacing: var(--view-title-tracking);
+  }
+  .more {
+    min-height: var(--target);
+    margin: 4px 0 16px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--papyrus);
+    font-size: var(--small);
   }
   .summary {
     margin: 6px 0 20px;
