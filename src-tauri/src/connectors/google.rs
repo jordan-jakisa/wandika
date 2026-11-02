@@ -118,7 +118,7 @@ pub async fn await_code(listener: tokio::net::TcpListener, state: &str) -> Resul
             let Some(target) = req.split_whitespace().nth(1) else { continue };
             let url = url::Url::parse(&format!("http://127.0.0.1{target}")).map_err(|e| msg(e.to_string()))?;
             let q: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
-            if q.get("code").is_none() && q.get("error").is_none() {
+            if !q.contains_key("code") && !q.contains_key("error") {
                 // Favicon and other stray requests.
                 let _ = sock.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n").await;
                 continue;
@@ -254,13 +254,13 @@ pub async fn mail(http: &reqwest::Client, secrets: &Secrets) -> Result<Vec<MailI
 }
 
 fn find_part(payload: &Value, mime: &str) -> Option<String> {
-    if payload["mimeType"].as_str() == Some(mime) {
-        if let Some(data) = payload["body"]["data"].as_str() {
-            let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
-                .decode(data.trim_end_matches('='))
-                .ok()?;
-            return String::from_utf8(bytes).ok();
-        }
+    if payload["mimeType"].as_str() == Some(mime)
+        && let Some(data) = payload["body"]["data"].as_str()
+    {
+        let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(data.trim_end_matches('='))
+            .ok()?;
+        return String::from_utf8(bytes).ok();
     }
     payload["parts"].as_array()?.iter().find_map(|p| find_part(p, mime))
 }
@@ -330,10 +330,26 @@ pub fn html_unescape(s: &str) -> String {
 
 /// Good enough to keep the words of an HTML-only email in a note.
 pub fn strip_html(html: &str) -> String {
-    let no_blocks = regex::Regex::new(r"(?is)<(script|style|head)[^>]*>.*?</\1>").unwrap().replace_all(html, "");
+    // The regex crate has no backreferences, so each block element gets its own pattern.
+    let mut no_blocks = html.to_string();
+    for tag in ["script", "style", "head"] {
+        let re = regex::Regex::new(&format!(r"(?is)<{tag}[^>]*>.*?</{tag}>")).unwrap();
+        no_blocks = re.replace_all(&no_blocks, "").to_string();
+    }
     let breaks = regex::Regex::new(r"(?i)<(br|/p|/div|/tr|/li|/h\d)[^>]*>").unwrap().replace_all(&no_blocks, "\n");
     let text = regex::Regex::new(r"<[^>]+>").unwrap().replace_all(&breaks, "");
     let text = html_unescape(&text);
     let blank = regex::Regex::new(r"\n\s*\n\s*\n+").unwrap();
     blank.replace_all(text.trim(), "\n\n").to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strips_html_email() {
+        let html = "<html><head><title>x</title></head><style>p{}</style><p>Hi &amp; welcome</p><div>Line two<br>three</div></html>";
+        assert_eq!(strip_html(html), "Hi & welcome\nLine two\nthree");
+    }
 }

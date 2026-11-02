@@ -123,7 +123,7 @@ pub fn tree(root: &Path) -> Result<Vec<Entry>> {
             modified,
         });
     }
-    out.sort_by(|a, b| a.path.to_lowercase().cmp(&b.path.to_lowercase()));
+    out.sort_by_key(|e| e.path.to_lowercase());
     Ok(out)
 }
 
@@ -206,6 +206,9 @@ pub fn rename(root: &Path, from: &str, new_name: &str, crypto: &Crypto, index: &
         return Err(msg(format!("“{name}” already exists here.")));
     }
     std::fs::rename(&src, &dst)?;
+    if is_dir {
+        move_encrypted_folders(root, crypto, from, Some(&to))?;
+    }
     if !is_dir && is_note(from) {
         let (old, new) = (title_of(from), title_of(&to));
         index.refresh(root, crypto);
@@ -230,9 +233,35 @@ pub fn rename(root: &Path, from: &str, new_name: &str, crypto: &Crypto, index: &
     Ok(to)
 }
 
+/// Keeps the list of encrypted folders in step when a folder is renamed (`Some`) or trashed (`None`).
+fn move_encrypted_folders(root: &Path, crypto: &Crypto, from: &str, to: Option<&str>) -> Result<()> {
+    let Some(mut cfg) = crypto.config.clone() else { return Ok(()) };
+    let before = cfg.folders.clone();
+    cfg.folders = cfg
+        .folders
+        .into_iter()
+        .filter_map(|f| {
+            let rest = if f == from { Some("") } else { f.strip_prefix(&format!("{from}/")) };
+            match (rest, to) {
+                (None, _) => Some(f),
+                (Some(_), None) => None,
+                (Some(""), Some(to)) => Some(to.to_string()),
+                (Some(r), Some(to)) => Some(format!("{to}/{r}")),
+            }
+        })
+        .collect();
+    if cfg.folders != before {
+        crypto::save_config(root, &cfg)?;
+    }
+    Ok(())
+}
+
 /// Moves to `.trash/` like Obsidian, so a deleted note can be recovered from the repo.
-pub fn trash(root: &Path, rel: &str) -> Result<()> {
+pub fn trash(root: &Path, rel: &str, crypto: &Crypto) -> Result<()> {
     let src = safe(root, rel)?;
+    if src.is_dir() {
+        move_encrypted_folders(root, crypto, rel, None)?;
+    }
     let dst = root.join(".trash").join(rel);
     if let Some(p) = dst.parent() {
         std::fs::create_dir_all(p)?;
@@ -380,7 +409,7 @@ impl Index {
 
     pub fn titles(&self) -> Vec<NoteMeta> {
         let mut v: Vec<NoteMeta> = self.notes.values().map(|c| c.meta.clone()).collect();
-        v.sort_by(|a, b| b.modified.cmp(&a.modified));
+        v.sort_by_key(|n| std::cmp::Reverse(n.modified));
         v
     }
 
@@ -423,7 +452,7 @@ impl Index {
                 encrypted: c.meta.encrypted,
             })
             .collect();
-        out.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
+        out.sort_by_key(|h| h.title.to_lowercase());
         out
     }
 

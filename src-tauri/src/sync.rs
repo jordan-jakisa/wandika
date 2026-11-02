@@ -358,7 +358,7 @@ async fn sync_once(gh: &GitHub, t: &Target, p: &Paths, state: &mut SyncState) ->
             uploads.push(path.clone());
         }
     }
-    let created: Vec<(String, String)> = stream::iter(uploads.into_iter())
+    let created: Vec<(String, String)> = stream::iter(uploads)
         .map(|path| async move {
             let bytes = std::fs::read(vault::safe(&p.files, &path)?)?;
             let sha = gh.create_blob(&t.owner, &t.repo, &bytes).await?;

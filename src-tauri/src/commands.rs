@@ -163,7 +163,7 @@ pub async fn entry_rename(app: S<'_>, path: String, name: String) -> Result<Stri
 
 #[tauri::command]
 pub async fn entry_trash(app: S<'_>, path: String) -> Result<()> {
-    vault::trash(&app.root()?, &path)
+    vault::trash(&app.root()?, &path, &app.crypto()?)
 }
 
 fn with_index<T>(app: &App, f: impl FnOnce(&vault::Index) -> T) -> Result<T> {
