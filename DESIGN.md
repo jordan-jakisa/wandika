@@ -74,7 +74,8 @@ Phone (< 900px), same on iPhone and Android     Note open, typing
 └────────────────────┘               └────────────────────┘
 ```
 
-Phones share one calm design: a flat bar with three places and the new-note button, a single ⋯ menu
+Phones share one calm design: a bar with three places and the new-note button (on iOS a floating
+Liquid Glass capsule with the button as tinted glass beside it, Jordan's ask; flat on Android), a single ⋯ menu
 for everything else (Graph, Projects, New folder, Sync, Settings), Tasks reached from Today, plain
 "‹ Notes" back rows, and Settings as one bottom sheet. The platform decides behaviour only (iOS edge
 swipe back, Android system back, safe areas). Text follows the phone's text size setting.
