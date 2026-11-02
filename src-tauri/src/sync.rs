@@ -16,6 +16,7 @@ use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use walkdir::WalkDir;
 
 /// Larger files stay on the device they were added on; GitHub's blob API stops at 100 MB.
@@ -75,31 +76,63 @@ fn save_state(p: &Paths, s: &SyncState) -> Result<()> {
     vault::write_atomic(&p.state, &serde_json::to_vec(s)?)
 }
 
-fn skip(rel: &str) -> bool {
-    rel == ".git" || rel.starts_with(".git/") || rel.ends_with(".DS_Store") || rel.ends_with(TMP_SUFFIX)
+/// Paths sync leaves alone on both sides: the vault's `.gitignore`, plus files that only describe
+/// one device (Obsidian's open tabs, Finder's .DS_Store). Ignored files are never uploaded,
+/// downloaded or deleted, so a file GitHub already has stays as it is there.
+struct Ignored(Gitignore);
+
+impl Ignored {
+    fn load(root: &Path) -> Self {
+        let mut b = GitignoreBuilder::new(root);
+        for line in [".git", ".DS_Store", ".obsidian/workspace.json", ".obsidian/workspace-mobile.json"] {
+            let _ = b.add_line(None, line);
+        }
+        let _ = b.add_line(None, &format!("*{TMP_SUFFIX}"));
+        if root.join(".gitignore").is_file() {
+            let _ = b.add(root.join(".gitignore"));
+        }
+        Ignored(b.build().unwrap_or_else(|_| Gitignore::empty()))
+    }
+
+    fn file(&self, rel: &str) -> bool {
+        self.0.matched_path_or_any_parents(rel, false).is_ignore()
+    }
+
+    fn dir(&self, rel: &str) -> bool {
+        self.0.matched_path_or_any_parents(rel, true).is_ignore()
+    }
 }
 
 /// Hashes every local file, reusing the cached hash when size and mtime are unchanged.
-fn scan(root: &Path, cache: &BTreeMap<String, Stat>) -> Result<(BTreeMap<String, String>, BTreeMap<String, Stat>)> {
+fn scan(
+    root: &Path,
+    cache: &BTreeMap<String, Stat>,
+    ignored: &Ignored,
+) -> Result<(BTreeMap<String, String>, BTreeMap<String, Stat>)> {
     let mut files = BTreeMap::new();
     let mut stat = BTreeMap::new();
     if !root.exists() {
         return Ok((files, stat));
     }
-    for e in WalkDir::new(root).follow_links(false).into_iter().filter_entry(|e| e.file_name() != ".git") {
-        let e = e.map_err(|e| msg(format!("Couldn't read the vault folder: {e}")))?;
-        if !e.file_type().is_file() {
-            continue;
-        }
-        let rel = e
-            .path()
-            .strip_prefix(root)
+    let rel_of = |p: &Path| {
+        p.strip_prefix(root)
             .unwrap()
             .components()
             .filter_map(|c| c.as_os_str().to_str())
             .collect::<Vec<_>>()
-            .join("/");
-        if skip(&rel) {
+            .join("/")
+    };
+    let walk = WalkDir::new(root)
+        .follow_links(false)
+        .into_iter()
+        .filter_entry(|e| e.depth() == 0 || !(e.file_type().is_dir() && ignored.dir(&rel_of(e.path()))));
+    for e in walk {
+        let e = e.map_err(|e| msg(format!("Couldn't read the vault folder: {e}")))?;
+        if !e.file_type().is_file() {
+            continue;
+        }
+        let rel = rel_of(e.path());
+        if ignored.file(&rel) {
             continue;
         }
         let meta = e.metadata().map_err(|e| msg(e.to_string()))?;
@@ -207,6 +240,7 @@ async fn sync_once(gh: &GitHub, t: &Target, p: &Paths, state: &mut SyncState) ->
         return Ok(None);
     };
     let tree_sha = gh.commit_tree(&t.owner, &t.repo, &remote_head).await?;
+    let ignored = Ignored::load(&p.files);
 
     // First sync on this device: clone with one tarball, keeping anything already on disk. A local
     // vault being connected to a repository lands here too; where both sides have a different file
@@ -214,9 +248,9 @@ async fn sync_once(gh: &GitHub, t: &Target, p: &Paths, state: &mut SyncState) ->
     if state.head.is_none() {
         let tree = gh.tree(&t.owner, &t.repo, &tree_sha).await?;
         let files = untar(&gh.tarball(&t.owner, &t.repo, &remote_head).await?, None)?;
-        let (local, _) = scan(&p.files, &BTreeMap::new())?;
+        let (local, _) = scan(&p.files, &BTreeMap::new(), &ignored)?;
         let mut remote = BTreeMap::new();
-        for e in tree.iter().filter(|e| e.kind == "blob" && e.mode != "120000" && !skip(&e.path)) {
+        for e in tree.iter().filter(|e| e.kind == "blob" && e.mode != "120000" && !ignored.file(&e.path)) {
             remote.insert(e.path.clone(), e.sha.clone());
             if let Some(local_sha) = local.get(&e.path) {
                 if local_sha != &e.sha
@@ -235,7 +269,7 @@ async fn sync_once(gh: &GitHub, t: &Target, p: &Paths, state: &mut SyncState) ->
         }
         state.files = remote;
         state.head = Some(remote_head.clone());
-        let (_, stat) = scan(&p.files, &state.stat)?;
+        let (_, stat) = scan(&p.files, &state.stat, &ignored)?;
         state.stat = stat;
         // Files that were already on disk get compared and pushed on the next pass.
         if local.is_empty() {
@@ -247,7 +281,7 @@ async fn sync_once(gh: &GitHub, t: &Target, p: &Paths, state: &mut SyncState) ->
     }
 
     let base = state.files.clone();
-    let (local, stat) = scan(&p.files, &state.stat)?;
+    let (local, stat) = scan(&p.files, &state.stat, &ignored)?;
     state.stat = stat;
     let remote_moved = state.head.as_deref() != Some(remote_head.as_str());
     if !remote_moved && local == base {
@@ -260,7 +294,7 @@ async fn sync_once(gh: &GitHub, t: &Target, p: &Paths, state: &mut SyncState) ->
     let tree = gh.tree(&t.owner, &t.repo, &tree_sha).await?;
     let mut remote = BTreeMap::new();
     let mut modes = HashMap::new();
-    for e in tree.iter().filter(|e| e.kind == "blob" && e.mode != "120000" && !skip(&e.path)) {
+    for e in tree.iter().filter(|e| e.kind == "blob" && e.mode != "120000" && !ignored.file(&e.path)) {
         remote.insert(e.path.clone(), e.sha.clone());
         modes.insert(e.path.clone(), e.mode.clone());
     }
@@ -327,7 +361,7 @@ async fn sync_once(gh: &GitHub, t: &Target, p: &Paths, state: &mut SyncState) ->
         }
     }
 
-    let (final_local, stat) = scan(&p.files, &state.stat)?;
+    let (final_local, stat) = scan(&p.files, &state.stat, &ignored)?;
     state.stat = stat;
     // Everything pulled so far is now part of the base, even if the push below has to retry.
     for path in &report.pulled {
@@ -404,6 +438,25 @@ async fn sync_once(gh: &GitHub, t: &Target, p: &Paths, state: &mut SyncState) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn follows_the_vault_gitignore_and_skips_device_state() {
+        let root = std::env::temp_dir().join(format!("wandika-ignore-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join(".smart-env/multi")).unwrap();
+        std::fs::create_dir_all(root.join(".obsidian")).unwrap();
+        std::fs::create_dir_all(root.join("05_Visuals/Images")).unwrap();
+        std::fs::write(root.join(".gitignore"), ".smart-env/\n05_Visuals/Images/*.gif\n").unwrap();
+        for f in [".smart-env/multi/a.ajson", ".obsidian/workspace.json", ".obsidian/app.json", "05_Visuals/Images/big.gif", "05_Visuals/Images/ok.png", "Note.md", ".DS_Store"] {
+            std::fs::write(root.join(f), f).unwrap();
+        }
+        let ignored = Ignored::load(&root);
+        let (files, _) = scan(&root, &BTreeMap::new(), &ignored).unwrap();
+        let names: Vec<&str> = files.keys().map(String::as_str).collect();
+        assert_eq!(names, [".gitignore", ".obsidian/app.json", "05_Visuals/Images/ok.png", "Note.md"]);
+        assert!(ignored.file(".smart-env/multi/a.ajson"), "remote files under an ignored folder are left alone too");
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn conflict_names_keep_extensions() {
