@@ -166,6 +166,13 @@
   ];
   const PARENT: Partial<Record<Tab, Tab>> = { tasks: "today", projects: "notes", graph: "notes" };
   const parentTab = $derived(PARENT[app.tab] ?? app.tab);
+  const subView = $derived(
+    PARENT[app.tab] ? { parent: PARENT[app.tab]!, parentLabel: PARENT[app.tab] === "today" ? "Today" : "Notes" } : null,
+  );
+
+  // Pull down at the top of a list to sync.
+  const PULL_TRIGGER = 64;
+  let phoneBody = $state<HTMLDivElement>();
 
   // Each tab keeps its own scroll position, so Notes is where you left it after a look at Today.
   const tabScroll = new Map<Tab, number>();
@@ -178,14 +185,7 @@
       void tick().then(() => phoneBody && (phoneBody.scrollTop = tabScroll.get(t) ?? 0));
     });
   });
-  const subView = $derived(
-    PARENT[app.tab] ? { parent: PARENT[app.tab]!, parentLabel: PARENT[app.tab] === "today" ? "Today" : "Notes" } : null,
-  );
 
-
-  // Pull down at the top of a list to sync.
-  const PULL_TRIGGER = 64;
-  let phoneBody = $state<HTMLDivElement>();
   let pull = $state(0);
   let pullFrom: number | null = null;
   function pullStart(e: TouchEvent) {
