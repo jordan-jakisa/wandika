@@ -82,6 +82,16 @@ fn hidden(rel: &str) -> bool {
     rel.split('/').any(|part| part.starts_with('.')) || rel.ends_with(TMP_SUFFIX)
 }
 
+/// Every entry under `root`, without descending into hidden folders (.git, .obsidian, .trash,
+/// plugin caches): nothing in them is shown or indexed.
+fn walk_visible(root: &Path) -> impl Iterator<Item = walkdir::DirEntry> {
+    WalkDir::new(root)
+        .follow_links(false)
+        .into_iter()
+        .filter_entry(|e| e.depth() == 0 || !e.file_name().to_string_lossy().starts_with('.'))
+        .flatten()
+}
+
 pub fn is_note(rel: &str) -> bool {
     rel.ends_with(".md") || rel.ends_with(".md.age")
 }
@@ -107,7 +117,7 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
 
 pub fn tree(root: &Path) -> Result<Vec<Entry>> {
     let mut out = Vec::new();
-    for e in WalkDir::new(root).min_depth(1).follow_links(false).into_iter().flatten() {
+    for e in walk_visible(root).filter(|e| e.depth() > 0) {
         let Some(rel) = rel_of(root, e.path()) else { continue };
         if hidden(&rel) {
             continue;
@@ -160,6 +170,24 @@ fn clean_name(name: &str) -> Result<String> {
 fn join(folder: &str, name: &str) -> String {
     let folder = folder.trim_matches('/');
     if folder.is_empty() { name.to_string() } else { format!("{folder}/{name}") }
+}
+
+/// Obsidian's "Default location for new notes": the vault root, the open note's folder, or a set
+/// folder (`.obsidian/app.json` → `newFileLocation`, `newFileFolderPath`).
+pub fn new_note_folder(root: &Path, current: Option<&str>) -> String {
+    let app: serde_json::Value = std::fs::read(root.join(".obsidian/app.json"))
+        .ok()
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .unwrap_or_default();
+    let folder_of = |p: &str| p.rsplit_once('/').map_or(String::new(), |(f, _)| f.to_string());
+    match app.get("newFileLocation").and_then(|v| v.as_str()) {
+        Some("current") => current.map(folder_of).unwrap_or_default(),
+        Some("folder") => {
+            let f = app.get("newFileFolderPath").and_then(|v| v.as_str()).unwrap_or("").trim_matches('/');
+            if safe(root, f).is_ok() { f.to_string() } else { String::new() }
+        }
+        _ => String::new(),
+    }
 }
 
 /// Creates a note with a unique name. Notes in encrypted folders are created encrypted.
@@ -451,7 +479,7 @@ impl Index {
             self.unlocked = crypto.unlocked();
         }
         let mut seen = std::collections::HashSet::new();
-        for e in WalkDir::new(root).follow_links(false).into_iter().flatten() {
+        for e in walk_visible(root) {
             if !e.file_type().is_file() {
                 continue;
             }
@@ -774,6 +802,49 @@ mod tests {
         assert_eq!(rename(&root, "Projects/Plan.md", "Roadmap", &crypto, &mut index).unwrap(), "Projects/Roadmap.md");
         let daily = std::fs::read_to_string(root.join("Daily.md")).unwrap();
         assert_eq!(daily, "See [[Projects/Roadmap#Goals|the plan]] and ![[beach.png|300]]\n");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// Timings on a real vault, read only: `WANDIKA_BENCH_VAULT=/path cargo test --release bench -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn bench_real_vault() {
+        let Ok(dir) = std::env::var("WANDIKA_BENCH_VAULT") else { return };
+        let root = PathBuf::from(dir);
+        let crypto = Crypto::load(&root, &crate::secrets::Secrets::new(std::env::temp_dir()), "bench/vault");
+        let t = Instant::now();
+        let entries = tree(&root).unwrap();
+        println!("tree: {} entries in {:?}", entries.len(), t.elapsed());
+        let mut index = Index::default();
+        let t = Instant::now();
+        index.refresh(&root, &crypto);
+        println!("index cold: {} notes in {:?}", index.titles().len(), t.elapsed());
+        let t = Instant::now();
+        index.refresh(&root, &crypto);
+        println!("index warm rescan: {:?}", t.elapsed());
+        let t = Instant::now();
+        let hits = index.search("app", &crypto);
+        println!("search 'app': {} hits in {:?}", hits.len(), t.elapsed());
+        let t = Instant::now();
+        let titles = index.titles();
+        println!("titles: {} in {:?}", titles.len(), t.elapsed());
+        let t = Instant::now();
+        let tasks = index.tasks();
+        println!("tasks: {} in {:?}", tasks.len(), t.elapsed());
+        let bytes: usize = index.notes.values().map(|c| c.lower.len()).sum();
+        println!("index text held: {} KB", bytes / 1024);
+    }
+
+    #[test]
+    fn new_notes_go_where_obsidian_is_set_to_put_them() {
+        let root = std::env::temp_dir().join(format!("wandika-newloc-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join(".obsidian")).unwrap();
+        assert_eq!(new_note_folder(&root, Some("Projects/Plan.md")), "");
+        std::fs::write(root.join(".obsidian/app.json"), r#"{"newFileLocation":"current"}"#).unwrap();
+        assert_eq!(new_note_folder(&root, Some("Projects/Plan.md")), "Projects");
+        std::fs::write(root.join(".obsidian/app.json"), r#"{"newFileLocation":"folder","newFileFolderPath":"00_Inbox"}"#).unwrap();
+        assert_eq!(new_note_folder(&root, Some("Projects/Plan.md")), "00_Inbox");
         let _ = std::fs::remove_dir_all(&root);
     }
 

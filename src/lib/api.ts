@@ -98,6 +98,8 @@ export const api = {
       : call<string>("attachment_save", { note, name, bytes });
   },
   attachmentRead: (target: string, from: string) => call<ArrayBuffer>("attachment_read", { target, from }),
+  /** Where a new note goes, following Obsidian's "Default location for new notes". */
+  newNoteFolder: (current: string | null) => call<string>("new_note_folder", { current }),
   templatesList: () => call<string[]>("templates_list"),
   templateRender: (path: string, title: string) => call<string>("template_render", { path, title }),
   noteRead: (path: string) => call<string>("note_read", { path }),

@@ -205,7 +205,9 @@ class AppState {
     this.open(path);
   }
 
-  async newNote(folder = this.currentFolder()) {
+  /** A note in `folder`, or where Obsidian's settings put new notes. */
+  async newNote(folder?: string) {
+    folder ??= await this.newNoteFolder();
     const path = await api.noteCreate(folder, "Untitled");
     await this.refreshFiles();
     this.open(path);
@@ -238,9 +240,8 @@ class AppState {
     this.tab = "projects";
   }
 
-  currentFolder() {
-    const c = this.current;
-    return c && c.includes("/") ? c.slice(0, c.lastIndexOf("/")) : "";
+  newNoteFolder() {
+    return api.newNoteFolder(this.current).catch(() => "");
   }
 
   /** Follows a [[wikilink]], creating the note when it doesn't exist yet. */
@@ -250,7 +251,7 @@ class AppState {
     const found = await api.resolveLink(clean);
     if (found) return this.open(found);
     const slash = clean.lastIndexOf("/");
-    const folder = slash >= 0 ? clean.slice(0, slash) : "";
+    const folder = slash >= 0 ? clean.slice(0, slash) : await this.newNoteFolder();
     const path = await api.noteCreate(folder, clean.slice(slash + 1));
     await this.refreshFiles();
     this.open(path);

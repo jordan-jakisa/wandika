@@ -53,6 +53,7 @@ pub fn run() {
             commands::folder_create,
             commands::attachment_save,
             commands::attachment_read,
+            commands::new_note_folder,
             commands::templates_list,
             commands::template_render,
             commands::entry_rename,

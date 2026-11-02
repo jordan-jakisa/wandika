@@ -47,7 +47,7 @@
   async function choose(i: number) {
     if (i < results.length) return app.open(results[i].path);
     if (canCreate) {
-      const path = await api.noteCreate(app.currentFolder(), query.trim());
+      const path = await api.noteCreate(await app.newNoteFolder(), query.trim());
       await app.refreshFiles();
       app.open(path);
       app.edited();

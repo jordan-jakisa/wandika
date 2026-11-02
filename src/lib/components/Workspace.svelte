@@ -233,7 +233,7 @@
     <p class="empty-title">Pick a note, or start today's.</p>
     <div class="empty-actions">
       <button class="btn primary" onclick={() => app.openDaily()}><NotebookPen size={16} /> Open today's note</button>
-      <button class="btn" onclick={() => app.newNote("")}><Plus size={16} /> New note</button>
+      <button class="btn" onclick={() => app.newNote()}><Plus size={16} /> New note</button>
     </div>
     <p class="muted keys">Search with ⌘K. New note with ⌘N. Sync with ⌘S.</p>
   </div>

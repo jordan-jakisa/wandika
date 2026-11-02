@@ -238,6 +238,11 @@ pub async fn note_create(app: S<'_>, folder: String, title: String, body: Option
 }
 
 #[tauri::command]
+pub async fn new_note_folder(app: S<'_>, current: Option<String>) -> Result<String> {
+    Ok(vault::new_note_folder(&app.root()?, current.as_deref()))
+}
+
+#[tauri::command]
 pub async fn templates_list(app: S<'_>) -> Result<Vec<String>> {
     Ok(vault::templates(&app.root()?))
 }

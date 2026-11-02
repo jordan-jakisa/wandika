@@ -230,6 +230,7 @@ const handlers: Record<string, (a: Args) => unknown> = {
     return { pulled: [], pushed: [], removed: [], merged: [], conflicts: [], too_big: [], head: "abc", at: lastSync };
   },
   tree: () => entries(),
+  new_note_folder: ({ current }) => (current && current.includes("/") ? current.slice(0, current.lastIndexOf("/")) : ""),
   templates_list: () => [...notes.keys()].filter((p) => p.startsWith("Templates/")),
   template_render: ({ path, title }) =>
     (notes.get(path) ?? "")
