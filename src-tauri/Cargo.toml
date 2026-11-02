@@ -1,8 +1,8 @@
 [package]
 name = "wandika"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "Wandika: Markdown notes synced through GitHub"
+authors = ["Jordan Mungujakisa"]
 edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -16,12 +16,38 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+dotenvy = "0.15"
 
 [dependencies]
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
+tauri-plugin-deep-link = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-webpki-roots", "http2", "gzip"] }
+tokio = { version = "1", features = ["sync", "time", "net", "io-util", "macros", "rt"] }
+futures = "0.3"
+thiserror = "2"
+base64 = "0.22"
+sha1 = "0.10"
+sha2 = "0.10"
+hex = "0.4"
+diffy = "0.4"
+flate2 = "1"
+tar = "0.4"
+walkdir = "2"
+regex = "1"
+chrono = { version = "0.4", features = ["serde"] }
+url = "2"
+rand = "0.8"
+age = { version = "0.11", features = ["armor"] }
+
+[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+objc2 = "0.6"
+objc2-foundation = "0.3"
+objc2-event-kit = "0.3"
+block2 = "0.6"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
