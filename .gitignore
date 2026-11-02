@@ -17,3 +17,4 @@ src-tauri/tauri.ios.conf.json
 
 # Project tracker: private-repo only (Jordan's rule); this repo is public
 docs/backlog.md
+docs/growth/
