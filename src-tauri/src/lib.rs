@@ -1,3 +1,4 @@
+mod attachments;
 mod commands;
 mod config;
 mod connectors;
@@ -50,6 +51,8 @@ pub fn run() {
             commands::note_write,
             commands::note_create,
             commands::folder_create,
+            commands::attachment_save,
+            commands::attachment_read,
             commands::entry_rename,
             commands::entry_trash,
             commands::note_titles,

@@ -237,6 +237,29 @@ pub async fn note_create(app: S<'_>, folder: String, title: String, body: Option
     Ok(path)
 }
 
+/// Raw file bytes in the body; `x-meta` carries `note` and `name`, form-encoded.
+#[tauri::command]
+pub async fn attachment_save(app: S<'_>, request: tauri::ipc::Request<'_>) -> Result<String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err(msg("No file data arrived."));
+    };
+    let meta = request.headers().get("x-meta").and_then(|v| v.to_str().ok()).unwrap_or_default();
+    let field = |k: &str| url::form_urlencoded::parse(meta.as_bytes()).find(|(key, _)| key == k).map(|(_, v)| v.into_owned());
+    let note = field("note").unwrap_or_default();
+    let name = field("name").ok_or_else(|| msg("The file has no name."))?;
+    let rel = crate::attachments::save(&app.root()?, &note, &name, bytes, &app.crypto()?)?;
+    changed(&app);
+    Ok(rel)
+}
+
+/// The bytes of the file an embed in `from` points at.
+#[tauri::command]
+pub async fn attachment_read(app: S<'_>, target: String, from: String) -> Result<tauri::ipc::Response> {
+    let root = app.root()?;
+    let rel = crate::attachments::resolve(&root, &target, &from).ok_or_else(|| msg(format!("{target} isn't in this vault.")))?;
+    Ok(tauri::ipc::Response::new(crate::attachments::read(&root, &rel, &app.crypto()?)?))
+}
+
 #[tauri::command]
 pub async fn folder_create(app: S<'_>, path: String) -> Result<()> {
     vault::create_folder(&app.root()?, &path)
