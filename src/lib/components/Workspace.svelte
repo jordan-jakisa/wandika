@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick, untrack } from "svelte";
   import {
     CalendarDays,
     ListChecks,
@@ -20,6 +21,7 @@
   import { api } from "../api";
   import Menu from "./Menu.svelte";
   import { isIOS } from "../platform";
+  import { push } from "../transitions";
   import { app, titleOf, type Tab } from "../app.svelte";
   import Editor from "./Editor.svelte";
   import FileTree from "./FileTree.svelte";
@@ -132,8 +134,14 @@
     if (Math.abs(t.clientY - swipeFrom.y) > Math.abs(dx) && swipeX === 0) return void (swipeFrom = null);
     swipeX = Math.max(0, dx);
   }
+  /** Where the note was when a swipe let go, so it carries on from there instead of jumping. */
+  let releasedAt = $state(0);
   function swipeEnd() {
-    if (swipeFrom && swipeX > width * 0.33) app.current = null;
+    releasedAt = 0;
+    if (swipeFrom && swipeX > width * 0.33) {
+      releasedAt = swipeX;
+      app.current = null;
+    }
     swipeFrom = null;
     swipeX = 0;
   }
@@ -146,6 +154,18 @@
   ];
   const PARENT: Partial<Record<Tab, Tab>> = { tasks: "today", projects: "notes", graph: "notes" };
   const parentTab = $derived(PARENT[app.tab] ?? app.tab);
+
+  // Each tab keeps its own scroll position, so Notes is where you left it after a look at Today.
+  const tabScroll = new Map<Tab, number>();
+  let scrollTab: Tab = app.tab;
+  $effect.pre(() => {
+    const t = app.tab;
+    untrack(() => {
+      if (phoneBody && t !== scrollTab) tabScroll.set(scrollTab, phoneBody.scrollTop);
+      scrollTab = t;
+      void tick().then(() => phoneBody && (phoneBody.scrollTop = tabScroll.get(t) ?? 0));
+    });
+  });
   const subView = $derived(
     PARENT[app.tab] ? { parent: PARENT[app.tab]!, parentLabel: PARENT[app.tab] === "today" ? "Today" : "Notes" } : null,
   );
@@ -164,8 +184,13 @@
     const dy = e.touches[0].clientY - pullFrom;
     pull = dy > 0 ? Math.min(96, dy * 0.5) : 0;
   }
+  /** True while a sync you pulled for runs; background syncs never push the list down. */
+  let pulledSync = $state(false);
   function pullEnd() {
-    if (pull >= PULL_TRIGGER) void app.sync();
+    if (pull >= PULL_TRIGGER) {
+      pulledSync = true;
+      void app.sync().finally(() => (pulledSync = false));
+    }
     pull = 0;
     pullFrom = null;
   }
@@ -352,13 +377,9 @@
     ontouchend={swipeEnd}
     style={swipeX ? `--swipe: ${swipeX}px` : undefined}
   >
-    {#if app.current}
-      <div class="note-host" class:swiping={swipeX > 0}>
-        {#key app.openCount}
-          <Editor path={app.current} compact />
-        {/key}
-      </div>
-    {:else}
+    <!-- The list stays mounted under an open note, so back returns to the same place and a swipe
+         back shows it underneath. -->
+    <div class="phone-list" inert={!!app.current}>
       <!-- Pull to sync is a shortcut for the sync status line. -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
@@ -368,9 +389,9 @@
         ontouchmove={pullMove}
         ontouchend={pullEnd}
       >
-        {#if app.synced && (pull > 0 || app.syncing)}
-          <div class="pull" style="height: {app.syncing && !pull ? 44 : pull}px" aria-live="polite">
-            {app.syncing ? "Syncing…" : pull >= PULL_TRIGGER ? "Release to sync" : "Pull to sync"}
+        {#if app.synced && (pull > 0 || pulledSync)}
+          <div class="pull" class:settling={pull === 0} style="height: {pulledSync && !pull ? 44 : pull}px" aria-live="polite">
+            {pulledSync ? "Syncing…" : pull >= PULL_TRIGGER ? "Release to sync" : "Pull to sync"}
           </div>
         {/if}
         {@render conflictsBanner()}
@@ -379,32 +400,37 @@
             <ChevronLeft size={22} /> {subView.parentLabel}
           </button>
         {/if}
-        {#if app.tab === "notes"}
-          <header class="phone-head">
-            <h1 class="vault-name">{app.vault?.name}</h1>
-            <Menu label="More" size={22}>
-              <button role="menuitem" onclick={() => app.showGraph()}><Network size={18} /> Graph</button>
-              <button role="menuitem" onclick={() => (app.tab = "projects")}><Columns3 size={18} /> Projects</button>
-              <button role="menuitem" onclick={() => app.newFolder()}><FolderPlus size={18} /> New folder</button>
-              {#if app.synced}
-                <button role="menuitem" onclick={() => app.sync()}><RefreshCw size={18} /> Sync now</button>
-              {/if}
-              <button role="menuitem" onclick={() => app.openSettings()}><SettingsIcon size={18} /> Settings</button>
-            </Menu>
-          </header>
-          <div class="phone-status"><SyncStatus /></div>
-          <FileTree />
-        {:else if app.tab === "today"}
-          <TodayPanel />
-        {:else if app.tab === "tasks"}
-          <TasksView />
-        {:else if app.tab === "projects"}
-          <ProjectsView />
-        {:else if app.tab === "graph"}
-          <div class="graph-host phone-graph"><GraphView /></div>
-        {:else}
-          <Search mode="page" />
-        {/if}
+        <!-- A screen inside a tab (Tasks, Projects, Graph) slides in; switching tabs is instant. -->
+        {#key app.tab}
+          <div class="view" in:push={{ enabled: !!PARENT[app.tab] }}>
+            {#if app.tab === "notes"}
+              <header class="phone-head">
+                <h1 class="vault-name">{app.vault?.name}</h1>
+                <Menu label="More" size={22}>
+                  <button role="menuitem" onclick={() => app.showGraph()}><Network size={18} /> Graph</button>
+                  <button role="menuitem" onclick={() => (app.tab = "projects")}><Columns3 size={18} /> Projects</button>
+                  <button role="menuitem" onclick={() => app.newFolder()}><FolderPlus size={18} /> New folder</button>
+                  {#if app.synced}
+                    <button role="menuitem" onclick={() => app.sync()}><RefreshCw size={18} /> Sync now</button>
+                  {/if}
+                  <button role="menuitem" onclick={() => app.openSettings()}><SettingsIcon size={18} /> Settings</button>
+                </Menu>
+              </header>
+              <div class="phone-status"><SyncStatus /></div>
+              <FileTree />
+            {:else if app.tab === "today"}
+              <TodayPanel />
+            {:else if app.tab === "tasks"}
+              <TasksView />
+            {:else if app.tab === "projects"}
+              <ProjectsView />
+            {:else if app.tab === "graph"}
+              <div class="graph-host phone-graph"><GraphView /></div>
+            {:else}
+              <Search mode="page" />
+            {/if}
+          </div>
+        {/key}
       </div>
 
       <!-- Three places and one action. Tasks live in Today; boards, tags and the graph in Notes. -->
@@ -421,6 +447,18 @@
         </div>
         <button class="new" class:glass={isIOS} onclick={() => app.newNote()} aria-label="New note"><Plus size={24} /></button>
       </nav>
+    </div>
+    {#if app.current}
+      <div
+        class="note-host"
+        class:swiping={swipeX > 0}
+        in:push
+        out:push={{ from: releasedAt }}
+      >
+        {#key app.openCount}
+          <Editor path={app.current} compact />
+        {/key}
+      </div>
     {/if}
   </div>
 {/if}
@@ -677,11 +715,19 @@
     background: var(--paper);
     overflow: hidden;
   }
-  .note-host {
+  .phone-list {
     flex: 1;
     min-height: 0;
     display: flex;
     flex-direction: column;
+  }
+  .note-host {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    background: var(--sheet);
     transform: translateX(var(--swipe, 0));
     transition: transform var(--dur-base) var(--ease-out);
   }
@@ -703,6 +749,10 @@
     display: grid;
     place-items: center;
     overflow: hidden;
+  }
+  /* Once the finger lifts, the row eases to its resting height. */
+  .pull.settling {
+    transition: height var(--dur-base) var(--ease-out);
     font-size: var(--small);
     color: var(--graphite);
   }

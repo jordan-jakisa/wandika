@@ -19,6 +19,12 @@ const ext = (name: string) => name.split(/[?#]/)[0].split(".").pop()?.toLowerCas
 export const isImage = (target: string) => ext(target) in TYPES;
 
 const cache = new Map<string, Promise<string>>();
+/** URLs already loaded, so a redrawn image shows at once instead of blinking. */
+const ready = new Map<string, string>();
+
+export function readyUrl(target: string, from: string) {
+  return /^(https?:|data:)/i.test(target) ? target : ready.get(`${from}\n${target}`);
+}
 
 /** A URL for the image `target` embedded in the note `from`. Web images pass straight through. */
 export function imageUrl(target: string, from: string): Promise<string> {
@@ -26,7 +32,11 @@ export function imageUrl(target: string, from: string): Promise<string> {
   const key = `${from}\n${target}`;
   let url = cache.get(key);
   if (!url) {
-    url = api.attachmentRead(target, from).then((buf) => URL.createObjectURL(new Blob([buf], { type: TYPES[ext(target)] })));
+    url = api.attachmentRead(target, from).then((buf) => {
+      const u = URL.createObjectURL(new Blob([buf], { type: TYPES[ext(target)] }));
+      ready.set(key, u);
+      return u;
+    });
     url.catch(() => cache.delete(key));
     cache.set(key, url);
   }
@@ -36,6 +46,7 @@ export function imageUrl(target: string, from: string): Promise<string> {
 export function forgetImages() {
   for (const url of cache.values()) url.then(URL.revokeObjectURL, () => {});
   cache.clear();
+  ready.clear();
 }
 
 /** Obsidian's name for a pasted picture: "Pasted image 20261103094512.png". */

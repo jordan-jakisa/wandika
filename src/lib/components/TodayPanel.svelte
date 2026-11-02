@@ -77,13 +77,20 @@
   const heading = $derived(clock.heading);
 </script>
 
-<section class="today" aria-labelledby="today-h">
+{#snippet skeleton(rows: number)}
+  <!-- Rows the shape of what is coming, so the section doesn't jump when it arrives. -->
+  <ul class="skeleton" aria-hidden="true">
+    {#each Array(rows) as _, i (i)}<li></li>{/each}
+  </ul>
+{/snippet}
+
+<section class="today" aria-labelledby="today-h" aria-busy={!data}>
   <header>
     <h2 id="today-h">{heading}</h2>
     <button class="btn primary" onclick={() => app.openDaily()}><NotebookPen size={16} /> Open today's note</button>
   </header>
 
-  {#if !calendarConnected && !mailConnected && !loading}
+  {#if !calendarConnected && !mailConnected && data}
     <p class="connect muted">
       See your calendar and inbox here.
       <button class="link-btn" onclick={() => app.openSettings("connections")}>Connect an account</button>
@@ -113,9 +120,9 @@
         </button>
       {/if}
     </div>
-    {#if loading && !data}
-      <p class="muted">Loading your day…</p>
-    {:else if !data?.events.length}
+    {#if !data}
+      {@render skeleton(3)}
+    {:else if !data.events.length}
       <p class="muted">Nothing on your calendar today.</p>
     {:else}
       <ul class="events">
@@ -183,7 +190,9 @@
           />
         {/each}
       </ul>
-    {:else if !loading}
+    {:else if !data}
+      {@render skeleton(2)}
+    {:else}
       <p class="muted">Nothing due today. Add 📅 and a date to a task to see it here.</p>
     {/if}
   </section>
@@ -193,9 +202,11 @@
     <div class="section-head">
       <h3 id="mail-h">Inbox</h3>
     </div>
-    {#if !data?.mail.length && !loading}
+    {#if !data}
+      {@render skeleton(3)}
+    {:else if !data.mail.length}
       <p class="muted">Your inbox is empty.</p>
-    {:else if data}
+    {:else}
       <ul class="mail">
         {#each data.mail as m (m.source + m.id)}
           <li class:unread={m.unread}>
@@ -387,5 +398,17 @@
     flex-wrap: wrap;
     align-items: baseline;
     gap: 4px 8px;
+  }
+  .skeleton {
+    display: grid;
+    gap: var(--space-3);
+    margin: var(--space-1) 0 var(--space-2);
+    padding: 0;
+    list-style: none;
+  }
+  .skeleton li {
+    height: 36px;
+    border-radius: var(--radius-sm);
+    background: var(--press);
   }
 </style>

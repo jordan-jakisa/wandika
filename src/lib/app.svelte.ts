@@ -1,5 +1,6 @@
 import { api, codeOf, listen } from "./api";
 import { forgetImages } from "./attachments";
+import { forgetNoteEmbeds } from "./editor/embeds";
 import { TEMPLATE } from "./kanban";
 import type { Entry, NoteMeta, Snippet, Status, SyncReport, Today } from "./types";
 
@@ -19,6 +20,7 @@ export interface Ask {
 }
 
 const SYNC_AFTER_EDIT_MS = 20_000;
+const SESSION_KEY = "wandika.session";
 const SYNC_EVERY_MS = 3 * 60_000;
 /** Mail and calendars are fetched at most this often unless asked; vault tasks are always fresh. */
 const TODAY_TTL_MS = 2 * 60_000;
@@ -85,6 +87,39 @@ class AppState {
 
   #started = false;
 
+  // Where you were, per vault: the open note, the tab, the Today column and the Settings section.
+  constructor() {
+    if (typeof window === "undefined") return;
+    $effect.root(() => {
+      $effect(() => {
+        const id = this.status?.vault?.id;
+        if (!id) return;
+        const session = { current: this.current, tab: this.tab, showToday: this.showToday, settingsSection: this.settingsSection };
+        try {
+          localStorage.setItem(`${SESSION_KEY}:${id}`, JSON.stringify(session));
+        } catch {
+          // Private mode or full storage: nothing is remembered, nothing breaks.
+        }
+      });
+    });
+  }
+
+  #restore(vaultId: string) {
+    let s: { current?: string | null; tab?: Tab; showToday?: boolean; settingsSection?: SettingsSection } = {};
+    try {
+      s = JSON.parse(localStorage.getItem(`${SESSION_KEY}:${vaultId}`) ?? "{}");
+    } catch {
+      return;
+    }
+    if (s.tab) this.tab = s.tab;
+    if (typeof s.showToday === "boolean") this.showToday = s.showToday;
+    if (s.settingsSection) this.settingsSection = s.settingsSection;
+    if (s.current && this.tree.some((e) => e.path === s.current)) {
+      this.openCount++;
+      this.current = s.current;
+    }
+  }
+
   async init() {
     // The page can mount twice (dev reloads, a remount); one start, one listener, one sync.
     if (this.#started) return;
@@ -93,7 +128,10 @@ class AppState {
       const status = await api.status();
       this.lastSync = status.last_sync;
       // Load the files before showing the workspace so it never flashes an empty vault.
-      if (status.vault) await this.refreshFiles();
+      if (status.vault) {
+        await this.refreshFiles();
+        this.#restore(status.vault.id);
+      }
       this.status = status;
       if (status.vault) void this.loadSnippets();
       if (status.vault?.remote) {
@@ -123,6 +161,7 @@ class AppState {
     if (this.status?.vault?.id !== before) {
       this.current = null;
       forgetImages();
+      if (this.status?.vault) this.#restore(this.status.vault.id);
     }
     void this.loadSnippets();
     this.stopAutoSync();
@@ -161,6 +200,7 @@ class AppState {
 
   /** Called after every local save: sync once typing has paused for a while. */
   edited() {
+    forgetNoteEmbeds();
     clearTimeout(this.#editTimer);
     if (!this.synced) return;
     this.#editTimer = setTimeout(() => void this.sync(), SYNC_AFTER_EDIT_MS);
@@ -188,6 +228,7 @@ class AppState {
     if (report.conflicts.length) this.conflicts = [...new Set([...this.conflicts, ...report.conflicts])];
     this.tooBig = report.too_big;
     const touched = [...report.pulled, ...report.merged, ...report.removed];
+    if (touched.length) forgetNoteEmbeds();
     if (touched.length || report.conflicts.length) {
       this.changed = { paths: touched, at: Date.now() };
       void this.refreshFiles();

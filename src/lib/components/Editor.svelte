@@ -6,6 +6,7 @@
   import { api, codeOf, openUrl } from "../api";
   import { app, titleOf } from "../app.svelte";
   import { pastedName } from "../attachments";
+  import { positions, remember } from "../positions";
   import { extensions } from "../editor/setup";
   import { isBoard } from "../kanban";
   import type { SearchHit } from "../types";
@@ -109,6 +110,23 @@
     }
   }
 
+  let pageEl: HTMLDivElement;
+
+  /** Puts a note back where it was left: the same scroll and the same cursor. */
+  function restorePosition(p: string) {
+    const pos = positions.get(p);
+    if (!pos || !view) return;
+    const len = view.state.doc.length;
+    view.dispatch({ selection: { anchor: Math.min(pos.anchor, len), head: Math.min(pos.head, len) } });
+    requestAnimationFrame(() => pageEl && (pageEl.scrollTop = pos.top));
+  }
+
+  function rememberPosition() {
+    if (!loadedPath || !view || !pageEl) return;
+    const sel = view.state.selection.main;
+    remember(loadedPath, { top: pageEl.scrollTop, anchor: sel.anchor, head: sel.head });
+  }
+
   let saveError = $state<string | null>(null);
   let saveTries = 0;
 
@@ -157,7 +175,15 @@
       return;
     }
     if (loadedPath !== p) return;
-    backlinks = await api.backlinks(p).catch(() => []);
+    // The note draws first; "Linked from" fills in after without holding it up.
+    void api.backlinks(p).then(
+      (b) => {
+        if (loadedPath !== p) return;
+        backlinks = b;
+        app.noteStats = { ...app.noteStats, backlinks: b.length };
+      },
+      () => {},
+    );
     count(text, isBoard(text) && !showSource);
     if (isBoard(text) && !showSource) {
       view?.destroy();
@@ -181,6 +207,7 @@
     if (view) view.setState(state);
     else view = new EditorView({ state, parent: host });
     pending = null;
+    restorePosition(p);
     // A new note opens with its title selected so typing renames it.
     if (title === "Untitled" || /^Untitled \d+$/.test(title)) {
       queueMicrotask(() => {
@@ -221,12 +248,19 @@
         boardKey++;
         return;
       }
-      if (view && text !== view.state.doc.toString() && pending === null) {
-        const sel = view.state.selection.main.head;
-        view.dispatch({
-          changes: { from: 0, to: view.state.doc.length, insert: text },
-          selection: { anchor: Math.min(sel, text.length) },
-        });
+      if (view && pending === null) {
+        // Replace only the part that changed, so the cursor, scroll and drawn widgets stay put.
+        const old = view.state.doc.toString();
+        if (text === old) return;
+        let start = 0;
+        while (start < old.length && start < text.length && old[start] === text[start]) start++;
+        let endOld = old.length;
+        let endNew = text.length;
+        while (endOld > start && endNew > start && old[endOld - 1] === text[endNew - 1]) {
+          endOld--;
+          endNew--;
+        }
+        view.dispatch({ changes: { from: start, to: endOld, insert: text.slice(start, endNew) } });
         pending = null;
       }
     })();
@@ -293,6 +327,7 @@
   });
 
   onDestroy(() => {
+    rememberPosition();
     const leaving = loadedPath;
     const empty = !!view && view.state.doc.length === 0;
     void save().then(async () => {
@@ -332,7 +367,7 @@
     </Menu>
   </header>
 
-  <div class="page" class:wide={boardText !== null}>
+  <div class="page" class:wide={boardText !== null} bind:this={pageEl}>
     <div class="column">
     <input
       id="note-title"

@@ -10,6 +10,8 @@
   let query = $state("");
   let hits = $state<SearchHit[]>([]);
   let failed = $state<string | null>(null);
+  /** The query the shown results answer; "Create" waits for it, so it doesn't jump down. */
+  let answered = $state("");
   let selected = $state(0);
   /** On phones nothing is highlighted until you type; the highlight is for keyboard selection. */
   const coarse = typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches;
@@ -22,7 +24,9 @@
   );
   const results = $derived(query.trim() ? hits : recent);
   const canCreate = $derived(
-    query.trim().length > 0 && !hits.some((h) => h.title.toLowerCase() === query.trim().toLowerCase()),
+    query.trim().length > 0 &&
+      answered === query.trim() &&
+      !hits.some((h) => h.title.toLowerCase() === query.trim().toLowerCase()),
   );
   const count = $derived(results.length + (canCreate ? 1 : 0));
 
@@ -40,6 +44,7 @@
         if (mine === seq) {
           hits = found;
           failed = null;
+          answered = q.trim();
         }
       } catch (e) {
         if (mine === seq) failed = (e as Error).message;
@@ -139,7 +144,7 @@
     {/if}
     {#if failed && query.trim()}
       <li class="none" role="presentation">Search didn't finish. {failed}</li>
-    {:else if query.trim() && !results.length && !canCreate}
+    {:else if query.trim() && answered === query.trim() && !results.length && !canCreate}
       <li class="none" role="presentation">No notes match.</li>
     {:else if !query.trim() && !recent.length}
       <li class="none" role="presentation">No notes yet. Type a title and press Return to create one.</li>

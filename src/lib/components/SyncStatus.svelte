@@ -9,6 +9,13 @@
   });
 
   const offline = $derived(app.syncError?.code === "offline");
+  // Quick background syncs don't flicker the line; "Syncing…" shows once one takes half a second.
+  let slow = $state(false);
+  $effect(() => {
+    if (!app.syncing) return void (slow = false);
+    const t = setTimeout(() => (slow = true), 500);
+    return () => clearTimeout(t);
+  });
   // A failure names its cause in a few words; tapping shows the full sentence and tries again.
   const SHORT: Record<string, string> = {
     github_rate_limit: "GitHub is busy. Tap to retry",
@@ -18,7 +25,7 @@
     disk_full: "Device is out of space",
   };
   const text = $derived(
-    app.syncing
+    slow
       ? "Syncing…"
       : offline
         ? "Offline. Changes are saved here."
@@ -50,7 +57,7 @@
   title={app.syncError?.message ?? "Sync now"}
   aria-label={`${text}. Sync now`}
 >
-  <span class="icon" class:spin={app.syncing}><RefreshCw size={13} /></span>
+  <span class="icon" class:spin={slow}><RefreshCw size={13} /></span>
   <span>{text}</span>
 </button>
 {/if}

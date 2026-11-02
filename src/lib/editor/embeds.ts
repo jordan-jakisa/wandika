@@ -5,7 +5,7 @@
 import { type Range } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate, WidgetType } from "@codemirror/view";
 import { api } from "../api";
-import { imageUrl, isImage } from "../attachments";
+import { imageUrl, isImage, readyUrl } from "../attachments";
 import { activeLines, inCode } from "./livePreview";
 import { renderLite, section } from "./noteText";
 
@@ -31,11 +31,22 @@ class ImageEmbed extends WidgetType {
     img.alt = this.alt;
     img.decoding = "async";
     if (this.width) img.style.width = `${this.width}px`;
-    img.addEventListener("load", () => view.requestMeasure());
     wrap.append(img);
+    const known = readyUrl(this.target, this.from);
+    if (known) {
+      img.src = known;
+      return wrap;
+    }
+    // Hold some room while the image loads, so the text below doesn't jump twice.
+    wrap.classList.add("cm-embed-loading");
+    img.addEventListener("load", () => {
+      wrap.classList.remove("cm-embed-loading");
+      view.requestMeasure();
+    });
     imageUrl(this.target, this.from).then(
       (url) => (img.src = url),
       (e: unknown) => {
+        wrap.classList.remove("cm-embed-loading");
         wrap.classList.add("cm-embed-missing");
         wrap.textContent =
           (e as { code?: string }).code === "locked"
@@ -48,6 +59,12 @@ class ImageEmbed extends WidgetType {
   ignoreEvent() {
     return false;
   }
+}
+
+/** Rendered note embeds, by target; cleared whenever any note changes. */
+const noteHtml = new Map<string, string>();
+export function forgetNoteEmbeds() {
+  noteHtml.clear();
 }
 
 class NoteEmbed extends WidgetType {
@@ -72,6 +89,12 @@ class NoteEmbed extends WidgetType {
     const body = document.createElement("div");
     body.className = "cm-note-embed-body";
     box.append(head, body);
+    const cached = noteHtml.get(this.target);
+    if (cached) {
+      body.innerHTML = cached;
+      return box;
+    }
+    body.innerHTML = '<p class="more">…</p>';
     api
       .resolveLink(name)
       .then((path) => (path ? api.noteRead(path) : Promise.reject(new Error("missing"))))
@@ -80,6 +103,7 @@ class NoteEmbed extends WidgetType {
         if (!part.trim()) throw new Error("empty");
         const { html, more } = renderLite(part);
         body.innerHTML = html + (more ? '<p class="more">…</p>' : "");
+        noteHtml.set(this.target, body.innerHTML);
         view.requestMeasure();
       })
       .catch((e: Error) => {
@@ -148,6 +172,7 @@ export function embeds(getPath: () => string, onOpen: (target: string) => void) 
 export const embedTheme = EditorView.theme({
   ".cm-embed": { display: "block", margin: "6px 0" },
   ".cm-embed img": { display: "block", maxWidth: "100%", height: "auto", borderRadius: "8px" },
+  ".cm-embed-loading": { minHeight: "120px", borderRadius: "var(--radius-sm)", background: "var(--press)" },
   ".cm-embed-missing": { color: "var(--graphite)", fontSize: "var(--small)" },
   // An embedded note reads as part of this one: a quiet panel, its title a link to the source.
   ".cm-note-embed": {
