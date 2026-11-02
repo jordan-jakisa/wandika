@@ -48,7 +48,7 @@ size and line width; vault CSS snippets in `.obsidian/snippets` override anythin
 - Monospace (system `ui-monospace`) only inside code spans and code blocks.
 
 Scale (note text 17px base on phones, 18px on Mac, ratio 1.25):
-`h1 2.0em/1.2 600`, `h2 1.5em/1.25 600`, `h3 1.25em/1.3 600`, body `1em/1.65 400`, small UI `14px/1.4`.
+`h1 2.0em/1.2 600`, `h2 1.5em/1.25 600`, `h3 1.25em/1.3 600`, body `1em/1.65 400`, small UI `13px/1.4`. Every size is multiplied by `--text-scale` (iOS Dynamic Type).
 Editor measure: `max-width: 68ch`.
 
 ## Layout
@@ -64,15 +64,20 @@ Mac (≥ 900px)
 │   Note.md    │  Linked from: …                │              │
 └──────────────┴────────────────────────────────┴──────────────┘
 
-Phone (< 900px)                      Note open
+Phone (< 900px), same on iPhone and Android     Note open, typing
 ┌────────────────────┐               ┌────────────────────┐
-│ jordan/notes   ⟳ ✎ │               │ ‹ Notes        ⋯   │
-│ list of notes      │               │ Title              │
-│                    │               │ Body               │
-├────────────────────┤               │                    │
-│ Notes Today Tasks ⌕│               └────────────────────┘
-└────────────────────┘
+│ notes            ⋯ │               │ ‹ Notes        ⋯   │
+│ Synced 2m          │               │ Title              │
+│ list of notes      │               │ Body               │
+├────────────────────┤               ├────────────────────┤
+│ Notes Today ⌕   [+]│               │ 🔗 # ☐ H • ⇥ ↶   ⌨ │  writing toolbar
+└────────────────────┘               └────────────────────┘
 ```
+
+Phones share one calm design: a flat bar with three places and the new-note button, a single ⋯ menu
+for everything else (Graph, Projects, New folder, Sync, Settings), Tasks reached from Today, plain
+"‹ Notes" back rows, and Settings as one bottom sheet. The platform decides behaviour only (iOS edge
+swipe back, Android system back, safe areas). Text follows the phone's text size setting.
 
 Left aligned throughout. The one memorable element is the page itself: Literata at a generous size on
 a quiet sheet. Everything else is restrained.
