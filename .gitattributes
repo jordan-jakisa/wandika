@@ -1,0 +1,3 @@
+# Builds write the Apple signing team into the Xcode project; keep it out of this public repo.
+# Needs once per clone: git config filter.noteam.clean "sed /DEVELOPMENT_TEAM\ =/d" && git config filter.noteam.smudge cat
+src-tauri/gen/apple/wandika.xcodeproj/project.pbxproj filter=noteam

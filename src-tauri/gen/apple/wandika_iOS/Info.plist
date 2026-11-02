@@ -40,5 +40,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Wandika shows today&apos;s events beside your notes and turns a meeting into a note.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Wandika lists your reminders beside the tasks in your notes so you can tick them off.</string>
 </dict>
 </plist>
