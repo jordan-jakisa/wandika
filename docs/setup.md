@@ -1,11 +1,14 @@
 # Setting up Wandika
 
+A vault needs no account: on the start screen, create one on this device or, on the Mac, open any
+folder. Everything below is only for the services you choose to connect.
+
 Wandika needs one OAuth client per service you connect. Client IDs go in `.env` (copy
 `.env.example`); they are read when the app is built. `.env` is git-ignored.
 
 Checked against the providers' docs on 2 November 2026.
 
-## 1. GitHub sign-in (required)
+## 1. GitHub sync (optional)
 
 1. GitHub → profile picture → **Settings** → **Developer settings** → **OAuth apps** →
    **New OAuth App**.
