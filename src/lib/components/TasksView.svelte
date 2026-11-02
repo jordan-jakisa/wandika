@@ -112,9 +112,9 @@
   }
   h2 {
     margin: 0;
-    font-family: var(--font-note);
-    font-size: 1.6rem;
-    font-weight: 600;
+    font-size: 1.45rem;
+    font-weight: 650;
+    letter-spacing: -0.01em;
   }
   .summary {
     margin: 6px 0 20px;

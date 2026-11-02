@@ -146,9 +146,9 @@
   }
   .lead {
     margin: 0;
-    font-family: var(--font-note);
-    font-size: 1.2rem;
+    font-size: 1.15rem;
     line-height: 1.55;
+    color: var(--graphite);
   }
   section {
     display: grid;
