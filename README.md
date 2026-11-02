@@ -14,7 +14,7 @@ CodeMirror 6 editor.
 ## Develop
 
 ```bash
-cp .env.example .env   # add OAuth client IDs, see docs/setup.md
+cp .env.example .env   # add OAuth client IDs: docs/setup.md
 npm install
 npm run tauri dev
 ```

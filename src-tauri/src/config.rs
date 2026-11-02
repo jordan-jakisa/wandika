@@ -22,8 +22,12 @@ pub fn google_desktop() -> Result<(&'static str, &'static str)> {
     ))
 }
 
-/// Google "iOS" client: used on iPhone and Android with its reversed-client-ID URL scheme.
+/// Google "iOS" client: used on iPhone with its reversed-client-ID URL scheme. Google doesn't
+/// allow custom-scheme redirects for Android clients, so Android needs its own sign-in.
 pub fn google_mobile_client_id() -> Result<&'static str> {
+    if cfg!(target_os = "android") {
+        return Err(msg("Google can't connect on Android in this version. Connect it on your Mac or iPhone; Outlook works here."));
+    }
     need(option_env!("WANDIKA_GOOGLE_IOS_CLIENT_ID"), "Google")
 }
 

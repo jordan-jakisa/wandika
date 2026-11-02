@@ -1,4 +1,5 @@
-// Registers the Google sign-in URL scheme for the iPhone and Android builds.
+// Registers the Google sign-in URL scheme for the iPhone build. (Google refuses custom-scheme
+// redirects for Android clients, so Android doesn't get one.)
 // Google redirects to the reversed iOS client ID, so the scheme depends on .env:
 //   node scripts/configure-mobile.mjs
 import { readFileSync, writeFileSync } from "node:fs";
@@ -17,7 +18,7 @@ if (!id) {
 }
 const scheme = `com.googleusercontent.apps.${id.replace(/\.apps\.googleusercontent\.com$/, "")}`;
 const config = { plugins: { "deep-link": { mobile: [{ scheme: [scheme], appLink: false }] } } };
-for (const platform of ["ios", "android"]) {
+for (const platform of ["ios"]) {
   writeFileSync(
     new URL(`../src-tauri/tauri.${platform}.conf.json`, import.meta.url),
     JSON.stringify(config, null, 2) + "\n",

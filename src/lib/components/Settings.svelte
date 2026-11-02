@@ -139,7 +139,7 @@
         <div class="conn">
           <div class="grow">
             <div>{name}</div>
-            <div class="muted small">{configured ? detail : "Not set up in this build. See docs/setup.md."}</div>
+            <div class="muted small">{configured ? detail : provider === "google" && /Android/.test(navigator.userAgent) ? "Not available on Android yet. Connect Google on your Mac or iPhone." : "Not set up in this build. See docs/setup.md."}</div>
           </div>
           {#if connected && canDisconnect}
             <button class="btn" onclick={() => disconnect(provider)}>Disconnect</button>

@@ -134,6 +134,9 @@ impl GitHub {
             return Ok(res);
         }
         let status = res.status().as_u16();
+        if status == 401 {
+            return Err(msg("Your GitHub sign-in expired or was revoked. Sign out in Settings and sign in again."));
+        }
         let body = res.text().await.unwrap_or_default();
         let message = serde_json::from_str::<Value>(&body)
             .ok()
