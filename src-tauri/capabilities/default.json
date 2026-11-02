@@ -8,7 +8,8 @@
   "permissions": [
     "core:default",
     "opener:default",
-    "deep-link:default"
+    "deep-link:default",
+    "core:window:allow-start-dragging"
   ],
   "platforms": [
     "macOS",
