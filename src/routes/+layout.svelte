@@ -2,8 +2,7 @@
   import "@fontsource-variable/literata";
   import "@fontsource-variable/literata/wght-italic.css";
   import "../app.css";
-  import "../android.css";
-  import "../ios.css";
+  import "../mobile.css";
 
   let { children } = $props();
 </script>

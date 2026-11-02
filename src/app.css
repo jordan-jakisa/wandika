@@ -73,24 +73,16 @@
   }
 }
 
-/* Screen titles follow each platform: large titles on iOS, the top app bar's title on Android. */
+/* Screen titles: one size on every phone. */
 :root {
   --view-title-size: 1.45rem;
   --view-title-weight: 650;
   --view-title-tracking: -0.01em;
 }
 @media (max-width: 899px) {
-  :root[data-platform="ios"] {
-    --view-title-size: 34px;
-    --view-title-weight: 700;
-    --view-title-tracking: 0.01em;
-    --target: 44px;
-  }
-  :root[data-platform="android"] {
-    --view-title-size: 22px;
-    --view-title-weight: 400;
-    --view-title-tracking: 0;
-    --target: 48px;
+  :root {
+    --view-title-size: 28px;
+    --view-title-tracking: -0.015em;
   }
 }
 

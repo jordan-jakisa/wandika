@@ -1,0 +1,217 @@
+/* Wandika on phones: one calm design on iOS and Android alike. Paper, ink and one accent; type and
+   spacing carry the hierarchy, not boxes, glass or tinted pills. The platform only decides
+   behaviour (back gestures, safe areas, the keyboard). */
+
+@media (max-width: 899px) {
+  :root {
+    --press: color-mix(in srgb, var(--ink) 8%, transparent);
+    --hairline: color-mix(in srgb, var(--graphite) 30%, transparent);
+  }
+
+  /* Nested under html[data-platform] so these win over each component's own scoped styles. */
+  html[data-platform] {
+    /* Buttons: 44px tall, 12px corners. Primary is filled with the accent; the rest are quiet text. */
+    .btn {
+      min-height: 44px;
+      padding: 0 18px;
+      border: 0;
+      border-radius: 12px;
+      background: var(--press);
+      font-weight: 500;
+    }
+    .btn.primary {
+      background: var(--papyrus);
+      color: var(--on-papyrus);
+    }
+    .btn:active,
+    .icon-btn:active {
+      background: color-mix(in srgb, var(--ink) 14%, transparent);
+    }
+    .field {
+      border-color: var(--hairline);
+      border-radius: 12px;
+    }
+
+    /* Dialogs: centred, plain sheet colour, buttons side by side. */
+    dialog[aria-labelledby="dialog-title"] {
+      width: min(340px, calc(100vw - 40px));
+      padding: 22px 20px 18px;
+      border: 0;
+      border-radius: 20px;
+    }
+    dialog[aria-labelledby="dialog-title"] .buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    dialog[aria-labelledby="dialog-title"] .buttons .danger-fill {
+      background: var(--alarm);
+      color: var(--sheet);
+    }
+
+    /* Menus: plain list, 48px rows, hairlines between items. */
+    .menu .list {
+      min-width: 230px;
+      padding: 4px 0;
+      border: 0;
+      border-radius: 14px;
+      box-shadow: 0 10px 32px rgb(0 0 0 / 0.22);
+    }
+    .menu .list [role="menuitem"] {
+      min-height: 48px;
+      padding: 0 16px;
+      border-radius: 0;
+      gap: 12px;
+    }
+    .menu .list [role="menuitem"] + [role="menuitem"] {
+      border-top: 1px solid var(--hairline);
+    }
+    .menu .list [role="menuitem"]:active {
+      background: var(--press);
+    }
+
+    /* Messages: a quiet bar above the bottom bar. */
+    .toast {
+      left: 16px;
+      right: 16px;
+      transform: none;
+      max-width: none;
+      bottom: calc(64px + var(--safe-bottom) + 12px);
+      padding: 12px 16px;
+      border-radius: 12px;
+      font-size: 15px;
+    }
+
+    /* Search: one rounded field. */
+    .search.page .input-row {
+      margin: 4px 16px 8px;
+      height: 44px;
+      padding: 0 12px;
+      border: 0;
+      border-radius: 12px;
+      background: var(--press);
+    }
+    .search.page .heading {
+      padding: 12px 20px 4px;
+    }
+    .search.page li[role="option"] {
+      min-height: 48px;
+      margin: 0 8px;
+      padding: 10px 12px;
+      align-items: center;
+    }
+    .search.page li[role="option"]:active {
+      background: var(--press);
+    }
+
+    /* Settings sheet: flat rows, small section labels, no icons or chevrons. */
+    .settings .sections li button {
+      min-height: 60px;
+      padding: 0 20px;
+      border-radius: 0;
+    }
+    .settings .sections li button > svg {
+      display: none;
+    }
+    .settings .sections li button:active {
+      background: var(--press);
+    }
+    .settings .sections ul {
+      padding: 0;
+    }
+    .settings .nav-head h2,
+    .settings .pane-head h3 {
+      font-size: 22px;
+      font-weight: 650;
+    }
+    .settings .pane-body {
+      padding-left: 0;
+      padding-right: 0;
+    }
+    .settings h4 {
+      margin: 24px 20px 4px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--graphite);
+    }
+    .settings .group {
+      border: 0;
+      border-radius: 0;
+      background: none;
+    }
+    .settings .row {
+      min-height: 52px;
+      padding: 10px 20px;
+    }
+    .settings .row + .row {
+      border-top: 1px solid var(--hairline);
+    }
+    .settings .note {
+      margin: 6px 20px 0;
+    }
+    .settings .footer-actions {
+      margin: 24px 20px 0;
+    }
+
+    /* Segmented control: one quiet track, the chosen option on the sheet colour. */
+    .segmented {
+      padding: 2px;
+      gap: 2px;
+      border: 0;
+      border-radius: 10px;
+      background: var(--press);
+    }
+    .segmented button {
+      min-height: 32px;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+    }
+    .segmented button + button {
+      border-left: 0;
+    }
+    .segmented button.on {
+      background: var(--sheet);
+      color: var(--ink);
+      box-shadow: 0 1px 3px rgb(0 0 0 / 0.16);
+    }
+
+    /* Switches. */
+    input.toggle {
+      appearance: none;
+      -webkit-appearance: none;
+      position: relative;
+      flex: none;
+      width: 48px;
+      height: 28px;
+      margin: 0;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--graphite) 35%, transparent);
+      transition: background 150ms ease-out;
+    }
+    input.toggle::after {
+      content: "";
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
+      transition: left 150ms ease-out;
+    }
+    input.toggle:checked {
+      background: var(--papyrus);
+    }
+    input.toggle:checked::after {
+      left: 23px;
+    }
+
+    /* Rows answer a press. */
+    .tree .row:active,
+    .list button:active {
+      background: var(--press);
+    }
+  }
+}

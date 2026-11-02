@@ -1,6 +1,5 @@
-// Which phone conventions to follow. iOS gets Apple's patterns (Liquid Glass tab bar, large titles,
-// "‹ Notes" back buttons); Android gets Material 3 (navigation bar with a pill indicator, top app
-// bar, floating action button). Set as data-platform on <html> so CSS can follow it too.
+// Which phone we run on. The design is the same on every phone; the platform only decides
+// behaviour such as the iOS edge swipe back. Set as data-platform on <html> for CSS too.
 
 export type Platform = "ios" | "android" | "desktop";
 
