@@ -62,6 +62,9 @@
     color: var(--ink);
     box-shadow: var(--shadow-modal);
   }
+  dialog[open] {
+    animation: pop-in var(--dur-quick) var(--ease-out);
+  }
   dialog::backdrop {
     background: var(--scrim);
   }

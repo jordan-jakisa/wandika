@@ -7,6 +7,7 @@
   let dialogEl: HTMLDialogElement;
   let src = $state<string | null>(null);
   let failed = $state(false);
+  let loaded = $state(false);
   const name = $derived(app.viewing?.split("/").pop()?.replace(/\.age$/, "") ?? "");
 
   $effect(() => {
@@ -14,6 +15,7 @@
     if (path && !dialogEl.open) {
       src = null;
       failed = false;
+      loaded = false;
       imageUrl(path, "").then(
         (url) => app.viewing === path && (src = url),
         () => (failed = true),
@@ -40,7 +42,7 @@
     {#if failed}
       <p class="muted">This image couldn't be opened.</p>
     {:else if src}
-      <img {src} alt={name} />
+      <img {src} alt={name} class:shown={loaded} onload={() => (loaded = true)} />
     {/if}
   </div>
 </dialog>
@@ -58,6 +60,9 @@
     border: 0;
     background: #000;
     color: #fff;
+  }
+  .viewer[open] {
+    animation: fade-in var(--dur-quick) var(--ease-out);
   }
   .viewer::backdrop {
     background: transparent;
@@ -88,11 +93,16 @@
     padding: 8px 16px 24px;
   }
   img {
+    opacity: 0;
+    transition: opacity var(--dur-quick) var(--ease-out);
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
   }
   .muted {
     color: rgb(255 255 255 / 0.7);
+  }
+  img.shown {
+    opacity: 1;
   }
 </style>

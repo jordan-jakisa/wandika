@@ -48,9 +48,13 @@
   /* Empty and invisible between messages, but still in the accessibility tree. */
   .toast:not(.shown) {
     opacity: 0;
+    translate: 0 4px;
     pointer-events: none;
   }
   .toast {
+    transition:
+      opacity var(--dur-quick) var(--ease-out),
+      translate var(--dur-quick) var(--ease-out);
     position: fixed;
     left: 50%;
     bottom: calc(76px + var(--safe-bottom));

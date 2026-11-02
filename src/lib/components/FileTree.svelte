@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import { ChevronRight, FileText, Folder, FolderPlus, Lock, LockOpen, Pencil, Plus, Trash2, File, Image as ImageIcon } from "@lucide/svelte";
   import { api } from "../api";
   import { app } from "../app.svelte";
@@ -62,8 +63,12 @@
     if (next.has(path)) next.delete(path);
     else next.add(path);
     openFolders = next;
+    save();
+  }
+
+  function save() {
     try {
-      localStorage.setItem(OPEN_KEY, JSON.stringify([...next]));
+      localStorage.setItem(OPEN_KEY, JSON.stringify([...openFolders]));
     } catch {
       /* private mode: folders just start closed */
     }
@@ -96,8 +101,12 @@
     if (!c || !c.includes("/")) return;
     const parts = c.split("/").slice(0, -1);
     const needed = parts.map((_, i) => parts.slice(0, i + 1).join("/"));
-    if (needed.every((p) => openFolders.has(p))) return;
-    openFolders = new Set([...openFolders, ...needed]);
+    if (!needed.every((p) => openFolders.has(p))) {
+      openFolders = new Set([...openFolders, ...needed]);
+      save();
+    }
+    // Bring the open note's row into view, e.g. after opening it from search.
+    void tick().then(() => document.querySelector(".tree .row.current")?.scrollIntoView({ block: "nearest" }));
   });
 
   async function newFolder(parent: string) {

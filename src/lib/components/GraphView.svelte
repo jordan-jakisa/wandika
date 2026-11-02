@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { readView, saveView } from "../viewPrefs";
   import { Maximize, SlidersHorizontal } from "@lucide/svelte";
   import { onDestroy, untrack } from "svelte";
   import { app } from "../app.svelte";
@@ -10,15 +11,17 @@
   let filter = $state("");
   // svelte-ignore state_referenced_locally
   let local = $state(app.graphLocal && !!app.graphFocus);
-  let ghosts = $state(false);
-  let orphans = $state(true);
-  let byFolder = $state(true);
+  const saved = readView("graph", { ghosts: false, orphans: true, byFolder: true, dotSize: 1, linkDistance: 50, repel: 110, depth: 1 });
+  let ghosts = $state(saved.ghosts);
+  let orphans = $state(saved.orphans);
+  let byFolder = $state(saved.byFolder);
   let panel = $state(false);
   /** Display settings, like Obsidian's graph sliders. */
-  let dotSize = $state(1);
-  let linkDistance = $state(50);
-  let repel = $state(110);
-  let depth = $state(1);
+  let dotSize = $state(saved.dotSize);
+  let linkDistance = $state(saved.linkDistance);
+  let repel = $state(saved.repel);
+  let depth = $state(saved.depth);
+  $effect(() => saveView("graph", { ghosts, orphans, byFolder, dotSize, linkDistance, repel, depth }));
   /** Folders in colour order, biggest first; the legend and the dots share it. */
   let groups = $state<{ name: string; count: number; color: string }[]>([]);
   let spotlight = $state<string | null>(null);
@@ -217,16 +220,29 @@
         redraw();
       });
     sim = simulation;
+    // Reduced motion: lay the graph out at once and show it settled.
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      simulation.stop();
+      simulation.tick(300);
+      fit();
+      redraw();
+    }
   }
 
-  // Rebuild when the notes or the options change. The simulation stops by itself when it settles.
+  // Rebuild when the notes, their links or the options change. A sync that only touched note
+  // text leaves the graph alone instead of shaking it awake.
+  let builtFor = "";
   $effect(() => {
-    void app.titles;
-    void local;
-    void ghosts;
-    void orphans;
-    void depth;
-    void app.graphFocus;
+    const key = [
+      app.titles.map((t) => `${t.path}>${t.links.join("|")}`).join("\n"),
+      local,
+      ghosts,
+      orphans,
+      depth,
+      app.graphFocus,
+    ].join("\u0000");
+    if (key === builtFor) return;
+    builtFor = key;
     untrack(() => void rebuild());
   });
 

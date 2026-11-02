@@ -84,7 +84,8 @@
     position: fixed;
     left: 0;
     right: 0;
-    bottom: var(--lift);
+    bottom: 0;
+    transform: translateY(calc(-1 * var(--lift)));
     z-index: 20;
     display: flex;
     align-items: center;

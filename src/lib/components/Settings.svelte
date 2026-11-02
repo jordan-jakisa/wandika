@@ -662,6 +662,9 @@
     border: 0;
     border-radius: 0;
   }
+  .settings[open]:not(.sheet) {
+    animation: pop-in var(--dur-quick) var(--ease-out);
+  }
   .settings::backdrop {
     background: var(--scrim);
   }
@@ -684,6 +687,10 @@
   .settings.sheet.closing {
     transform: translateY(100%);
     transition: transform var(--dur-base) var(--ease-sheet);
+  }
+  .settings.sheet.closing::backdrop {
+    opacity: 0;
+    transition: opacity var(--dur-base) var(--ease-out);
   }
   .settings.sheet::backdrop {
     background: var(--scrim);

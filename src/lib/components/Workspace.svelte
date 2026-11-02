@@ -146,6 +146,10 @@
     swipeX = 0;
   }
 
+  const recentNotes = $derived(
+    [...app.titles].sort((a, b) => b.modified - a.modified).slice(0, 6),
+  );
+
   // Phones show three places. Views that live inside one of them show "‹ Today" or "‹ Notes".
   const phoneTabs: { id: Tab; label: string; icon: typeof FolderClosed }[] = [
     { id: "notes", label: "Notes", icon: FolderClosed },
@@ -249,13 +253,30 @@
 {/snippet}
 
 {#snippet emptyMain()}
+  <!-- The likeliest next step is the note you were just in. Today's note is one click away in the
+       sidebar and the Today column, so it isn't offered a third time here. -->
   <div class="empty">
-    <p class="empty-title">Pick a note, or start today's.</p>
+    {#if recentNotes.length}
+      <h2 class="empty-title">Recent notes</h2>
+      <ul class="recent">
+        {#each recentNotes as n (n.path)}
+          <li>
+            <button onclick={() => app.open(n.path)}>
+              <span class="recent-title">{n.title}</span>
+              {#if n.path.includes("/")}<span class="recent-folder">{n.path.slice(0, n.path.lastIndexOf("/"))}</span>{/if}
+            </button>
+          </li>
+        {/each}
+      </ul>
+    {:else}
+      <h2 class="empty-title">Start your first note</h2>
+    {/if}
     <div class="empty-actions">
-      <button class="btn primary" onclick={() => app.openDaily()}><NotebookPen size={16} /> Open today's note</button>
       <button class="btn" onclick={() => app.newNote()}><Plus size={16} /> New note</button>
     </div>
-    <p class="muted keys">Search with ⌘K. New note with ⌘N. Sync with ⌘S.</p>
+    {#if isMac}
+      <p class="muted keys">Search with ⌘K. New note with ⌘N.{app.synced ? " Sync with ⌘S." : ""}</p>
+    {/if}
   </div>
 {/snippet}
 
@@ -466,6 +487,7 @@
 <style>
   .shell {
     display: grid;
+    transition: grid-template-columns var(--dur-base) var(--ease-out);
     grid-template-columns: var(--sidebar) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) auto;
     height: 100dvh;
@@ -666,7 +688,45 @@
   .empty-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: var(--space-2);
+  }
+  .recent {
+    display: grid;
+    width: min(28rem, 100%);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .recent button {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    width: 100%;
+    min-height: 40px;
+    padding: 0 var(--space-3);
+    margin: 0 calc(-1 * var(--space-3));
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: none;
+    text-align: left;
+  }
+  @media (hover: hover) {
+    .recent button:hover {
+      background: var(--papyrus-wash);
+    }
+  }
+  .recent-title {
+    font-family: var(--font-note);
+    font-size: var(--text-lg);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .recent-folder {
+    margin-left: auto;
+    flex: none;
+    color: var(--graphite);
+    font-size: var(--small);
   }
   .keys {
     margin: 0;
@@ -691,6 +751,9 @@
     flex: 1;
     margin: 0;
     font-size: var(--small);
+  }
+  .switcher[open] {
+    animation: pop-in var(--dur-quick) var(--ease-out);
   }
   .switcher {
     width: min(620px, calc(100vw - 32px));

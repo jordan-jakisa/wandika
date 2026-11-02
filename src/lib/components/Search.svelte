@@ -54,7 +54,8 @@
   });
 
   $effect(() => {
-    if (mode === "palette") queueMicrotask(() => input?.focus());
+    // The palette, and the Search tab on phones, are for typing: the field is ready.
+    queueMicrotask(() => input?.focus());
   });
 
   async function choose(i: number) {

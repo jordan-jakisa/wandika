@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { readView, saveView } from "../viewPrefs";
   import { untrack } from "svelte";
   import { Check } from "@lucide/svelte";
   import { api } from "../api";
@@ -8,7 +9,8 @@
 
   let tasks = $state<VaultTask[]>([]);
   const remote = $derived<RemoteTask[]>(app.today?.remote_tasks ?? []);
-  let showDone = $state(false);
+  let showDone = $state(readView("tasks", { showDone: false }).showDone);
+  $effect(() => saveView("tasks", { showDone }));
   let loading = $state(true);
 
   async function load() {
