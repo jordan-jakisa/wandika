@@ -3,7 +3,8 @@
   import { api } from "../api";
   import { app } from "../app.svelte";
 
-  let { onunlocked }: { onunlocked?: () => void } = $props();
+  /** `note`: shown in place of a locked note. `settings`: the Encryption section. */
+  let { onunlocked, context = "note" }: { onunlocked?: () => void; context?: "note" | "settings" } = $props();
   let passphrase = $state("");
   let busy = $state(false);
   let error = $state<string | null>(null);
@@ -28,7 +29,10 @@
 </script>
 
 <form class="unlock" onsubmit={submit}>
-  <p class="lead"><Lock size={18} /> {setUp ? "This note is encrypted." : "Set up encryption for this vault."}</p>
+  <p class="lead">
+    <Lock size={18} />
+    {setUp ? (context === "note" ? "This note is encrypted." : "Encrypted notes are locked on this device.") : "Set up encryption for this vault."}
+  </p>
   <p class="muted">
     {setUp
       ? "Enter your vault passphrase. This device remembers it in the keychain until you lock it."

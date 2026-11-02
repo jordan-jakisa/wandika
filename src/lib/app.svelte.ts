@@ -49,9 +49,15 @@ class AppState {
 
   async init() {
     try {
-      this.status = await api.status();
-      this.lastSync = this.status.last_sync;
-      if (this.status.target) await this.enterVault();
+      const status = await api.status();
+      this.lastSync = status.last_sync;
+      // Load the files before showing the workspace so it never flashes an empty vault.
+      if (status.target && status.user) await this.refreshFiles();
+      this.status = status;
+      if (status.target && status.user) {
+        this.startAutoSync();
+        void this.sync();
+      }
     } catch (e) {
       this.bootError = (e as Error).message;
     }
@@ -65,10 +71,12 @@ class AppState {
     this.status = await api.status();
   }
 
-  async enterVault() {
+  /** After the first download of a vault: show it, then keep it in sync. */
+  async enterVault(report: SyncReport) {
+    this.apply(report);
     await this.refreshFiles();
+    await this.refreshStatus();
     this.startAutoSync();
-    void this.sync();
   }
 
   async refreshFiles() {
@@ -156,7 +164,7 @@ class AppState {
     if (found) return this.open(found);
     const slash = clean.lastIndexOf("/");
     const folder = slash >= 0 ? clean.slice(0, slash) : "";
-    const path = await api.noteCreate(folder, clean.slice(slash + 1), `# ${clean.slice(slash + 1)}\n\n`);
+    const path = await api.noteCreate(folder, clean.slice(slash + 1));
     await this.refreshFiles();
     this.open(path);
     this.edited();

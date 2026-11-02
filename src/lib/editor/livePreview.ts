@@ -44,6 +44,18 @@ class Checkbox extends WidgetType {
   }
 }
 
+class Bullet extends WidgetType {
+  eq() {
+    return true;
+  }
+  toDOM() {
+    const b = document.createElement("span");
+    b.className = "cm-bullet";
+    b.textContent = "•";
+    return b;
+  }
+}
+
 class Rule extends WidgetType {
   toDOM() {
     const hr = document.createElement("span");
@@ -52,8 +64,10 @@ class Rule extends WidgetType {
   }
 }
 
-function activeLines(state: EditorState) {
+function activeLines(state: EditorState, focused = true) {
   const lines = new Set<number>();
+  // Unfocused, the whole note reads as rendered text.
+  if (!focused) return lines;
   for (const r of state.selection.ranges) {
     const a = state.doc.lineAt(r.from).number;
     const b = state.doc.lineAt(r.to).number;
@@ -73,7 +87,7 @@ function frontmatterEnd(state: EditorState) {
 
 function build(view: EditorView): DecorationSet {
   const { state } = view;
-  const active = activeLines(state);
+  const active = activeLines(state, view.hasFocus);
   const isActive = (pos: number) => active.has(state.doc.lineAt(pos).number);
   const out: Range<Decoration>[] = [];
   const fmEnd = frontmatterEnd(state);
@@ -114,6 +128,8 @@ function build(view: EditorView): DecorationSet {
         }
         if (name === "Link") {
           const url = node.node.getChild("URL");
+          // `[[note]]` also parses as a reference link `[note]`; leave those to the wikilink pass.
+          if (!url) return false;
           const href = url ? state.sliceDoc(url.from, url.to) : "";
           out.push(
             Decoration.mark({ class: "cm-md-link", attributes: { "data-href": href } }).range(node.from, node.to),
@@ -163,7 +179,19 @@ function build(view: EditorView): DecorationSet {
         if (name === "HorizontalRule" && !isActive(node.from)) {
           out.push(Decoration.replace({ widget: new Rule() }).range(node.from, node.to));
         }
-        if (name === "ListMark") out.push(Decoration.mark({ class: "cm-list-mark" }).range(node.from, node.to));
+        if (name === "ListMark") {
+          const item = node.node.parent;
+          const isTask = !!item?.getChild("Task");
+          const bullet = /^[-*+]$/.test(state.sliceDoc(node.from, node.to));
+          if (!isActive(node.from) && isTask) {
+            // "- [ ] text": the checkbox stands in for the dash.
+            out.push(hide.range(node.from, Math.min(node.to + 1, state.doc.lineAt(node.from).to)));
+          } else if (!isActive(node.from) && bullet) {
+            out.push(Decoration.replace({ widget: new Bullet() }).range(node.from, node.to));
+          } else {
+            out.push(Decoration.mark({ class: "cm-list-mark" }).range(node.from, node.to));
+          }
+        }
       },
     });
 
@@ -212,7 +240,13 @@ export function livePreview(onOpenLink: (target: string) => void) {
         this.decorations = build(view);
       }
       update(u: ViewUpdate) {
-        if (u.docChanged || u.viewportChanged || u.selectionSet || syntaxTree(u.startState) !== syntaxTree(u.state)) {
+        if (
+          u.docChanged ||
+          u.viewportChanged ||
+          u.selectionSet ||
+          u.focusChanged ||
+          syntaxTree(u.startState) !== syntaxTree(u.state)
+        ) {
           this.decorations = build(u.view);
         }
       }
@@ -222,10 +256,11 @@ export function livePreview(onOpenLink: (target: string) => void) {
 
   const clicks = EditorView.domEventHandlers({
     mousedown(e, view) {
-      const el = (e.target as HTMLElement).closest<HTMLElement>(".cm-wikilink, .cm-md-link");
+      const target = e.target as HTMLElement;
+      const el = target.closest<HTMLElement>(".cm-wikilink") ?? target.closest<HTMLElement>(".cm-md-link");
       if (!el) return false;
       const pos = view.posAtDOM(el);
-      const onActiveLine = activeLines(view.state).has(view.state.doc.lineAt(pos).number);
+      const onActiveLine = activeLines(view.state, view.hasFocus).has(view.state.doc.lineAt(pos).number);
       // On the line being edited a plain click places the cursor; Cmd or Ctrl click still follows.
       if (onActiveLine && !(e.metaKey || e.ctrlKey)) return false;
       e.preventDefault();

@@ -127,7 +127,7 @@
           Encrypted notes are stored as age files on GitHub and on your devices. Only your passphrase opens them,
           and they also open with the age command-line tool.
         </p>
-        <Unlock />
+        <Unlock context="settings" />
       {/if}
     </section>
 

@@ -26,10 +26,7 @@
     opening = `${owner}/${repo}`;
     error = null;
     try {
-      const report = await api.vaultOpen(owner, repo);
-      await app.refreshStatus();
-      app.apply(report);
-      await app.enterVault();
+      await app.enterVault(await api.vaultOpen(owner, repo));
     } catch (e) {
       error = (e as Error).message;
       opening = null;

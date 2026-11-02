@@ -42,8 +42,10 @@ const notes = new Map<string, string>([
   ["Private/Passport renewal.md.age", "# Passport renewal\n\nAppointment reference and documents list.\n"],
 ]);
 let encryption = { set_up: true, unlocked: false, folders: ["Private"] };
-let signedIn = false;
-let target: Status["target"] = null;
+// `?mock=vault` opens straight into a vault, for checking screens after a reload.
+const startInVault = typeof location !== "undefined" && new URLSearchParams(location.search).get("mock") === "vault";
+let signedIn = startInVault;
+let target: Status["target"] = startInVault ? { owner: "jordan-jakisa", repo: "notes", branch: "main" } : null;
 let polls = 0;
 let lastSync: number | null = null;
 

@@ -64,6 +64,7 @@ const theme = EditorView.theme({
   },
   ".cm-tag": { color: "var(--papyrus)", fontFamily: "var(--font-ui)", fontSize: "0.85em", fontWeight: "500" },
   ".cm-list-mark": { color: "var(--graphite)" },
+  ".cm-bullet": { color: "var(--graphite)", display: "inline-block", width: "0.6em" },
   ".cm-task": {
     width: "1.05em",
     height: "1.05em",

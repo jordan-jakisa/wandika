@@ -18,7 +18,17 @@
   let busy = $state(false);
   const today = new Date().toLocaleDateString("en-CA");
   const overdue = $derived(!!due && due < today && !done);
-  const label = $derived(text.replace(/\s*📅\s?\d{4}-\d{2}-\d{2}/, "").replace(/\s*✅ \d{4}-\d{2}-\d{2}/, "").trim());
+  // Plain words for the list: dates move to the meta line, Markdown marks go.
+  const label = $derived(
+    text
+      .replace(/\s*📅\s?\d{4}-\d{2}-\d{2}/, "")
+      .replace(/\s*✅ \d{4}-\d{2}-\d{2}/, "")
+      .replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, "$2")
+      .replace(/\[\[([^\]]+)\]\]/g, "$1")
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+      .replace(/(\*\*|__|\*|_|~~|`)(.+?)\1/g, "$2")
+      .trim(),
+  );
 
   async function toggle() {
     busy = true;

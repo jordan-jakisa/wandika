@@ -73,7 +73,7 @@
 <section class="today" aria-labelledby="today-h">
   <header>
     <h2 id="today-h">{heading}</h2>
-    <button class="btn primary" onclick={() => app.openDaily()}><NotebookPen size={16} /> Open today's note</button>
+    <button class="btn" onclick={() => app.openDaily()}><NotebookPen size={16} /> Open today's note</button>
   </header>
 
   {#if errors.length}
