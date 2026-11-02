@@ -7,7 +7,8 @@ Markdown notes for Mac, iPhone and Android, kept in a GitHub repository you choo
   local git repository). Connect it to a GitHub repository later, or disconnect it, from Settings.
 - Sign in with GitHub, pick a repository, and every device syncs through it.
 - Kanban boards in the Obsidian Kanban format, with tags and links between cards and notes.
-- Mermaid diagrams in notes, drawn by [Pele](https://github.com/obsidianmd/pele).
+- A graph of notes and links, for the whole vault or around one note.
+- Tables and Mermaid diagrams in notes, drawn by [Pele](https://github.com/obsidianmd/pele).
 - Encrypt any note or folder; encrypted notes are standard [age](https://age-encryption.org) files.
 - Today's calendar, inbox and tasks sit beside your notes (Google, Outlook, Apple Calendar and
   Reminders, Google Tasks, and `- [ ]` tasks in the vault).
