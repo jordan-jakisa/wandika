@@ -85,5 +85,24 @@ a quiet sheet. Everything else is restrained.
 
 ## Motion
 
-Only motion that answers an action: sheet slide-in on phones (200ms, ease-out), panel collapse.
-`prefers-reduced-motion` turns both off.
+Only motion that answers an action, from tokens in `app.css`:
+- `--dur-instant` 100ms: press tint, chevrons.
+- `--dur-quick` 160ms: fades for dialogs, toast and image; toggles.
+- `--dur-base` 240ms: push and pop of phone screens, sheet close, panel collapse, a ticked task
+  folding away.
+- `--dur-slow` 360ms: sheet open.
+
+Easings are `--ease-out` for arrivals, `--ease-in` for departures and `--ease-sheet` for sheets.
+Reduced motion sets every duration to 0, and script timers read the same tokens (`src/lib/motion.ts`).
+Tab switches, typing and repeated actions never animate.
+
+## Tokens beyond colour
+
+- Type: `--text-2xs` to `--text-2xl` (11, 12, 13, 15/16, 18, 22, 28), all × `--text-scale`.
+- Space: `--space-1` to `--space-8` (4 to 40).
+- Radius: `--radius-xs` 4, `-sm` 6, base 10, `-md` 12, `-lg` 14, `-xl` 20.
+- Elevation: `--shadow-raise`, `--shadow-pop`, `--shadow-modal`, `--scrim` (stronger in dark).
+
+Shared controls live in `app.css`: `.btn` (`.primary`, `.quiet`, `.danger`), `.icon-btn`, `.link-btn`,
+`.back`, `.chip`, `.segmented`, `.field`. Small controls keep their look and get a 44px tap area on
+touch.

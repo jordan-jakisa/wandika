@@ -161,3 +161,21 @@ Tier 1, then 2, then 3, then 4. Commit in small chunks. After each tier:
 - install on the iPhone and the Pixel;
 - check light and dark with screenshots;
 - re-score the scorecard.
+
+## Result (2026-11-03, after all four tiers)
+
+| # | Criterion | Mac | iPhone | Android | What changed |
+|---|---|---|---|---|---|
+| 1 | Anticipates needs | 2 | 2 | 2 | Last note, tab, Today column and Settings section per vault. Scroll and cursor per note; scroll per tab. The Mac start screen lists recent notes. Search is ready to type. |
+| 2 | Intentional transitions | 2 | 2 | 2 | Notes slide over a list that stays mounted, and a swipe back finishes from where it let go. Sub-screens slide in. Modals, the toast and the image viewer fade. Panels collapse with motion. Nothing jumps while loading. |
+| 3 | Delight | 1 | 1 | 2 | A ticked task strikes through, holds, then folds away, with a vibration on Android. "All done for today." First-sync and manual-sync messages. iOS web views have no haptics. |
+| 4 | Knows when not to animate | 2 | 2 | 2 | Motion tokens are zero under reduced motion, script timers read them, and the graph settles at once. Typing paths stay still. |
+| 5 | Invisible consistency | 2 | 2 | 2 | Tokens for type, spacing, radius, elevation and motion. One chip, segmented control, back row and text button. 44px tap areas. Conflicts shown in alarm red. Android bar icons follow the theme. |
+| 6 | Empty states | 2 | 2 | 2 | Empty Untitled notes are discarded. The repo list, search and Today each say why they are empty and what to do. |
+| 7 | Discovery | 2 | 1 | 1 | One-time phone tips (long press, pull to sync). The Mac shows its shortcuts where they work. |
+| 8 | Prescriptive errors | 2 | 2 | 2 | Coded errors in plain words. Saves retry without hiding the note. Sync failures say why and retry on tap. Reconnect buttons. Undo after trash. |
+| 9 | Performance | 2 | 2 | 2 | The note body draws before backlinks; images and embeds are cached. Graph and task lists render in pages. |
+
+Kept as is:
+- The dark colour block appears twice in app.css (media query and chosen mode), because both are needed before the interface script runs.
+- Spacing of 6, 10 and 14px stays as half-steps of the grid; only the outliers were snapped.
