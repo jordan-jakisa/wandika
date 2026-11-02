@@ -37,7 +37,7 @@ chrono = { version = "0.4", features = ["serde"] }
 url = "2"
 rand = "0.8"
 age = { version = "0.11", features = ["armor"] }
-# Sync is git: libgit2 built into the app (Apple platforms use the system TLS).
+# Sync is git: libgit2 built into the app (the Mac uses the system TLS).
 git2 = { version = "0.20", default-features = false, features = ["https", "vendored-libgit2"] }
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
@@ -56,6 +56,6 @@ opt-level = 3
 panic = "abort"
 strip = true
 
-# Android has no system OpenSSL for libgit2's HTTPS, so it is built from source.
-[target.'cfg(target_os = "android")'.dependencies]
+# iPhone and Android have no system OpenSSL for libgit2's HTTPS, so it is built from source.
+[target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
 git2 = { version = "0.20", default-features = false, features = ["https", "vendored-libgit2", "vendored-openssl"] }
