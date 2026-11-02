@@ -1,0 +1,615 @@
+//! The local working copy: plain files on disk, Obsidian-compatible, plus an in-memory index for
+//! search, links, backlinks and tasks.
+
+use crate::crypto::{self, Crypto};
+use crate::error::{msg, Result};
+use chrono::{Local, NaiveDate};
+use regex::Regex;
+use serde::Serialize;
+use std::collections::HashMap;
+use std::path::{Component, Path, PathBuf};
+use std::sync::LazyLock;
+use std::time::SystemTime;
+use walkdir::WalkDir;
+
+pub const TMP_SUFFIX: &str = ".wandika-tmp";
+
+static WIKILINK: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\[\[([^\]\|#\n]+)(#[^\]\|\n]*)?(\|[^\]\n]*)?\]\]").unwrap());
+static TAG: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?:^|\s)#([A-Za-z][\w/-]*)").unwrap());
+static TASK: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^(\s*[-*+] \[)([ xX])(\] )(.*)$").unwrap());
+static DUE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"📅\s?(\d{4}-\d{2}-\d{2})").unwrap());
+
+#[derive(Serialize, Clone)]
+pub struct Entry {
+    pub path: String,
+    pub name: String,
+    pub kind: &'static str,
+    pub encrypted: bool,
+    pub modified: i64,
+}
+
+#[derive(Serialize, Clone)]
+pub struct NoteMeta {
+    pub path: String,
+    pub title: String,
+    pub links: Vec<String>,
+    pub tags: Vec<String>,
+    pub encrypted: bool,
+    pub locked: bool,
+    pub modified: i64,
+}
+
+#[derive(Serialize, Clone)]
+pub struct SearchHit {
+    pub path: String,
+    pub title: String,
+    pub snippet: String,
+    pub encrypted: bool,
+}
+
+#[derive(Serialize, Clone)]
+pub struct VaultTask {
+    pub path: String,
+    pub title: String,
+    pub line: usize,
+    pub text: String,
+    pub done: bool,
+    pub due: Option<String>,
+}
+
+/// Rejects anything that could leave the vault folder.
+pub fn safe(root: &Path, rel: &str) -> Result<PathBuf> {
+    let p = Path::new(rel);
+    if rel.is_empty() || p.is_absolute() || p.components().any(|c| !matches!(c, Component::Normal(_)))
+    {
+        return Err(msg("That path is outside the vault."));
+    }
+    Ok(root.join(p))
+}
+
+fn rel_of(root: &Path, p: &Path) -> Option<String> {
+    let rel = p.strip_prefix(root).ok()?;
+    Some(rel.components().filter_map(|c| c.as_os_str().to_str()).collect::<Vec<_>>().join("/"))
+}
+
+fn hidden(rel: &str) -> bool {
+    rel.split('/').any(|part| part.starts_with('.')) || rel.ends_with(TMP_SUFFIX)
+}
+
+pub fn is_note(rel: &str) -> bool {
+    rel.ends_with(".md") || rel.ends_with(".md.age")
+}
+
+pub fn title_of(rel: &str) -> String {
+    let name = rel.rsplit('/').next().unwrap_or(rel);
+    name.trim_end_matches(".age").trim_end_matches(".md").to_string()
+}
+
+fn mtime_ms(t: SystemTime) -> i64 {
+    t.duration_since(SystemTime::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
+}
+
+pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let tmp = PathBuf::from(format!("{}{TMP_SUFFIX}", path.display()));
+    std::fs::write(&tmp, bytes)?;
+    std::fs::rename(&tmp, path)?;
+    Ok(())
+}
+
+pub fn tree(root: &Path) -> Result<Vec<Entry>> {
+    let mut out = Vec::new();
+    for e in WalkDir::new(root).min_depth(1).follow_links(false).into_iter().flatten() {
+        let Some(rel) = rel_of(root, e.path()) else { continue };
+        if hidden(&rel) {
+            continue;
+        }
+        let ft = e.file_type();
+        if !(ft.is_dir() || ft.is_file()) {
+            continue;
+        }
+        let modified = e.metadata().ok().and_then(|m| m.modified().ok()).map(mtime_ms).unwrap_or(0);
+        out.push(Entry {
+            name: if ft.is_dir() { rel.rsplit('/').next().unwrap_or(&rel).to_string() } else { title_of(&rel) },
+            kind: if ft.is_dir() { "folder" } else if is_note(&rel) { "note" } else { "file" },
+            encrypted: crypto::is_encrypted(&rel),
+            path: rel,
+            modified,
+        });
+    }
+    out.sort_by(|a, b| a.path.to_lowercase().cmp(&b.path.to_lowercase()));
+    Ok(out)
+}
+
+pub fn read_note(root: &Path, rel: &str, crypto: &Crypto) -> Result<String> {
+    let bytes = std::fs::read(safe(root, rel)?)?;
+    let bytes = if crypto::is_encrypted(rel) { crypto.decrypt(&bytes)? } else { bytes };
+    String::from_utf8(bytes).map_err(|_| msg("This file isn't text."))
+}
+
+pub fn write_note(root: &Path, rel: &str, content: &str, crypto: &Crypto) -> Result<()> {
+    let path = safe(root, rel)?;
+    if crypto::is_encrypted(rel) {
+        write_atomic(&path, &crypto.encrypt(content.as_bytes())?)
+    } else {
+        write_atomic(&path, content.as_bytes())
+    }
+}
+
+fn clean_name(name: &str) -> Result<String> {
+    let cleaned: String = name
+        .trim()
+        .chars()
+        .map(|c| if matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') { '-' } else { c })
+        .collect();
+    let cleaned = cleaned.trim_start_matches('.').trim().to_string();
+    if cleaned.is_empty() {
+        return Err(msg("Give the note a name."));
+    }
+    Ok(cleaned)
+}
+
+fn join(folder: &str, name: &str) -> String {
+    let folder = folder.trim_matches('/');
+    if folder.is_empty() { name.to_string() } else { format!("{folder}/{name}") }
+}
+
+/// Creates a note with a unique name. Notes in encrypted folders are created encrypted.
+pub fn create_note(root: &Path, folder: &str, title: &str, body: &str, crypto: &Crypto) -> Result<String> {
+    let base = clean_name(title)?;
+    let ext = if crypto.folder_is_encrypted(folder) { ".md.age" } else { ".md" };
+    let mut n = 1;
+    let rel = loop {
+        let name = if n == 1 { format!("{base}{ext}") } else { format!("{base} {n}{ext}") };
+        let rel = join(folder, &name);
+        if !safe(root, &rel)?.exists() {
+            break rel;
+        }
+        n += 1;
+    };
+    write_note(root, &rel, body, crypto)?;
+    Ok(rel)
+}
+
+pub fn create_folder(root: &Path, rel: &str) -> Result<()> {
+    std::fs::create_dir_all(safe(root, rel)?)?;
+    Ok(())
+}
+
+/// Renames a note or folder in place and rewrites `[[links]]` to a renamed note.
+pub fn rename(root: &Path, from: &str, new_name: &str, crypto: &Crypto, index: &mut Index) -> Result<String> {
+    let src = safe(root, from)?;
+    let parent = from.rsplit_once('/').map(|(p, _)| p).unwrap_or("");
+    let name = clean_name(new_name)?;
+    let is_dir = src.is_dir();
+    let suffix = if is_dir {
+        ""
+    } else if from.ends_with(".md.age") {
+        ".md.age"
+    } else if from.ends_with(".md") {
+        ".md"
+    } else {
+        ""
+    };
+    let to = join(parent, &format!("{name}{suffix}"));
+    if to == from {
+        return Ok(to);
+    }
+    let dst = safe(root, &to)?;
+    if dst.exists() && to.to_lowercase() != from.to_lowercase() {
+        return Err(msg(format!("“{name}” already exists here.")));
+    }
+    std::fs::rename(&src, &dst)?;
+    if !is_dir && is_note(from) {
+        let (old, new) = (title_of(from), title_of(&to));
+        index.refresh(root, crypto);
+        for note in index.notes_linking_to(&old) {
+            let Ok(text) = read_note(root, &note, crypto) else { continue };
+            let updated = WIKILINK.replace_all(&text, |c: &regex::Captures| {
+                if c[1].trim().eq_ignore_ascii_case(&old) {
+                    format!(
+                        "[[{new}{}{}]]",
+                        c.get(2).map_or("", |m| m.as_str()),
+                        c.get(3).map_or("", |m| m.as_str())
+                    )
+                } else {
+                    c[0].to_string()
+                }
+            });
+            if updated != text {
+                write_note(root, &note, &updated, crypto)?;
+            }
+        }
+    }
+    Ok(to)
+}
+
+/// Moves to `.trash/` like Obsidian, so a deleted note can be recovered from the repo.
+pub fn trash(root: &Path, rel: &str) -> Result<()> {
+    let src = safe(root, rel)?;
+    let dst = root.join(".trash").join(rel);
+    if let Some(p) = dst.parent() {
+        std::fs::create_dir_all(p)?;
+    }
+    if dst.exists() {
+        if dst.is_dir() { std::fs::remove_dir_all(&dst)?; } else { std::fs::remove_file(&dst)?; }
+    }
+    std::fs::rename(src, dst)?;
+    Ok(())
+}
+
+/// Encrypts or decrypts one note, or every note in a folder (and marks the folder for new notes).
+pub fn set_encrypted(root: &Path, rel: &str, encrypt: bool, crypto: &mut Crypto) -> Result<String> {
+    if encrypt && !crypto.unlocked() {
+        return Err(msg("Set up or unlock encryption first."));
+    }
+    if !encrypt && !crypto.unlocked() {
+        return Err(msg("Unlock encrypted notes first."));
+    }
+    let path = safe(root, rel)?;
+    let convert = |rel: &str| -> Result<String> {
+        let is_enc = crypto::is_encrypted(rel);
+        if !is_note(rel) || is_enc == encrypt {
+            return Ok(rel.to_string());
+        }
+        let text = read_note(root, rel, crypto)?;
+        let to = if encrypt { format!("{rel}{}", crypto::EXT) } else { rel.trim_end_matches(crypto::EXT).to_string() };
+        write_note(root, &to, &text, crypto)?;
+        std::fs::remove_file(safe(root, rel)?)?;
+        Ok(to)
+    };
+    if path.is_dir() {
+        let notes: Vec<String> = WalkDir::new(&path)
+            .into_iter()
+            .flatten()
+            .filter(|e| e.file_type().is_file())
+            .filter_map(|e| rel_of(root, e.path()))
+            .filter(|r| !hidden(r))
+            .collect();
+        for n in notes {
+            convert(&n)?;
+        }
+        if let Some(cfg) = crypto.config.as_mut() {
+            let folder = rel.trim_matches('/').to_string();
+            cfg.folders.retain(|f| f != &folder);
+            if encrypt {
+                cfg.folders.push(folder);
+            }
+            crypto::save_config(root, cfg)?;
+        }
+        Ok(rel.to_string())
+    } else {
+        convert(rel)
+    }
+}
+
+struct Cached {
+    mtime: SystemTime,
+    meta: NoteMeta,
+    text: String,
+    lower: String,
+}
+
+#[derive(Default)]
+pub struct Index {
+    root: PathBuf,
+    notes: HashMap<String, Cached>,
+    unlocked: bool,
+}
+
+fn parse(rel: &str, text: &str, modified: i64, encrypted: bool, locked: bool) -> NoteMeta {
+    let body = strip_code(text);
+    let mut links: Vec<String> = WIKILINK.captures_iter(&body).map(|c| c[1].trim().to_string()).collect();
+    links.dedup();
+    let mut tags: Vec<String> = TAG.captures_iter(&body).map(|c| c[1].to_string()).collect();
+    tags.sort();
+    tags.dedup();
+    NoteMeta { path: rel.to_string(), title: title_of(rel), links, tags, encrypted, locked, modified }
+}
+
+/// Removes fenced code so `#include` or `[[x]]` inside code isn't read as a tag or link.
+fn strip_code(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut fenced = false;
+    for line in text.lines() {
+        if line.trim_start().starts_with("```") {
+            fenced = !fenced;
+            continue;
+        }
+        if !fenced {
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    out
+}
+
+fn snippet(text: &str, lower: &str, needle: &str) -> String {
+    let Some(pos) = lower.find(needle) else {
+        return text.chars().take(140).collect::<String>().replace('\n', " ");
+    };
+    // `lower` can differ in byte length from `text` for some scripts; fall back to the start.
+    let start = if lower.len() == text.len() { pos.saturating_sub(60) } else { 0 };
+    let mut s = start;
+    while s > 0 && !text.is_char_boundary(s) {
+        s -= 1;
+    }
+    let piece: String = text[s..].chars().take(160).collect();
+    let piece = piece.replace('\n', " ");
+    if s > 0 { format!("…{}", piece.trim_start()) } else { piece }
+}
+
+impl Index {
+    pub fn refresh(&mut self, root: &Path, crypto: &Crypto) {
+        if self.root != root || self.unlocked != crypto.unlocked() {
+            self.notes.clear();
+            self.root = root.to_path_buf();
+            self.unlocked = crypto.unlocked();
+        }
+        let mut seen = std::collections::HashSet::new();
+        for e in WalkDir::new(root).follow_links(false).into_iter().flatten() {
+            if !e.file_type().is_file() {
+                continue;
+            }
+            let Some(rel) = rel_of(root, e.path()) else { continue };
+            if hidden(&rel) || !is_note(&rel) {
+                continue;
+            }
+            let Some(mtime) = e.metadata().ok().and_then(|m| m.modified().ok()) else { continue };
+            seen.insert(rel.clone());
+            if self.notes.get(&rel).is_some_and(|c| c.mtime == mtime) {
+                continue;
+            }
+            let encrypted = crypto::is_encrypted(&rel);
+            let (text, locked) = match read_note(root, &rel, crypto) {
+                Ok(t) => (t, false),
+                Err(_) => (String::new(), encrypted),
+            };
+            let meta = parse(&rel, &text, mtime_ms(mtime), encrypted, locked);
+            let lower = text.to_lowercase();
+            self.notes.insert(rel, Cached { mtime, meta, text, lower });
+        }
+        self.notes.retain(|k, _| seen.contains(k));
+    }
+
+    pub fn titles(&self) -> Vec<NoteMeta> {
+        let mut v: Vec<NoteMeta> = self.notes.values().map(|c| c.meta.clone()).collect();
+        v.sort_by(|a, b| b.modified.cmp(&a.modified));
+        v
+    }
+
+    pub fn resolve(&self, target: &str) -> Option<String> {
+        let target = target.trim().trim_end_matches(".md");
+        let t = target.to_lowercase();
+        // A link with a folder (`Projects/Plan`) matches that path; a bare name matches any folder.
+        let mut matches: Vec<&String> = self
+            .notes
+            .keys()
+            .filter(|rel| {
+                let stem = rel.trim_end_matches(".age").trim_end_matches(".md").to_lowercase();
+                stem == t || stem.ends_with(&format!("/{t}"))
+            })
+            .collect();
+        matches.sort_by_key(|r| r.len());
+        matches.first().map(|s| s.to_string())
+    }
+
+    pub fn notes_linking_to(&self, title: &str) -> Vec<String> {
+        self.notes
+            .values()
+            .filter(|c| c.meta.links.iter().any(|l| l.rsplit('/').next().unwrap_or(l).eq_ignore_ascii_case(title)))
+            .map(|c| c.meta.path.clone())
+            .collect()
+    }
+
+    pub fn backlinks(&self, rel: &str) -> Vec<SearchHit> {
+        let title = title_of(rel);
+        let needle = format!("[[{}", title.to_lowercase());
+        let mut out: Vec<SearchHit> = self
+            .notes_linking_to(&title)
+            .into_iter()
+            .filter(|p| p != rel)
+            .filter_map(|p| self.notes.get(&p))
+            .map(|c| SearchHit {
+                path: c.meta.path.clone(),
+                title: c.meta.title.clone(),
+                snippet: snippet(&c.text, &c.lower, &needle),
+                encrypted: c.meta.encrypted,
+            })
+            .collect();
+        out.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
+        out
+    }
+
+    pub fn search(&self, query: &str) -> Vec<SearchHit> {
+        let q = query.trim().to_lowercase();
+        if q.is_empty() {
+            return Vec::new();
+        }
+        let words: Vec<&str> = q.split_whitespace().collect();
+        let mut scored: Vec<(i64, &Cached)> = self
+            .notes
+            .values()
+            .filter_map(|c| {
+                let title = c.meta.title.to_lowercase();
+                let path = c.meta.path.to_lowercase();
+                if !words.iter().all(|w| title.contains(w) || path.contains(w) || c.lower.contains(w)) {
+                    return None;
+                }
+                let mut score = 0i64;
+                if title == q {
+                    score += 1000;
+                }
+                if title.starts_with(&q) {
+                    score += 300;
+                }
+                for w in &words {
+                    if title.contains(w) {
+                        score += 100;
+                    }
+                    score += c.lower.matches(w).count().min(20) as i64;
+                }
+                Some((score, c))
+            })
+            .collect();
+        scored.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.meta.modified.cmp(&a.1.meta.modified)));
+        scored
+            .into_iter()
+            .take(50)
+            .map(|(_, c)| SearchHit {
+                path: c.meta.path.clone(),
+                title: c.meta.title.clone(),
+                snippet: snippet(&c.text, &c.lower, words[0]),
+                encrypted: c.meta.encrypted,
+            })
+            .collect()
+    }
+
+    pub fn tasks(&self) -> Vec<VaultTask> {
+        let mut out = Vec::new();
+        for c in self.notes.values() {
+            let mut fenced = false;
+            for (i, line) in c.text.lines().enumerate() {
+                if line.trim_start().starts_with("```") {
+                    fenced = !fenced;
+                }
+                if fenced {
+                    continue;
+                }
+                if let Some(m) = TASK.captures(line) {
+                    let text = m[4].to_string();
+                    out.push(VaultTask {
+                        path: c.meta.path.clone(),
+                        title: c.meta.title.clone(),
+                        line: i,
+                        due: DUE.captures(&text).map(|d| d[1].to_string()),
+                        done: &m[2] != " ",
+                        text,
+                    });
+                }
+            }
+        }
+        out.sort_by(|a, b| {
+            a.due.is_none().cmp(&b.due.is_none()).then(a.due.cmp(&b.due)).then(a.path.cmp(&b.path)).then(a.line.cmp(&b.line))
+        });
+        out
+    }
+}
+
+/// Ticks or unticks the checkbox on `line`, after checking the line still holds the same task.
+pub fn toggle_task(root: &Path, rel: &str, line: usize, expected: &str, crypto: &Crypto) -> Result<bool> {
+    let text = read_note(root, rel, crypto)?;
+    let mut lines: Vec<String> = text.split('\n').map(str::to_string).collect();
+    let current = lines.get(line).ok_or_else(|| msg("That task moved. Refresh and try again."))?;
+    let caps = TASK.captures(current).ok_or_else(|| msg("That task moved. Refresh and try again."))?;
+    if caps[4].trim() != expected.trim() {
+        return Err(msg("That task changed. Refresh and try again."));
+    }
+    let done = &caps[2] == " ";
+    let mark = if done { "x" } else { " " };
+    let mut rest = caps[4].to_string();
+    // Obsidian Tasks style completion date.
+    let done_re = Regex::new(r"\s*✅ \d{4}-\d{2}-\d{2}").unwrap();
+    rest = done_re.replace_all(&rest, "").to_string();
+    if done {
+        rest = format!("{rest} ✅ {}", Local::now().format("%Y-%m-%d"));
+    }
+    lines[line] = format!("{}{mark}{}{rest}", &caps[1], &caps[3]);
+    write_note(root, rel, &lines.join("\n"), crypto)?;
+    Ok(done)
+}
+
+/// Today's note, following Obsidian's Daily notes settings when the vault has them.
+pub fn daily_note(root: &Path, date: NaiveDate, crypto: &Crypto) -> Result<String> {
+    #[derive(serde::Deserialize, Default)]
+    struct Daily {
+        #[serde(default)]
+        folder: String,
+        #[serde(default)]
+        format: String,
+        #[serde(default)]
+        template: String,
+    }
+    let cfg: Daily = std::fs::read(root.join(".obsidian/daily-notes.json"))
+        .ok()
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .unwrap_or_default();
+    let folder = if cfg.folder.trim().is_empty() { "Daily".to_string() } else { cfg.folder.trim_matches('/').to_string() };
+    let format = if cfg.format.trim().is_empty() { "YYYY-MM-DD".to_string() } else { cfg.format.clone() };
+    let name = moment_format(&format, date);
+    for ext in [".md", ".md.age"] {
+        let rel = join(&folder, &format!("{name}{ext}"));
+        if safe(root, &rel)?.exists() {
+            return Ok(rel);
+        }
+    }
+    let body = if cfg.template.trim().is_empty() {
+        format!("# {}\n\n## Agenda\n\n## Notes\n\n## Tasks\n\n", date.format("%A %-d %B %Y"))
+    } else {
+        let t = cfg.template.trim().trim_end_matches(".md");
+        read_note(root, &format!("{t}.md"), crypto)
+            .unwrap_or_default()
+            .replace("{{date}}", &date.format("%Y-%m-%d").to_string())
+            .replace("{{title}}", &name)
+    };
+    create_note(root, &folder, &name, &body, crypto)
+}
+
+/// The subset of moment.js tokens Obsidian users put in daily-note formats.
+fn moment_format(fmt: &str, d: NaiveDate) -> String {
+    let tokens = [
+        ("YYYY", "%Y"), ("YY", "%y"), ("MMMM", "%B"), ("MMM", "%b"), ("MM", "%m"),
+        ("dddd", "%A"), ("ddd", "%a"), ("DD", "%d"), ("Do", "%-d"), ("D", "%-d"), ("M", "%-m"),
+    ];
+    let mut out = String::new();
+    let mut rest = fmt;
+    'outer: while !rest.is_empty() {
+        for (tok, chrono_fmt) in tokens {
+            if let Some(r) = rest.strip_prefix(tok) {
+                out.push_str(&d.format(chrono_fmt).to_string());
+                rest = r;
+                continue 'outer;
+            }
+        }
+        let c = rest.chars().next().unwrap();
+        out.push(c);
+        rest = &rest[c.len_utf8()..];
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_escaping_paths() {
+        let root = Path::new("/v");
+        assert!(safe(root, "../x").is_err());
+        assert!(safe(root, "/etc/passwd").is_err());
+        assert!(safe(root, "a/./b").is_ok() || safe(root, "a/./b").is_err());
+        assert!(safe(root, "Daily/2026-11-02.md").is_ok());
+    }
+
+    #[test]
+    fn parses_links_tags_and_titles() {
+        let m = parse("Projects/Plan.md", "See [[Wandika|the app]] and [[Daily/2026-11-02#Tasks]] #idea\n```\n#notatag [[nope]]\n```", 0, false, false);
+        assert_eq!(m.title, "Plan");
+        assert_eq!(m.links, vec!["Wandika", "Daily/2026-11-02"]);
+        assert_eq!(m.tags, vec!["idea"]);
+        assert_eq!(title_of("Private/Diary.md.age"), "Diary");
+    }
+
+    #[test]
+    fn formats_daily_names() {
+        let d = NaiveDate::from_ymd_opt(2026, 11, 2).unwrap();
+        assert_eq!(moment_format("YYYY-MM-DD", d), "2026-11-02");
+        assert_eq!(moment_format("dddd, D MMMM YYYY", d), "Monday, 2 November 2026");
+    }
+}
