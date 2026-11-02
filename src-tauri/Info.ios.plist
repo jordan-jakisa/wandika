@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSCalendarsFullAccessUsageDescription</key>
+  <string>Wandika shows today's events beside your notes and turns a meeting into a note.</string>
+  <key>NSRemindersFullAccessUsageDescription</key>
+  <string>Wandika lists your reminders beside the tasks in your notes so you can tick them off.</string>
+</dict>
+</plist>
