@@ -203,12 +203,12 @@
 {/snippet}
 
 <nav class="tree">
+  <button class="new-folder" onclick={() => newFolder("")}><FolderPlus size={15} /> New folder</button>
   {#if app.tree.length}
     {@render branch(roots, 0)}
   {:else}
     <p class="muted empty">No notes yet. Create one with the + button.</p>
   {/if}
-  <button class="new-folder" onclick={() => newFolder("")}><FolderPlus size={15} /> New folder</button>
 </nav>
 
 <style>
@@ -302,7 +302,7 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    margin-top: 8px;
+    margin-bottom: 4px;
     min-height: 32px;
     padding: 0 10px;
     border: 0;
