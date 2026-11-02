@@ -9,6 +9,9 @@ Markdown notes for Mac, iPhone and Android, kept in a GitHub repository you choo
 - Kanban boards in the Obsidian Kanban format, with tags and links between cards and notes.
 - A graph of notes and links, for the whole vault or around one note.
 - Tables and Mermaid diagrams in notes, drawn by [Pele](https://github.com/obsidianmd/pele).
+- Images, callouts, embedded notes, properties and templates, as in Obsidian. Pasted and picked
+  images go to the vault's attachment folder.
+- Sync follows the vault's `.gitignore`.
 - Encrypt any note or folder; encrypted notes are standard [age](https://age-encryption.org) files.
 - Today's calendar, inbox and tasks sit beside your notes (Google, Outlook, Apple Calendar and
   Reminders, Google Tasks, and `- [ ]` tasks in the vault).
