@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { api, openUrl } from "../api";
+  import { api, codeOf, openUrl } from "../api";
   import { app } from "../app.svelte";
   import type { DeviceCode } from "../types";
 
@@ -39,6 +39,11 @@
       if (r?.slow_down) interval += 5;
       timer = setTimeout(poll, interval * 1000);
     } catch (e) {
+      // A dropped connection while you approve on GitHub isn't a failure; keep waiting.
+      if (codeOf(e) === "offline") {
+        timer = setTimeout(poll, interval * 1000);
+        return;
+      }
       code = null;
       error = (e as Error).message;
     }

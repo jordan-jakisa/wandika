@@ -14,12 +14,25 @@
   let newName = $state("notes");
   let creating = $state(false);
 
-  $effect(() => {
+  function loadRepos() {
+    error = null;
     api
       .reposList()
-      .then((r) => (repos = r))
+      .then((r) => {
+        repos = r;
+        // Suggest a name that isn't taken yet: notes, notes-2, notes-3…
+        const taken = new Set(r.map((x) => x.name.toLowerCase()));
+        if (taken.has(newName.toLowerCase())) {
+          let n = 2;
+          while (taken.has(`notes-${n}`)) n++;
+          newName = `notes-${n}`;
+        }
+      })
       .catch((e) => (error = (e as Error).message));
-  });
+  }
+  $effect(() => loadRepos());
+
+  const nameTaken = $derived(!!repos?.some((r) => r.name.toLowerCase() === newName.trim().toLowerCase()));
 
   const shown = $derived(
     (repos ?? []).filter((r) => r.full_name.toLowerCase().includes(filter.trim().toLowerCase())),
@@ -33,7 +46,7 @@
         await app.enterVault(await api.vaultOpen(owner, repo));
       } else {
         await app.enterVault(await api.vaultConnectRemote(owner, repo));
-        app.say(`Syncing with ${owner}/${repo}.`);
+        app.say(`Synced with ${owner}/${repo}.`);
       }
       opening = null;
       ondone?.();
@@ -77,17 +90,21 @@
       <label for="new-repo">New private repository</label>
       <div class="create-row">
         <input id="new-repo" class="field" bind:value={newName} autocapitalize="off" spellcheck="false" />
-        <button class="btn primary" disabled={creating || !newName.trim()}>
+        <button class="btn primary" disabled={creating || !newName.trim() || nameTaken}>
           <Plus size={16} />
           {creating ? "Creating…" : mode === "open" ? "Create and open" : "Create and connect"}
         </button>
       </div>
+      {#if nameTaken}<p class="muted taken">You already have “{newName.trim()}”. Pick it from the list below, or choose another name.</p>{/if}
     </form>
 
     <label class="sr-only" for="repo-filter">Filter repositories</label>
     <input id="repo-filter" class="field" type="search" bind:value={filter} placeholder="Or pick one of your repositories" />
 
-    {#if error}<p class="error" role="alert">{error}</p>{/if}
+    {#if error}
+      <p class="error" role="alert">{error}</p>
+      {#if repos === null}<button class="btn" onclick={loadRepos}>Try again</button>{/if}
+    {/if}
 
     {#if repos === null && !error}
       <p class="muted" role="status">Loading your repositories…</p>
@@ -106,7 +123,9 @@
             </button>
           </li>
         {:else}
-          <li class="muted none">No repositories match “{filter}”.</li>
+          <li class="muted none">
+            {filter.trim() ? `No repositories match “${filter.trim()}”.` : "You don't have any repositories yet. Create one above."}
+          </li>
         {/each}
       </ul>
     {/if}
@@ -114,6 +133,10 @@
 </div>
 
 <style>
+  .taken {
+    margin-top: 6px;
+    font-size: var(--small);
+  }
   .picker {
     display: grid;
     gap: 14px;
