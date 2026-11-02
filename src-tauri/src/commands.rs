@@ -237,6 +237,18 @@ pub async fn note_create(app: S<'_>, folder: String, title: String, body: Option
     Ok(path)
 }
 
+#[tauri::command]
+pub async fn templates_list(app: S<'_>) -> Result<Vec<String>> {
+    Ok(vault::templates(&app.root()?))
+}
+
+/// A template's text with its `{{date}}`, `{{time}}` and `{{title}}` filled in for `title`.
+#[tauri::command]
+pub async fn template_render(app: S<'_>, path: String, title: String) -> Result<String> {
+    let text = vault::read_note(&app.root()?, &path, &app.crypto()?)?;
+    Ok(vault::fill_template(&text, &title, Local::now().naive_local()))
+}
+
 /// Raw file bytes in the body; `x-meta` carries `note` and `name`, form-encoded.
 #[tauri::command]
 pub async fn attachment_save(app: S<'_>, request: tauri::ipc::Request<'_>) -> Result<String> {

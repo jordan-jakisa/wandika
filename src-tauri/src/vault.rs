@@ -3,7 +3,7 @@
 
 use crate::crypto::{self, Crypto};
 use crate::error::{msg, Result};
-use chrono::{Local, NaiveDate};
+use chrono::{Local, NaiveDate, NaiveDateTime};
 use regex::Regex;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -625,7 +625,8 @@ pub fn daily_note(root: &Path, date: NaiveDate, crypto: &Crypto) -> Result<Strin
         .unwrap_or_default();
     let folder = if cfg.folder.trim().is_empty() { "Daily".to_string() } else { cfg.folder.trim_matches('/').to_string() };
     let format = if cfg.format.trim().is_empty() { "YYYY-MM-DD".to_string() } else { cfg.format.clone() };
-    let name = moment_format(&format, date);
+    let at = date.and_time(Local::now().time());
+    let name = moment_format(&format, at);
     for ext in [".md", ".md.age"] {
         let rel = join(&folder, &format!("{name}{ext}"));
         if safe(root, &rel)?.exists() {
@@ -636,26 +637,25 @@ pub fn daily_note(root: &Path, date: NaiveDate, crypto: &Crypto) -> Result<Strin
         format!("# {}\n\n## Agenda\n\n## Notes\n\n## Tasks\n\n", date.format("%A %-d %B %Y"))
     } else {
         let t = cfg.template.trim().trim_end_matches(".md");
-        read_note(root, &format!("{t}.md"), crypto)
-            .unwrap_or_default()
-            .replace("{{date}}", &date.format("%Y-%m-%d").to_string())
-            .replace("{{title}}", &name)
+        fill_template(&read_note(root, &format!("{t}.md"), crypto).unwrap_or_default(), &name, at)
     };
     create_note(root, &folder, &name, &body, crypto)
 }
 
-/// The subset of moment.js tokens Obsidian users put in daily-note formats.
-fn moment_format(fmt: &str, d: NaiveDate) -> String {
+/// The subset of moment.js tokens Obsidian users put in daily-note and template formats.
+fn moment_format(fmt: &str, at: NaiveDateTime) -> String {
     let tokens = [
         ("YYYY", "%Y"), ("YY", "%y"), ("MMMM", "%B"), ("MMM", "%b"), ("MM", "%m"),
         ("dddd", "%A"), ("ddd", "%a"), ("DD", "%d"), ("Do", "%-d"), ("D", "%-d"), ("M", "%-m"),
+        ("HH", "%H"), ("H", "%-H"), ("hh", "%I"), ("h", "%-I"), ("mm", "%M"), ("ss", "%S"),
+        ("A", "%p"), ("a", "%P"),
     ];
     let mut out = String::new();
     let mut rest = fmt;
     'outer: while !rest.is_empty() {
         for (tok, chrono_fmt) in tokens {
             if let Some(r) = rest.strip_prefix(tok) {
-                out.push_str(&d.format(chrono_fmt).to_string());
+                out.push_str(&at.format(chrono_fmt).to_string());
                 rest = r;
                 continue 'outer;
             }
@@ -664,6 +664,45 @@ fn moment_format(fmt: &str, d: NaiveDate) -> String {
         out.push(c);
         rest = &rest[c.len_utf8()..];
     }
+    out
+}
+
+static TEMPLATE_VAR: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\{\{\s*(date|time|title)(?::([^}]*))?\s*\}\}").unwrap());
+
+/// Obsidian's template variables: `{{title}}`, `{{date}}`, `{{time}}`, `{{date:YYYY-MM-DD}}`.
+pub fn fill_template(text: &str, title: &str, at: NaiveDateTime) -> String {
+    TEMPLATE_VAR
+        .replace_all(text, |c: &regex::Captures| match (&c[1], c.get(2).map(|m| m.as_str().trim())) {
+            ("title", _) => title.to_string(),
+            ("date", Some(f)) | ("time", Some(f)) if !f.is_empty() => moment_format(f, at),
+            ("date", _) => moment_format("YYYY-MM-DD", at),
+            _ => moment_format("HH:mm", at),
+        })
+        .into_owned()
+}
+
+/// The templates folder from `.obsidian/templates.json`, or `Templates` when that folder exists.
+fn templates_folder(root: &Path) -> Option<String> {
+    let configured = std::fs::read(root.join(".obsidian/templates.json"))
+        .ok()
+        .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+        .and_then(|v| v.get("folder")?.as_str().map(|f| f.trim_matches('/').to_string()))
+        .filter(|f| !f.is_empty());
+    let folder = configured.unwrap_or_else(|| "Templates".into());
+    safe(root, &folder).ok().filter(|p| p.is_dir()).map(|_| folder)
+}
+
+/// Notes in the templates folder, sorted by name.
+pub fn templates(root: &Path) -> Vec<String> {
+    let Some(folder) = templates_folder(root) else { return Vec::new() };
+    let mut out: Vec<String> = WalkDir::new(root.join(&folder))
+        .into_iter()
+        .flatten()
+        .filter_map(|e| rel_of(root, e.path()))
+        .filter(|rel| is_note(rel) && !hidden(rel))
+        .collect();
+    out.sort_by_key(|p| title_of(p).to_lowercase());
     out
 }
 
@@ -740,8 +779,16 @@ mod tests {
 
     #[test]
     fn formats_daily_names() {
-        let d = NaiveDate::from_ymd_opt(2026, 11, 2).unwrap();
+        let d = NaiveDate::from_ymd_opt(2026, 11, 2).unwrap().and_hms_opt(9, 5, 0).unwrap();
         assert_eq!(moment_format("YYYY-MM-DD", d), "2026-11-02");
         assert_eq!(moment_format("dddd, D MMMM YYYY", d), "Monday, 2 November 2026");
+        assert_eq!(moment_format("HH:mm", d), "09:05");
+    }
+
+    #[test]
+    fn fills_obsidian_template_variables() {
+        let at = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap().and_hms_opt(14, 30, 0).unwrap();
+        let text = "# {{title}}\n{{date}} {{time}} {{date:dddd D MMMM}} {{ time:h:mm a }}";
+        assert_eq!(fill_template(text, "Standup", at), "# Standup\n2026-11-03 14:30 Tuesday 3 November 2:30 pm");
     }
 }
