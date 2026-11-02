@@ -134,6 +134,15 @@
     swipeX = 0;
   }
 
+  let scrolled = $state(false);
+  const compactTitle = $derived(
+    ({ notes: app.vault?.name ?? "", today: "Today", tasks: "Tasks", projects: "Projects" } as Record<string, string>)[app.tab] ?? "",
+  );
+  $effect(() => {
+    void app.tab;
+    scrolled = false;
+  });
+
   // Pull down at the top of a list to sync.
   const PULL_TRIGGER = 64;
   let phoneBody = $state<HTMLDivElement>();
@@ -349,7 +358,12 @@
         ontouchstart={pullStart}
         ontouchmove={pullMove}
         ontouchend={pullEnd}
+        onscroll={(e) => (scrolled = (e.currentTarget as HTMLElement).scrollTop > 48)}
       >
+        {#if isIOS && compactTitle}
+          <!-- iOS: once the large title scrolls away, a small centred title stays on a blurred bar. -->
+          <div class="nav-compact" class:shown={scrolled} aria-hidden={!scrolled}>{compactTitle}</div>
+        {/if}
         {#if app.synced && (pull > 0 || app.syncing)}
           <div class="pull" style="height: {app.syncing && !pull ? 44 : pull}px" aria-live="polite">
             {app.syncing ? "Syncing…" : pull >= PULL_TRIGGER ? "Release to sync" : "Pull to sync"}
@@ -715,6 +729,27 @@
     padding-top: var(--safe-top);
     -webkit-overflow-scrolling: touch;
   }
+  .nav-compact {
+    position: sticky;
+    top: calc(-1 * var(--safe-top));
+    z-index: 4;
+    height: calc(44px + var(--safe-top));
+    margin: calc(-1 * var(--safe-top)) 0 calc(-44px);
+    padding-top: var(--safe-top);
+    display: grid;
+    place-items: center;
+    font-size: 17px;
+    font-weight: 600;
+    background: color-mix(in srgb, var(--paper) 72%, transparent);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 150ms ease-out;
+  }
+  .nav-compact.shown {
+    opacity: 1;
+  }
   .pull {
     display: grid;
     place-items: center;
@@ -850,6 +885,7 @@
   }
   .search-tab.active {
     color: var(--papyrus);
+    background: color-mix(in srgb, var(--papyrus) 18%, color-mix(in srgb, var(--sheet) 58%, transparent));
   }
   /* The floating bar overlaps content, so lists leave room to scroll past it. */
   :global([data-platform="ios"]) .phone-body,

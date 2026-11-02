@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Columns3, FileText, Hash, Plus } from "@lucide/svelte";
   import { app } from "../app.svelte";
-  import { isAndroid } from "../platform";
+  import { isAndroid, isIOS } from "../platform";
 
   const boards = $derived(app.titles.filter((n) => n.board));
   const tags = $derived.by(() => {
@@ -16,7 +16,9 @@
 <section class="projects" aria-labelledby="projects-title">
   <header>
     <h2 id="projects-title">Projects</h2>
-    {#if !isAndroid}
+    {#if isIOS}
+      <button class="icon-btn" onclick={() => app.newBoard()} aria-label="New board"><Plus size={24} /></button>
+    {:else if !isAndroid}
       <button class="btn primary" onclick={() => app.newBoard()}><Plus size={16} /> New board</button>
     {/if}
   </header>

@@ -22,7 +22,7 @@
   import GitHubSignIn from "./GitHubSignIn.svelte";
   import RepoPicker from "./RepoPicker.svelte";
   import Unlock from "./Unlock.svelte";
-  import { isAndroid } from "../platform";
+  import { isAndroid, isIOS } from "../platform";
 
   const SECTIONS: { id: SettingsSection; label: string; icon: typeof Cloud }[] = [
     { id: "vault", label: "Vault", icon: HardDrive },
@@ -295,7 +295,11 @@
           <button class="icon-btn" onclick={close} aria-label="Close settings"><ArrowLeft size={24} /></button>
         {/if}
         <h2 id="settings-title">Settings</h2>
-        {#if phone && !isAndroid}<button class="icon-btn" onclick={close} aria-label="Close settings"><X size={20} /></button>{/if}
+        {#if phone && isIOS}
+          <button class="done" onclick={close}>Done</button>
+        {:else if phone && !isAndroid}
+          <button class="icon-btn" onclick={close} aria-label="Close settings"><X size={20} /></button>
+        {/if}
       </header>
       <ul>
         {#each SECTIONS as sec (sec.id)}
@@ -319,11 +323,15 @@
       <header class="pane-head">
         {#if phone && isAndroid}
           <button class="icon-btn" onclick={back} aria-label="All settings"><ArrowLeft size={24} /></button>
+        {:else if phone && isIOS}
+          <button class="back-ios" onclick={back}><ChevronLeft size={28} strokeWidth={2.25} />Settings</button>
         {:else if phone}
           <button class="icon-btn" onclick={back} aria-label="All settings"><ChevronLeft size={22} /></button>
         {/if}
         <h3>{label(section)}</h3>
-        {#if !(phone && isAndroid)}
+        {#if phone && isIOS}
+          <button class="done" onclick={close}>Done</button>
+        {:else if !(phone && isAndroid)}
           <button class="icon-btn" onclick={close} aria-label="Close settings"><X size={20} /></button>
         {/if}
       </header>
@@ -626,6 +634,29 @@
     background: none;
     color: var(--ink);
     text-align: left;
+  }
+  /* iOS: text buttons in the navigation bar. */
+  .done,
+  .back-ios {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--target);
+    border: 0;
+    background: none;
+    color: var(--papyrus);
+    font-size: 17px;
+  }
+  .done {
+    padding: 0 8px;
+    font-weight: 600;
+  }
+  .back-ios {
+    margin-left: -6px;
+    padding: 0 8px 0 0;
+  }
+  .done:active,
+  .back-ios:active {
+    opacity: 0.4;
   }
   .sec-text {
     flex: 1;
