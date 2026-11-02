@@ -24,7 +24,9 @@
         ? "Offline. Changes are saved here."
         : app.syncError
           ? (SHORT[app.syncError.code] ?? "Couldn't sync. Tap to retry")
-          : `Synced ${ago(app.lastSync, now)}`,
+          : app.lastSync
+            ? `Synced ${ago(app.lastSync, now)}`
+            : "Not synced yet",
   );
 
   function tap() {

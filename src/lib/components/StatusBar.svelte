@@ -20,7 +20,7 @@
   {#if stats}
     <div class="right">
       {#if stats.encrypted}<span class="item"><Lock size={12} /> Encrypted</span>{/if}
-      {#if stats.backlinks}<span class="item"><Link2 size={12} /> {n(stats.backlinks)} {stats.backlinks === 1 ? "backlink" : "backlinks"}</span>{/if}
+      {#if stats.backlinks}<span class="item"><Link2 size={12} /> Linked from {n(stats.backlinks)}</span>{/if}
       {#if stats.cards !== null}
         <span class="item">{n(stats.cards)} {stats.cards === 1 ? "card" : "cards"}</span>
       {:else}
@@ -69,8 +69,9 @@
     padding: 0;
     font-size: inherit;
   }
+  /* Conflicts need attention: alarm, as DESIGN.md says. Amber is for waiting and offline. */
   .warn {
-    color: var(--amber);
+    color: var(--alarm);
   }
   @media (hover: hover) {
     .warn:hover {

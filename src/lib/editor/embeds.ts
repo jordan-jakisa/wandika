@@ -35,9 +35,12 @@ class ImageEmbed extends WidgetType {
     wrap.append(img);
     imageUrl(this.target, this.from).then(
       (url) => (img.src = url),
-      () => {
+      (e: unknown) => {
         wrap.classList.add("cm-embed-missing");
-        wrap.textContent = `${this.target} isn't in this vault.`;
+        wrap.textContent =
+          (e as { code?: string }).code === "locked"
+            ? "Unlock encrypted notes to see this image."
+            : `${this.target} isn't in this vault.`;
       },
     );
     return wrap;

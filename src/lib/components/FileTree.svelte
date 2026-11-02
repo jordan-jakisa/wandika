@@ -101,12 +101,8 @@
   });
 
   async function newFolder(parent: string) {
-    const name = await app.ask({ title: "New folder", confirm: "Create folder", input: { label: "Folder name", value: "" } });
-    if (!name?.trim()) return;
-    const path = parent ? `${parent}/${name.trim()}` : name.trim();
-    await api.folderCreate(path);
-    toggle(path);
-    await app.newNote(path);
+    const path = await app.newFolder(parent);
+    if (path && !openFolders.has(path)) toggle(path);
   }
 
   function startRename(e: Entry) {
@@ -150,20 +146,7 @@
     }
   }
 
-  async function trash(e: Entry) {
-    const what = e.kind === "folder" ? `the folder “${e.name}” and everything in it` : `“${e.name}”`;
-    const ok = await app.ask({
-      title: `Move ${what} to the trash?`,
-      message: "You can restore it from the .trash folder in the repository.",
-      confirm: "Move to trash",
-      danger: true,
-    });
-    if (ok === null) return;
-    await api.entryTrash(e.path);
-    if (app.current === e.path || app.current?.startsWith(e.path + "/")) app.current = null;
-    await app.refreshFiles();
-    app.edited();
-  }
+  const trash = (e: Entry) => app.trash(e.path, e.name, e.kind === "folder");
 
   const folderEncrypted = (path: string) => app.status?.encryption?.folders.includes(path) ?? false;
 </script>

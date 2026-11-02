@@ -189,7 +189,8 @@
       d3 = await import("d3-force");
       loadError = null;
     } catch (e) {
-      loadError = `The graph couldn't load: ${(e as Error).message}`;
+      console.warn("[wandika] graph:", e);
+      loadError = "The graph couldn't load. Reload Wandika and try again.";
       return;
     }
     fitted = false;

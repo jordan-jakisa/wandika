@@ -19,7 +19,7 @@
 
 {#if app.bootError}
   <main class="boot">
-    <p class="error" role="alert">Wandika couldn't start: {app.bootError}</p>
+    <p class="error" role="alert">Wandika couldn't open your vault. {app.bootError}</p>
     <button class="btn" onclick={() => location.reload()}>Try again</button>
   </main>
 {:else if !app.status}

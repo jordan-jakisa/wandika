@@ -9,6 +9,7 @@
 
   let query = $state("");
   let hits = $state<SearchHit[]>([]);
+  let failed = $state<string | null>(null);
   let selected = $state(0);
   /** On phones nothing is highlighted until you type; the highlight is for keyboard selection. */
   const coarse = typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches;
@@ -34,8 +35,15 @@
       return;
     }
     const t = setTimeout(async () => {
-      const found = await api.search(q).catch(() => []);
-      if (mine === seq) hits = found;
+      try {
+        const found = await api.search(q);
+        if (mine === seq) {
+          hits = found;
+          failed = null;
+        }
+      } catch (e) {
+        if (mine === seq) failed = (e as Error).message;
+      }
     }, 90);
     return () => clearTimeout(t);
   });
@@ -47,10 +55,14 @@
   async function choose(i: number) {
     if (i < results.length) return app.open(results[i].path);
     if (canCreate) {
-      const path = await api.noteCreate(await app.newNoteFolder(), query.trim());
-      await app.refreshFiles();
-      app.open(path);
-      app.edited();
+      try {
+        const path = await api.noteCreate(await app.newNoteFolder(), query.trim());
+        await app.refreshFiles();
+        app.open(path);
+        app.edited();
+      } catch (e) {
+        app.say((e as Error).message);
+      }
     }
   }
 
@@ -101,7 +113,7 @@
         class:selected={showSelection && i === selected}
         onclick={() => choose(i)}
         onkeydown={() => {}}
-        onpointerenter={() => (selected = i)}
+        onpointerenter={(e) => e.pointerType !== "touch" && (selected = i)}
       >
         {#if hit.encrypted}<Lock size={15} />{:else}<FileText size={15} />{/if}
         <span class="text">
@@ -119,14 +131,18 @@
         class:selected={selected === results.length}
         onclick={() => choose(results.length)}
         onkeydown={() => {}}
-        onpointerenter={() => (selected = results.length)}
+        onpointerenter={(e) => e.pointerType !== "touch" && (selected = results.length)}
       >
         <FilePlus size={15} />
         <span class="text"><span class="title">Create “{query.trim()}”</span></span>
       </li>
     {/if}
-    {#if query.trim() && !results.length && !canCreate}
+    {#if failed && query.trim()}
+      <li class="none" role="presentation">Search didn't finish. {failed}</li>
+    {:else if query.trim() && !results.length && !canCreate}
       <li class="none" role="presentation">No notes match.</li>
+    {:else if !query.trim() && !recent.length}
+      <li class="none" role="presentation">No notes yet. Type a title and press Return to create one.</li>
     {/if}
   </ul>
 </div>

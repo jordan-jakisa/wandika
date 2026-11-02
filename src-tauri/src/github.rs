@@ -174,7 +174,8 @@ impl GitHub {
         Self::json(self.req(Method::POST, "/user/repos").json(&json!({
             "name": name,
             "private": true,
-            "auto_init": true,
+            // Empty, so the first sync starts it with the Welcome note.
+            "auto_init": false,
             "description": "Notes kept with Wandika",
         })))
         .await

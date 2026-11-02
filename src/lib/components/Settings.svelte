@@ -33,7 +33,7 @@
 
   let dialogEl: HTMLDialogElement;
   let width = $state(typeof window === "undefined" ? 1200 : window.innerWidth);
-  const phone = $derived(width < 700);
+  const phone = $derived(width < 900);
   /** On phones the category list is its own screen; `null` shows it. */
   let phoneSection = $state<SettingsSection | null>(null);
   const section = $derived(phone ? phoneSection : app.settingsSection);
@@ -168,7 +168,7 @@
   const appleText: Record<AppleAccess, string> = {
     granted: "Allowed on this device",
     not_asked: "Not connected",
-    denied: "Turned off in system Settings, under Privacy",
+    denied: "Turned off. Allow it in System Settings, under Privacy & Security",
     unsupported: "Only on iPhone and Mac",
   };
 
@@ -248,9 +248,22 @@
     if (waiting === "google" && c?.google) waiting = null;
   });
 
+  const NAMES: Record<string, string> = { google: "Google", microsoft: "Outlook", apple_calendar: "Apple Calendar", apple_reminders: "Apple Reminders" };
+
   async function disconnect(provider: string) {
-    await api.connectorDisconnect(provider);
-    await app.refreshStatus();
+    try {
+      await api.connectorDisconnect(provider);
+      await app.refreshStatus();
+      app.say(`${NAMES[provider] ?? provider} is disconnected.`);
+    } catch (e) {
+      app.say((e as Error).message);
+    }
+  }
+
+  function cancelDevice() {
+    clearTimeout(pollTimer);
+    device = null;
+    waiting = null;
   }
 
   async function copyAndOpen() {
@@ -260,10 +273,15 @@
   }
 
   async function lock() {
-    await api.encryptionLock();
-    await app.refreshStatus();
-    await app.refreshFiles();
-    if (app.current?.endsWith(".age")) app.current = null;
+    try {
+      await api.encryptionLock();
+      await app.refreshStatus();
+      await app.refreshFiles();
+      if (app.current?.endsWith(".age")) app.current = null;
+      app.say("Encrypted notes are locked on this device.");
+    } catch (e) {
+      app.say((e as Error).message);
+    }
   }
 
   const SHORTCUTS = [
@@ -293,7 +311,7 @@
         {#if !configured}
           {provider === "google" && /Android/.test(navigator.userAgent)
             ? "Not available on Android yet. Connect Google on your Mac or iPhone."
-            : "Not set up in this build. See docs/setup.md."}
+            : "Not available in this version."}
         {:else if account}
           {account}
         {:else}
@@ -418,7 +436,7 @@
               <div class="row">
                 <div class="row-text">
                   <span class="row-label"><Cloud size={14} /> {app.vault.remote.owner}/{app.vault.remote.repo}</span>
-                  <span class="row-desc">Synced {ago(app.lastSync)}. Changes sync a few seconds after you stop typing.</span>
+                  <span class="row-desc">Synced {ago(app.lastSync)}. Changes sync about 20 seconds after you stop typing.</span>
                 </div>
                 <button class="btn" onclick={() => app.sync()} disabled={app.syncing}>{app.syncing ? "Syncing…" : "Sync now"}</button>
               </div>
@@ -559,6 +577,8 @@
                 <span class="row-desc">Enter this code on Microsoft's sign-in page:</span>
                 <span class="code">{device.user_code}</span>
                 <button class="btn primary" onclick={copyAndOpen}>Copy code and open Microsoft</button>
+                <span class="row-desc">Waiting for Microsoft. This moves on by itself once you approve.</span>
+                <button class="btn quiet" onclick={cancelDevice}>Cancel</button>
               </div>
             {/if}
           </div>
