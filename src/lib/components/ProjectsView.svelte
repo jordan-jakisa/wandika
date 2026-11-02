@@ -1,7 +1,6 @@
 <script lang="ts">
   import { Columns3, FileText, Hash, Plus } from "@lucide/svelte";
   import { app } from "../app.svelte";
-  import { isAndroid, isIOS } from "../platform";
 
   const boards = $derived(app.titles.filter((n) => n.board));
   const tags = $derived.by(() => {
@@ -16,11 +15,7 @@
 <section class="projects" aria-labelledby="projects-title">
   <header>
     <h2 id="projects-title">Projects</h2>
-    {#if isIOS}
-      <button class="icon-btn" onclick={() => app.newBoard()} aria-label="New board"><Plus size={24} /></button>
-    {:else if !isAndroid}
-      <button class="btn primary" onclick={() => app.newBoard()}><Plus size={16} /> New board</button>
-    {/if}
+    <button class="btn" onclick={() => app.newBoard()}><Plus size={16} /> New board</button>
   </header>
 
   <section aria-labelledby="boards-h">
@@ -76,37 +71,7 @@
   </section>
 </section>
 
-{#if isAndroid}
-  <!-- Material 3: the screen's main action as an extended floating action button. -->
-  <button class="efab" onclick={() => app.newBoard()}><Plus size={24} /> New board</button>
-{/if}
-
 <style>
-  .efab {
-    position: fixed;
-    right: max(16px, var(--safe-right));
-    bottom: calc(80px + var(--safe-bottom) + 16px);
-    z-index: 5;
-    display: inline-flex;
-    align-items: center;
-    gap: 12px;
-    height: 56px;
-    padding: 0 20px 0 16px;
-    border: 0;
-    border-radius: 16px;
-    background: color-mix(in srgb, var(--papyrus) 26%, var(--sheet));
-    color: var(--ink);
-    font-size: 14px;
-    font-weight: 500;
-    box-shadow: 0 3px 8px rgb(0 0 0 / 0.18);
-  }
-  .projects {
-    display: grid;
-    gap: 26px;
-    padding: 20px 20px calc(32px + var(--safe-bottom));
-    max-width: 72ch;
-    align-content: start;
-  }
   header {
     display: flex;
     align-items: center;

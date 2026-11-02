@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { CalendarPlus, ExternalLink, FileText, Inbox, NotebookPen } from "@lucide/svelte";
+  import { CalendarPlus, ExternalLink, FileText, NotebookPen } from "@lucide/svelte";
   import { untrack } from "svelte";
   import { api, openUrl } from "../api";
   import { app } from "../app.svelte";
   import type { CalEvent, MailItem } from "../types";
+  import Menu from "./Menu.svelte";
   import TaskRow from "./TaskRow.svelte";
 
   const data = $derived(app.today);
@@ -73,8 +74,15 @@
 <section class="today" aria-labelledby="today-h">
   <header>
     <h2 id="today-h">{heading}</h2>
-    <button class="btn" onclick={() => app.openDaily()}><NotebookPen size={16} /> Open today's note</button>
+    <button class="btn primary" onclick={() => app.openDaily()}><NotebookPen size={16} /> Open today's note</button>
   </header>
+
+  {#if !calendarConnected && !mailConnected && !loading}
+    <p class="connect muted">
+      See your calendar and inbox here.
+      <button class="link" onclick={() => app.openSettings("connections")}>Connect an account</button>
+    </p>
+  {/if}
 
   {#if errors.length}
     <ul class="errors" role="status">
@@ -84,6 +92,7 @@
     </ul>
   {/if}
 
+  {#if calendarConnected}
   <section aria-labelledby="cal-h">
     <div class="section-head">
       <h3 id="cal-h">Calendar</h3>
@@ -95,9 +104,6 @@
     </div>
     {#if loading && !data}
       <p class="muted">Loading your day…</p>
-    {:else if !calendarConnected}
-      <p class="muted">Connect a calendar to see today's events here.</p>
-      <button class="btn" onclick={() => (app.openSettings("connections"))}>Connect a calendar</button>
     {:else if !data?.events.length}
       <p class="muted">Nothing on your calendar today.</p>
     {:else}
@@ -117,11 +123,20 @@
                 {/if}
               </span>
             </div>
+            <span class="row-menu">
+              <Menu label={`Actions for ${e.title}`}>
+                <button role="menuitem" onclick={() => meetingNote(e)}><FileText size={18} /> Meeting note</button>
+                {#if e.url}
+                  <button role="menuitem" onclick={() => openUrl(e.url!)}><ExternalLink size={18} /> Open in calendar</button>
+                {/if}
+              </Menu>
+            </span>
           </li>
         {/each}
       </ul>
     {/if}
   </section>
+  {/if}
 
   <section aria-labelledby="tasks-h">
     <div class="section-head">
@@ -162,14 +177,12 @@
     {/if}
   </section>
 
+  {#if mailConnected}
   <section aria-labelledby="mail-h">
     <div class="section-head">
       <h3 id="mail-h">Inbox</h3>
     </div>
-    {#if !mailConnected}
-      <p class="muted">Connect Gmail or Outlook to save emails as notes.</p>
-      <button class="btn" onclick={() => (app.openSettings("connections"))}><Inbox size={16} /> Connect email</button>
-    {:else if !data?.mail.length && !loading}
+    {#if !data?.mail.length && !loading}
       <p class="muted">Your inbox is empty.</p>
     {:else if data}
       <ul class="mail">
@@ -178,6 +191,14 @@
             <div class="mail-top">
               <span class="from">{sender(m.from)}</span>
               <span class="meta">{mailTime(m.date)}</span>
+              <span class="row-menu">
+                <Menu label={`Actions for ${m.subject || "this email"}`}>
+                  <button role="menuitem" onclick={() => saveMail(m)}><FileText size={18} /> Save as note</button>
+                  {#if m.url}
+                    <button role="menuitem" onclick={() => openUrl(m.url!)}><ExternalLink size={18} /> Open in mail</button>
+                  {/if}
+                </Menu>
+              </span>
             </div>
             <span class="subject">{m.subject || "(No subject)"}</span>
             <span class="snippet">{m.snippet}</span>
@@ -194,6 +215,7 @@
       </ul>
     {/if}
   </section>
+  {/if}
 </section>
 
 <style>
@@ -223,6 +245,13 @@
     margin: 0;
     font-size: 1rem;
     font-weight: 600;
+  }
+  .connect {
+    margin: 0 0 8px;
+  }
+  .connect .link {
+    display: inline;
+    padding: 0;
   }
   .section-head {
     display: flex;
@@ -303,6 +332,25 @@
   .unread .from {
     color: var(--ink);
     font-weight: 600;
+  }
+  /* Phones keep each row quiet: its actions sit behind one ⋯ button. */
+  .row-menu {
+    display: none;
+  }
+  @media (max-width: 899px) {
+    .row-actions {
+      display: none !important;
+    }
+    .row-menu {
+      display: block;
+      margin: -8px -8px 0 0;
+    }
+    .events li {
+      grid-template-columns: 4.2em minmax(0, 1fr) auto;
+    }
+    .mail-top {
+      align-items: center;
+    }
   }
   .row-actions {
     display: flex;

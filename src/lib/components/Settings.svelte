@@ -1,8 +1,6 @@
 <script lang="ts">
   import {
-    ArrowLeft,
     ChevronLeft,
-    ChevronRight,
     Cloud,
     FolderOpen,
     HardDrive,
@@ -22,7 +20,6 @@
   import GitHubSignIn from "./GitHubSignIn.svelte";
   import RepoPicker from "./RepoPicker.svelte";
   import Unlock from "./Unlock.svelte";
-  import { isAndroid, isIOS } from "../platform";
 
   const SECTIONS: { id: SettingsSection; label: string; icon: typeof Cloud }[] = [
     { id: "vault", label: "Vault", icon: HardDrive },
@@ -80,10 +77,9 @@
 
   /**
    * Phones: Settings is a bottom sheet that slides up, drags down to dismiss, and slides away on
-   * close. iOS gets a page sheet (grabber, the app shrinking behind it); Android a Material 3 modal
-   * bottom sheet (28dp corners, 32x4dp drag handle, scrim).
+   * close. The same sheet on every phone.
    */
-  const sheet = $derived(phone && (isIOS || isAndroid));
+  const sheet = $derived(phone);
   const reduceMotion = typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
   let closing = $state(false);
   let dragY = $state(0);
@@ -342,7 +338,6 @@
   class="settings"
   class:phone
   class:sheet
-  class:m3={sheet && isAndroid}
   class:closing
   class:dragging={dragY > 0 && dragFrom !== null}
   style={dragY ? `--drag: ${dragY}px` : undefined}
@@ -358,10 +353,8 @@
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <header class="nav-head" onpointerdown={sheetDown} onpointermove={sheetMove} onpointerup={sheetUp} onpointercancel={sheetUp}>
         <h2 id="settings-title">Settings</h2>
-        {#if phone && isIOS}
+        {#if phone}
           <button class="done" onclick={close}>Done</button>
-        {:else if phone && !isAndroid}
-          <button class="icon-btn" onclick={close} aria-label="Close settings"><X size={20} /></button>
         {/if}
       </header>
       <ul>
@@ -373,7 +366,6 @@
                 <span>{sec.label}</span>
                 {#if phone}<span class="sec-detail">{detail(sec.id)}</span>{/if}
               </span>
-              {#if phone && !isAndroid}<ChevronRight size={16} class="chev" />{/if}
             </button>
           </li>
         {/each}
@@ -385,17 +377,13 @@
     <div class="pane">
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <header class="pane-head" onpointerdown={sheetDown} onpointermove={sheetMove} onpointerup={sheetUp} onpointercancel={sheetUp}>
-        {#if phone && isAndroid}
-          <button class="icon-btn" onclick={back} aria-label="All settings"><ArrowLeft size={24} /></button>
-        {:else if phone && isIOS}
-          <button class="back-ios" onclick={back}><ChevronLeft size={28} strokeWidth={2.25} />Settings</button>
-        {:else if phone}
-          <button class="icon-btn" onclick={back} aria-label="All settings"><ChevronLeft size={22} /></button>
+        {#if phone}
+          <button class="back" onclick={back}><ChevronLeft size={22} />Settings</button>
         {/if}
         <h3>{label(section)}</h3>
-        {#if phone && isIOS}
+        {#if phone}
           <button class="done" onclick={close}>Done</button>
-        {:else if !(phone && isAndroid)}
+        {:else}
           <button class="icon-btn" onclick={close} aria-label="Close settings"><X size={20} /></button>
         {/if}
       </header>
@@ -657,14 +645,14 @@
     background: rgb(0 0 0 / 0.35);
   }
 
-  /* iOS sheet: rounded top, grabber, slides up from the bottom, follows a drag down. */
+  /* Phone sheet: rounded top, grabber, slides up from the bottom, follows a drag down. */
   .settings.sheet[open] {
     top: auto;
     bottom: 0;
     height: calc(100dvh - var(--safe-top) - 10px);
     max-height: none;
-    border-radius: 38px 38px 0 0;
-    background: var(--paper);
+    border-radius: 20px 20px 0 0;
+    background: var(--sheet);
     transform: translateY(var(--drag, 0px));
     transition: transform 280ms cubic-bezier(0.32, 0.72, 0, 1);
     animation: sheet-in 380ms cubic-bezier(0.32, 0.72, 0, 1);
@@ -713,31 +701,6 @@
     }
   }
 
-  /* Android: Material 3 modal bottom sheet. */
-  .settings.sheet.m3[open] {
-    height: calc(100dvh - var(--safe-top) - 24px);
-    border-radius: 28px 28px 0 0;
-    background: color-mix(in srgb, var(--papyrus) 7%, var(--sheet));
-    animation-duration: 300ms;
-    animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
-  }
-  .settings.sheet.m3::backdrop {
-    background: rgb(0 0 0 / 0.32);
-  }
-  .m3 .grabber-zone {
-    height: 36px;
-  }
-  .m3 .grabber {
-    width: 32px;
-    height: 4px;
-    border-radius: 2px;
-    background: color-mix(in srgb, var(--graphite) 70%, transparent);
-  }
-  .settings.m3 .sections,
-  .settings.m3 .pane-body {
-    background: transparent;
-  }
-
   .sections {
     background: var(--paper);
     border-right: 1px solid var(--rule);
@@ -783,28 +746,29 @@
     color: var(--ink);
     text-align: left;
   }
-  /* iOS: text buttons in the navigation bar. */
+  /* Phone sheet: plain text buttons in the header. */
   .done,
-  .back-ios {
+  .back {
     display: inline-flex;
     align-items: center;
+    gap: 2px;
     min-height: var(--target);
     border: 0;
     background: none;
-    color: var(--papyrus);
-    font-size: 17px;
+    font-size: 16px;
   }
   .done {
-    padding: 0 8px;
+    padding: 0 10px;
+    color: var(--papyrus);
     font-weight: 600;
   }
-  .back-ios {
-    margin-left: -6px;
-    padding: 0 8px 0 0;
+  .back {
+    padding: 0 8px 0 4px;
+    color: var(--graphite);
   }
   .done:active,
-  .back-ios:active {
-    opacity: 0.4;
+  .back:active {
+    opacity: 0.5;
   }
   .sec-text {
     flex: 1;
