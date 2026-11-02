@@ -13,7 +13,9 @@
     Network,
     PanelLeftClose,
     PanelLeftOpen,
+    SquarePen,
   } from "@lucide/svelte";
+  import { isAndroid, isIOS } from "../platform";
   import { app, titleOf, type Tab } from "../app.svelte";
   import Editor from "./Editor.svelte";
   import FileTree from "./FileTree.svelte";
@@ -89,6 +91,74 @@
     }
   }
 
+  // Phones: system back (Android) and swipe back (iOS) leave the note, as in native apps. Opening
+  // a note adds a history entry so the system back gesture has somewhere to go.
+  let notePushed = false;
+  $effect(() => {
+    if (wide) return;
+    const open = !!app.current;
+    if (open && !notePushed) {
+      history.pushState({ wandika: "note" }, "");
+      notePushed = true;
+    } else if (!open && notePushed) {
+      notePushed = false;
+      if (history.state?.wandika === "note") history.back();
+    }
+  });
+  function onPopState() {
+    if (app.settingsOpen) return void (app.settingsOpen = false);
+    if (notePushed) {
+      notePushed = false;
+      app.current = null;
+    }
+  }
+
+  // iOS: drag from the left edge to go back.
+  let swipeX = $state(0);
+  let swipeFrom: { x: number; y: number } | null = null;
+  function swipeStart(e: TouchEvent) {
+    const t = e.touches[0];
+    swipeFrom = isIOS && app.current && t.clientX < 24 ? { x: t.clientX, y: t.clientY } : null;
+  }
+  function swipeMove(e: TouchEvent) {
+    if (!swipeFrom) return;
+    const t = e.touches[0];
+    const dx = t.clientX - swipeFrom.x;
+    if (Math.abs(t.clientY - swipeFrom.y) > Math.abs(dx) && swipeX === 0) return void (swipeFrom = null);
+    swipeX = Math.max(0, dx);
+  }
+  function swipeEnd() {
+    if (swipeFrom && swipeX > width * 0.33) app.current = null;
+    swipeFrom = null;
+    swipeX = 0;
+  }
+
+  // Pull down at the top of a list to sync.
+  const PULL_TRIGGER = 64;
+  let phoneBody = $state<HTMLDivElement>();
+  let pull = $state(0);
+  let pullFrom: number | null = null;
+  function pullStart(e: TouchEvent) {
+    pullFrom = app.synced && (phoneBody?.scrollTop ?? 1) <= 0 ? e.touches[0].clientY : null;
+  }
+  function pullMove(e: TouchEvent) {
+    if (pullFrom === null) return;
+    const dy = e.touches[0].clientY - pullFrom;
+    pull = dy > 0 ? Math.min(96, dy * 0.5) : 0;
+  }
+  function pullEnd() {
+    if (pull >= PULL_TRIGGER) void app.sync();
+    pull = 0;
+    pullFrom = null;
+  }
+
+  // While the keyboard is up, bottom bars would ride on top of it; tuck them away.
+  let typing = $state(false);
+  function onFocusIn(e: FocusEvent) {
+    const el = e.target as HTMLElement;
+    typing = el.isContentEditable || /^(INPUT|TEXTAREA)$/.test(el.tagName);
+  }
+
   function onVisibility() {
     if (document.visibilityState === "visible") void app.sync();
     else void app.flush();
@@ -110,7 +180,7 @@
   ];
 </script>
 
-<svelte:window bind:innerWidth={width} onkeydown={onKey} />
+<svelte:window bind:innerWidth={width} onkeydown={onKey} onpopstate={onPopState} onfocusin={onFocusIn} onfocusout={() => (typing = false)} />
 <svelte:document onvisibilitychange={onVisibility} />
 
 {#snippet conflictsBanner()}
@@ -253,23 +323,49 @@
     {#if app.switcherOpen}<Search mode="palette" />{/if}
   </dialog>
 {:else}
-  <div class="phone">
+  <!-- Swipe back is a shortcut; the Back button does the same with a tap or a keyboard. -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="phone"
+    class:typing
+    ontouchstart={swipeStart}
+    ontouchmove={swipeMove}
+    ontouchend={swipeEnd}
+    style={swipeX ? `--swipe: ${swipeX}px` : undefined}
+  >
     {#if app.current}
-      {#key app.current}
-        <Editor path={app.current} compact />
-      {/key}
+      <div class="note-host" class:swiping={swipeX > 0}>
+        {#key app.current}
+          <Editor path={app.current} compact />
+        {/key}
+      </div>
     {:else}
-      <div class="phone-body">
+      <!-- Pull to sync is a shortcut for the sync status button. -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
+        class="phone-body"
+        bind:this={phoneBody}
+        ontouchstart={pullStart}
+        ontouchmove={pullMove}
+        ontouchend={pullEnd}
+      >
+        {#if app.synced && (pull > 0 || app.syncing)}
+          <div class="pull" style="height: {app.syncing && !pull ? 44 : pull}px" aria-live="polite">
+            {app.syncing ? "Syncing…" : pull >= PULL_TRIGGER ? "Release to sync" : "Pull to sync"}
+          </div>
+        {/if}
         {@render conflictsBanner()}
         {#if app.tab === "notes"}
           <header class="phone-head">
-            <div class="vault">
-              <span class="vault-name">{app.vault?.name}</span>
-              <SyncStatus />
+            <div class="head-actions">
+              <button class="icon-btn" onclick={() => app.showGraph()} aria-label="Graph"><Network size={22} /></button>
+              <button class="icon-btn" onclick={() => app.openSettings()} aria-label="Settings"><SettingsIcon size={22} /></button>
+              {#if !isAndroid}
+                <button class="icon-btn" onclick={() => app.newNote()} aria-label="New note"><SquarePen size={22} /></button>
+              {/if}
             </div>
-            <button class="icon-btn" onclick={() => app.showGraph()} aria-label="Graph"><Network size={20} /></button>
-            <button class="icon-btn" onclick={() => app.openSettings()} aria-label="Settings"><SettingsIcon size={20} /></button>
-            <button class="icon-btn" onclick={() => app.newNote()} aria-label="New note"><Plus size={22} /></button>
+            <h1 class="vault-name">{app.vault?.name}</h1>
+            <SyncStatus />
           </header>
           <button class="daily" onclick={() => app.openDaily()}><NotebookPen size={18} /> Open today's note</button>
           <FileTree />
@@ -285,13 +381,55 @@
           <Search mode="page" />
         {/if}
       </div>
-      <nav class="tabbar" aria-label="Sections">
-        {#each tabs as t (t.id)}
-          <button class:active={app.tab === t.id || (t.id === "notes" && app.tab === "graph")} aria-current={app.tab === t.id ? "page" : undefined} onclick={() => (app.tab = t.id)}>
-            <t.icon size={22} />
-            <span>{t.label}</span>
-          </button>
-        {/each}
+      {#if isAndroid && app.tab === "notes"}
+        <!-- Material 3: the screen's main action is a floating action button. -->
+        <button class="fab" onclick={() => app.newNote()} aria-label="New note"><Plus size={24} /></button>
+      {/if}
+    {/if}
+
+    {#if isAndroid}
+      {#if !app.current}
+        <nav class="navbar" aria-label="Sections">
+          {#each tabs as t (t.id)}
+            {@const on = app.tab === t.id || (t.id === "notes" && app.tab === "graph")}
+            <button class:active={on} aria-current={on ? "page" : undefined} onclick={() => (app.tab = t.id)}>
+              <span class="indicator"><t.icon size={24} /></span>
+              <span class="label">{t.label}</span>
+            </button>
+          {/each}
+        </nav>
+      {/if}
+    {:else}
+      <!-- iOS: the tab bar floats on Liquid Glass, with search as its own button at the trailing end. -->
+      <nav class="glassbar" aria-label="Sections">
+        <div class="glass tabs">
+          {#each tabs.filter((t) => t.id !== "search") as t (t.id)}
+            {@const on = !app.current && (app.tab === t.id || (t.id === "notes" && app.tab === "graph"))}
+            <button
+              class:active={on || (t.id === "notes" && !!app.current)}
+              aria-current={on ? "page" : undefined}
+              onclick={() => {
+                app.current = null;
+                app.tab = t.id;
+              }}
+            >
+              <t.icon size={22} strokeWidth={on ? 2.4 : 2} />
+              <span>{t.label}</span>
+            </button>
+          {/each}
+        </div>
+        <button
+          class="glass search-tab"
+          class:active={!app.current && app.tab === "search"}
+          aria-label="Search"
+          aria-current={!app.current && app.tab === "search" ? "page" : undefined}
+          onclick={() => {
+            app.current = null;
+            app.tab = "search";
+          }}
+        >
+          <SearchIcon size={22} />
+        </button>
       </nav>
     {/if}
   </div>
@@ -545,12 +683,26 @@
 
   /* Phone */
   .phone {
+    position: relative;
     height: 100dvh;
     display: flex;
     flex-direction: column;
     background: var(--paper);
+    overflow: hidden;
   }
-  .phone > :global(.note) {
+  .note-host {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    transform: translateX(var(--swipe, 0));
+    transition: transform 200ms ease-out;
+  }
+  .note-host.swiping {
+    transition: none;
+    box-shadow: -8px 0 24px rgb(0 0 0 / 0.15);
+  }
+  .note-host > :global(.note) {
     flex: 1;
     min-height: 0;
   }
@@ -560,52 +712,219 @@
     padding-top: var(--safe-top);
     -webkit-overflow-scrolling: touch;
   }
+  .pull {
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    font-size: var(--small);
+    color: var(--graphite);
+  }
   .phone-head {
+    display: grid;
+    gap: 2px;
+    padding: 4px 8px 6px max(20px, var(--safe-left));
+  }
+  .head-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 2px;
+  }
+  /* Material 3 small top app bar: title and actions share one 64dp row. */
+  :global([data-platform="android"]) .phone-head {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "title actions"
+      "status status";
+    align-items: center;
+    padding-left: max(16px, var(--safe-left));
+  }
+  :global([data-platform="android"]) .phone-head .vault-name {
+    grid-area: title;
+    min-height: 64px;
     display: flex;
     align-items: center;
-    gap: 2px;
-    padding: 12px 8px 4px max(20px, var(--safe-left));
+  }
+  :global([data-platform="android"]) .head-actions {
+    grid-area: actions;
+  }
+  :global([data-platform="android"]) .phone-head :global(.sync) {
+    grid-area: status;
+    margin-top: -12px;
   }
   .phone-head .vault-name {
-    font-size: 1.5rem;
-    font-weight: 650;
-    letter-spacing: -0.01em;
+    margin: 0;
+    font-size: var(--view-title-size);
+    font-weight: var(--view-title-weight);
+    letter-spacing: var(--view-title-tracking);
+    line-height: 1.15;
   }
   .daily {
     display: flex;
     align-items: center;
     gap: 10px;
     width: calc(100% - 32px);
-    margin: 8px 16px 6px;
-    min-height: 48px;
+    margin: 10px 16px 6px;
+    min-height: var(--target);
     padding: 0 14px;
-    border: 1px solid var(--rule);
+    border: 0;
     border-radius: var(--radius);
     background: var(--sheet);
     font-weight: 500;
   }
-  .tabbar {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    border-top: 1px solid var(--rule);
-    background: var(--sheet);
-    padding-bottom: var(--safe-bottom);
-    padding-left: var(--safe-left);
-    padding-right: var(--safe-right);
+  .daily:active {
+    background: var(--papyrus-wash);
   }
-  .tabbar button {
+
+  /* iOS: Liquid Glass tab bar floating over the content. */
+  .glassbar {
+    position: absolute;
+    left: max(16px, var(--safe-left));
+    right: max(16px, var(--safe-right));
+    bottom: max(10px, calc(var(--safe-bottom) - 8px));
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    pointer-events: none;
+    transition:
+      transform 200ms ease-out,
+      opacity 200ms ease-out;
+  }
+  .typing .glassbar {
+    transform: translateY(140%);
+    opacity: 0;
+  }
+  .glass {
+    pointer-events: auto;
+    background: color-mix(in srgb, var(--sheet) 58%, transparent);
+    -webkit-backdrop-filter: blur(22px) saturate(180%);
+    backdrop-filter: blur(22px) saturate(180%);
+    border: 1px solid color-mix(in srgb, white 45%, transparent);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, white 55%, transparent),
+      0 10px 30px rgb(0 0 0 / 0.14);
+  }
+  :global([data-mode="dark"]) .glass {
+    background: color-mix(in srgb, var(--sheet) 55%, transparent);
+    border-color: color-mix(in srgb, white 14%, transparent);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, white 12%, transparent),
+      0 10px 30px rgb(0 0 0 / 0.4);
+  }
+  .tabs {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    height: 62px;
+    padding: 4px;
+    border-radius: 999px;
+  }
+  .tabs button {
     display: grid;
     justify-items: center;
-    gap: 2px;
-    min-height: 54px;
-    padding: 6px 0 4px;
+    align-content: center;
+    gap: 1px;
+    border: 0;
+    border-radius: 999px;
+    background: none;
+    color: var(--ink);
+    font-size: 10px;
+    font-weight: 600;
+    transition: background 150ms ease-out;
+  }
+  .tabs button.active {
+    color: var(--papyrus);
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
+  }
+  .search-tab {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 62px;
+    height: 62px;
+    border-radius: 50%;
+    color: var(--ink);
+  }
+  .search-tab.active {
+    color: var(--papyrus);
+  }
+  /* The floating bar overlaps content, so lists leave room to scroll past it. */
+  :global([data-platform="ios"]) .phone-body,
+  :global([data-platform="ios"]) .note-host :global(.page) {
+    padding-bottom: calc(96px + var(--safe-bottom));
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    .glass {
+      background: var(--sheet);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
+  }
+
+  /* Android: Material 3 navigation bar (80dp, 56x32 pill indicator) and FAB (56dp, 16dp corners). */
+  .navbar {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    height: calc(80px + var(--safe-bottom));
+    padding: 12px max(0px, var(--safe-right)) var(--safe-bottom) max(0px, var(--safe-left));
+    background: color-mix(in srgb, var(--papyrus) 6%, var(--sheet));
+  }
+  .typing .navbar {
+    display: none;
+  }
+  .navbar button {
+    display: grid;
+    justify-items: center;
+    align-content: start;
+    gap: 4px;
     border: 0;
     background: none;
     color: var(--graphite);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 500;
+    letter-spacing: 0.04em;
   }
-  .tabbar button.active {
-    color: var(--papyrus);
+  .indicator {
+    display: grid;
+    place-items: center;
+    width: 56px;
+    height: 32px;
+    border-radius: 999px;
+    transition: background 150ms ease-out;
+  }
+  .navbar button.active {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .navbar button.active .indicator {
+    background: color-mix(in srgb, var(--papyrus) 24%, var(--sheet));
+    color: var(--ink);
+  }
+  .navbar button:active .indicator {
+    background: color-mix(in srgb, var(--ink) 10%, transparent);
+  }
+  .fab {
+    position: absolute;
+    right: max(16px, var(--safe-right));
+    bottom: calc(80px + var(--safe-bottom) + 16px);
+    z-index: 5;
+    display: grid;
+    place-items: center;
+    width: 56px;
+    height: 56px;
+    border: 0;
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--papyrus) 26%, var(--sheet));
+    color: var(--ink);
+    box-shadow: 0 3px 8px rgb(0 0 0 / 0.18);
+  }
+  .fab:active {
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
+  }
+  .typing .fab {
+    display: none;
+  }
+  :global([data-platform="android"]) .phone-body {
+    padding-bottom: 88px;
   }
 </style>

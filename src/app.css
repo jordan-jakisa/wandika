@@ -73,6 +73,43 @@
   }
 }
 
+/* Screen titles follow each platform: large titles on iOS, the top app bar's title on Android. */
+:root {
+  --view-title-size: 1.45rem;
+  --view-title-weight: 650;
+  --view-title-tracking: -0.01em;
+}
+@media (max-width: 899px) {
+  :root[data-platform="ios"] {
+    --view-title-size: 34px;
+    --view-title-weight: 700;
+    --view-title-tracking: 0.01em;
+    --target: 44px;
+  }
+  :root[data-platform="android"] {
+    --view-title-size: 22px;
+    --view-title-weight: 400;
+    --view-title-tracking: 0;
+    --target: 48px;
+  }
+}
+
+/* Phones: iOS zooms into any text field under 16px, and app chrome shouldn't select like a page. */
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: max(16px, 1em);
+  }
+  button,
+  nav,
+  header {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+}
+
 *,
 *::before,
 *::after {

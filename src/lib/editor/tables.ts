@@ -124,6 +124,10 @@ export const tableTheme = EditorView.theme({
     padding: "6px 10px",
     verticalAlign: "top",
     textAlign: "left",
+    // The editor wraps anywhere; tables wrap at words and scroll sideways on narrow screens.
+    overflowWrap: "normal",
+    wordBreak: "normal",
+    minWidth: "7em",
   },
   ".cm-table th": { fontWeight: "600", background: "var(--paper)" },
   ".cm-table code": {

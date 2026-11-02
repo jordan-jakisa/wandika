@@ -13,6 +13,29 @@
   const OPEN_KEY = "wandika.openFolders";
   let openFolders = $state<Set<string>>(load());
   let renaming = $state<string | null>(null);
+  /** Row whose menu is open from a touch and hold, as on iOS and Android. */
+  let pressedMenu = $state<string | null>(null);
+  let pressTimer: ReturnType<typeof setTimeout> | undefined;
+  let pressStart = { x: 0, y: 0 };
+  let swallowClick = false;
+
+  function pressDown(e: PointerEvent, path: string) {
+    if (e.pointerType !== "touch") return;
+    pressStart = { x: e.clientX, y: e.clientY };
+    clearTimeout(pressTimer);
+    pressTimer = setTimeout(() => {
+      pressedMenu = path;
+      swallowClick = true;
+    }, 450);
+  }
+
+  function pressMove(e: PointerEvent) {
+    if (Math.hypot(e.clientX - pressStart.x, e.clientY - pressStart.y) > 8) clearTimeout(pressTimer);
+  }
+
+  function pressEnd() {
+    clearTimeout(pressTimer);
+  }
   let renameValue = $state("");
 
   function load() {
@@ -157,7 +180,17 @@
           {:else}
             <button
               class="item"
-              onclick={() => (e.kind === "folder" ? toggle(e.path) : e.kind === "note" ? app.open(e.path) : null)}
+              onclick={() => {
+                // The tap that ends a touch and hold opens the menu, not the note.
+                if (swallowClick) return void (swallowClick = false);
+                if (e.kind === "folder") toggle(e.path);
+                else if (e.kind === "note") app.open(e.path);
+              }}
+              onpointerdown={(ev) => pressDown(ev, e.path)}
+              onpointermove={pressMove}
+              onpointerup={pressEnd}
+              onpointercancel={pressEnd}
+              oncontextmenu={(ev) => ev.preventDefault()}
               disabled={e.kind === "file"}
             >
               {#if e.kind === "folder"}
@@ -177,7 +210,11 @@
             </button>
             {#if e.kind !== "file"}
               <span class="actions">
-                <Menu label={`Actions for ${e.name}`} size={16}>
+                <Menu
+                  label={`Actions for ${e.name}`}
+                  size={16}
+                  bind:open={() => pressedMenu === e.path, (v) => (pressedMenu = v ? e.path : pressedMenu === e.path ? null : pressedMenu)}
+                >
                   {#if e.kind === "folder"}
                     <button role="menuitem" onclick={() => app.newNote(e.path)}><Plus size={16} /> New note here</button>
                     <button role="menuitem" onclick={() => newFolder(e.path)}><FolderPlus size={16} /> New folder here</button>
@@ -277,12 +314,22 @@
   .row:focus-within .actions {
     opacity: 1;
   }
+  /* Phones: rows are full-height targets and actions come from touch and hold, so the ⋯ buttons
+     stay out of the way (they still open with a pointer). */
   @media (pointer: coarse) {
     .item {
       min-height: var(--target);
     }
     .actions {
       opacity: 1;
+      width: 0;
+      overflow: visible;
+    }
+    .actions :global(.trigger) {
+      display: none;
+    }
+    .row:active {
+      background: var(--papyrus-wash);
     }
   }
   .rename {

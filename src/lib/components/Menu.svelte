@@ -2,8 +2,13 @@
   import { Ellipsis } from "@lucide/svelte";
   import type { Snippet } from "svelte";
 
-  let { label, children, size = 18 }: { label: string; children: Snippet; size?: number } = $props();
-  let open = $state(false);
+  /** `open` is bindable so a long press on the row can open the same menu. */
+  let {
+    label,
+    children,
+    size = 18,
+    open = $bindable(false),
+  }: { label: string; children: Snippet; size?: number; open?: boolean } = $props();
   let root: HTMLDivElement;
 
   function onWindowPointer(e: PointerEvent) {

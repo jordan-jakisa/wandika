@@ -1,7 +1,8 @@
 <script lang="ts">
   import { EditorState } from "@codemirror/state";
   import { EditorView } from "@codemirror/view";
-  import { ChevronLeft, Code, Columns3, Lock, LockOpen, Network, Trash2, Link2 } from "@lucide/svelte";
+  import { ArrowLeft, ChevronLeft, Code, Columns3, Lock, LockOpen, Network, Trash2, Link2 } from "@lucide/svelte";
+  import { isAndroid } from "../platform";
   import { onDestroy } from "svelte";
   import { api, openUrl } from "../api";
   import { app, titleOf } from "../app.svelte";
@@ -234,9 +235,16 @@
 <article class="note" class:compact>
   <header class="bar">
     {#if compact}
-      <button class="icon-btn back" onclick={() => (app.current = null)} aria-label="Back to notes">
-        <ChevronLeft size={22} />
-      </button>
+      {#if isAndroid}
+        <button class="icon-btn back" onclick={() => (app.current = null)} aria-label="Back to notes">
+          <ArrowLeft size={24} />
+        </button>
+      {:else}
+        <!-- iOS: a chevron with the previous screen's name, in the accent colour. -->
+        <button class="back-ios" onclick={() => (app.current = null)} aria-label="Back to notes">
+          <ChevronLeft size={28} strokeWidth={2.25} /><span>Notes</span>
+        </button>
+      {/if}
     {/if}
     <span class="spacer"></span>
     {#if encrypted}
@@ -337,6 +345,20 @@
   }
   .spacer {
     flex: 1;
+  }
+  .back-ios {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--target);
+    margin-left: -8px;
+    padding: 0 8px 0 0;
+    border: 0;
+    background: none;
+    color: var(--papyrus);
+    font-size: 17px;
+  }
+  .back-ios:active {
+    opacity: 0.4;
   }
   .badge {
     display: inline-flex;

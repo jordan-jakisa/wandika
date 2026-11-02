@@ -4,6 +4,7 @@
   import Settings from "$lib/components/Settings.svelte";
   import Start from "$lib/components/Start.svelte";
   import Workspace from "$lib/components/Workspace.svelte";
+  import "$lib/platform";
   import { prefs } from "$lib/prefs.svelte";
   import { onMount } from "svelte";
 

@@ -211,9 +211,9 @@
   }
   h2 {
     margin: 0;
-    font-size: 1.45rem;
-    font-weight: 650;
-    letter-spacing: -0.01em;
+    font-size: var(--view-title-size);
+    font-weight: var(--view-title-weight);
+    letter-spacing: var(--view-title-tracking);
     line-height: 1.2;
   }
   header .btn {
