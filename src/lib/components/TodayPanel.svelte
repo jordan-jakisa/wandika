@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { CalendarPlus, ExternalLink, FileText, NotebookPen } from "@lucide/svelte";
+  import { CalendarPlus, CircleCheck, ExternalLink, FileText, NotebookPen } from "@lucide/svelte";
   import { untrack } from "svelte";
   import { api, openUrl } from "../api";
   import { app } from "../app.svelte";
@@ -18,6 +18,16 @@
   const isDue = (t: { due: string | null }) => !!t.due && t.due <= clock.today;
   const dueTasks = $derived((data?.tasks ?? []).filter(isDue));
   const remoteDue = $derived((data?.remote_tasks ?? []).filter(isDue));
+  // "All done" only after you ticked off the last one here; an empty day just says so plainly.
+  let hadDue = $state(false);
+  let hadDueOn = "";
+  $effect(() => {
+    if (dueTasks.length || remoteDue.length) {
+      hadDue = true;
+      hadDueOn = clock.today;
+    } else if (hadDueOn !== clock.today) hadDue = false;
+  });
+  const clearedToday = $derived(hadDue && !dueTasks.length && !remoteDue.length);
   const hasOverdue = $derived([...dueTasks, ...remoteDue].some((t) => t.due! < clock.today));
   // One line per problem, not per service: Gmail, Calendar and Tasks share one Google sign-in.
   const errors = $derived.by(() => {
@@ -165,6 +175,7 @@
       <ul class="tasks">
         {#each dueTasks as t (t.path + t.line)}
           <TaskRow
+            leaves
             text={t.text}
             done={t.done}
             due={t.due}
@@ -179,6 +190,7 @@
         {/each}
         {#each remoteDue as t (t.source + t.id)}
           <TaskRow
+            leaves
             text={t.title}
             done={t.done}
             due={t.due}
@@ -192,6 +204,8 @@
       </ul>
     {:else if !data}
       {@render skeleton(2)}
+    {:else if clearedToday}
+      <p class="all-done" role="status"><CircleCheck size={20} /> All done for today.</p>
     {:else}
       <p class="muted">Nothing due today. Add 📅 and a date to a task to see it here.</p>
     {/if}
@@ -410,5 +424,15 @@
     height: 36px;
     border-radius: var(--radius-sm);
     background: var(--press);
+  }
+  .all-done {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: var(--space-1) 0;
+    color: var(--papyrus);
+    font-family: var(--font-note);
+    font-size: var(--text-lg);
+    animation: pop-in var(--dur-slow) var(--ease-out);
   }
 </style>

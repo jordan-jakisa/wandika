@@ -38,7 +38,7 @@
 
   function tap() {
     if (app.syncError && !offline) app.say(app.syncError.message);
-    void app.sync();
+    void app.sync(true);
   }
 </script>
 

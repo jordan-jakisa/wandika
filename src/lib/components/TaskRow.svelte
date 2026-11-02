@@ -1,6 +1,7 @@
 <script lang="ts">
   import { app } from "../app.svelte";
   import { clock } from "../clock.svelte";
+  import { duration } from "../motion";
   let {
     text,
     done,
@@ -8,6 +9,7 @@
     where,
     onToggle,
     onOpen,
+    leaves = false,
   }: {
     text: string;
     done: boolean;
@@ -15,7 +17,10 @@
     where: string;
     onToggle: () => Promise<void>;
     onOpen?: () => void;
+    /** The list hides done tasks: a ticked one shows its strike-through, then folds away. */
+    leaves?: boolean;
   } = $props();
+  let leaving = $state(false);
 
   let busy = $state(false);
   /** Ticks at once; a failed change puts the box back and says why. */
@@ -35,13 +40,23 @@
       .trim(),
   );
 
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
   async function toggle() {
     busy = true;
     shown = !checked;
+    if (shown) (navigator as { vibrate?: (ms: number) => boolean }).vibrate?.(10);
     try {
+      if (shown && leaves) {
+        // A moment to see it done; a pause, not motion, so it stays with reduced motion too.
+        await wait(600);
+        leaving = true;
+        await wait(duration("--dur-base"));
+      }
       await onToggle();
     } catch (e) {
       shown = null;
+      leaving = false;
       app.say(`Couldn't update that task. ${(e as Error).message}`);
     } finally {
       busy = false;
@@ -54,7 +69,7 @@
   });
 </script>
 
-<li class="task" class:done={checked}>
+<li class="task" class:done={checked} class:leaving>
   <label class="box"><input type="checkbox" {checked} disabled={busy} onchange={toggle} aria-label={label} /></label>
   <div class="body">
     <span class="text">{label}</span>
@@ -71,6 +86,11 @@
 
 <style>
   .task {
+    max-height: 12em;
+    transition:
+      max-height var(--dur-base) var(--ease-in),
+      opacity var(--dur-base) var(--ease-in),
+      padding var(--dur-base) var(--ease-in);
     display: flex;
     gap: 10px;
     align-items: flex-start;
@@ -137,5 +157,14 @@
   .due-today {
     color: var(--amber);
     font-weight: 600;
+  }
+  .leaving {
+    max-height: 0;
+    padding-block: 0;
+    opacity: 0;
+    overflow: hidden;
+  }
+  .text {
+    transition: color var(--dur-quick) var(--ease-out);
   }
 </style>

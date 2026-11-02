@@ -22,6 +22,7 @@
   import Menu from "./Menu.svelte";
   import { isIOS } from "../platform";
   import { push } from "../transitions";
+  import { tip } from "../tips";
   import { app, titleOf, type Tab } from "../app.svelte";
   import Editor from "./Editor.svelte";
   import FileTree from "./FileTree.svelte";
@@ -84,7 +85,7 @@
       void app.newNote();
     } else if (k === "s") {
       e.preventDefault();
-      void app.sync();
+      void app.sync(true);
     } else if (k === "d") {
       e.preventDefault();
       void app.openDaily();
@@ -146,6 +147,13 @@
     swipeX = 0;
   }
 
+  // On a phone, the first look at a synced vault's notes mentions pull to sync, once.
+  $effect(() => {
+    if (!wide && app.synced && app.tab === "notes" && !app.current) {
+      untrack(() => tip("pull-to-sync", "Tip: pull the list down to sync now.", (t) => app.say(t)));
+    }
+  });
+
   const recentNotes = $derived(
     [...app.titles].sort((a, b) => b.modified - a.modified).slice(0, 6),
   );
@@ -193,7 +201,7 @@
   function pullEnd() {
     if (pull >= PULL_TRIGGER) {
       pulledSync = true;
-      void app.sync().finally(() => (pulledSync = false));
+      void app.sync(true).finally(() => (pulledSync = false));
     }
     pull = 0;
     pullFrom = null;
@@ -309,7 +317,7 @@
         <button class="search-btn" onclick={() => (app.switcherOpen = true)}>
           <SearchIcon size={15} /> <span>Search</span> <kbd>⌘K</kbd>
         </button>
-        <button class="icon-btn" onclick={() => app.newNote()} aria-label="New note"><Plus size={18} /></button>
+        <button class="icon-btn" onclick={() => app.newNote()} aria-label="New note" title="New note (⌘N)"><Plus size={18} /></button>
       </div>
       <nav class="side-nav" aria-label="Views">
         <button onclick={() => app.openDaily()}><NotebookPen size={16} /> Today's note</button>
@@ -432,7 +440,7 @@
                   <button role="menuitem" onclick={() => (app.tab = "projects")}><Columns3 size={18} /> Projects</button>
                   <button role="menuitem" onclick={() => app.newFolder()}><FolderPlus size={18} /> New folder</button>
                   {#if app.synced}
-                    <button role="menuitem" onclick={() => app.sync()}><RefreshCw size={18} /> Sync now</button>
+                    <button role="menuitem" onclick={() => app.sync(true)}><RefreshCw size={18} /> Sync now</button>
                   {/if}
                   <button role="menuitem" onclick={() => app.openSettings()}><SettingsIcon size={18} /> Settings</button>
                 </Menu>

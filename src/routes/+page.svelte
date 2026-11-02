@@ -35,7 +35,20 @@
 <ImageViewer />
 
 <!-- Always in the page, so screen readers announce each new message. -->
-<div class="toast" class:shown={!!app.toast} role="status" aria-live="polite">{app.toast ?? ""}</div>
+<div class="toast" class:shown={!!app.toast} role="status" aria-live="polite">
+  <span>{app.toast ?? ""}</span>
+  {#if app.toast && app.toastAction}
+    <button
+      class="toast-action"
+      onclick={() => {
+        const run = app.toastAction?.run;
+        app.toast = null;
+        app.toastAction = null;
+        run?.();
+      }}>{app.toastAction.label}</button
+    >
+  {/if}
+</div>
 
 <style>
   .boot {
@@ -51,7 +64,21 @@
     translate: 0 4px;
     pointer-events: none;
   }
+  .toast-action {
+    margin-left: var(--space-3);
+    padding: var(--space-1) var(--space-2);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: inherit;
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
   .toast {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     transition:
       opacity var(--dur-quick) var(--ease-out),
       translate var(--dur-quick) var(--ease-out);

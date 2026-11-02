@@ -75,6 +75,7 @@
       <ul>
         {#each items as t (t.line)}
           <TaskRow
+            leaves={!showDone}
             text={t.text}
             done={t.done}
             due={t.due}
@@ -102,6 +103,7 @@
       <ul>
         {#each items as t (t.id)}
           <TaskRow
+            leaves={!showDone}
             text={t.title}
             done={t.done}
             due={t.due}

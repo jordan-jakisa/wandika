@@ -286,11 +286,12 @@
   }
 
   const SHORTCUTS = [
-    ["⌘K", "Search or create a note"],
+    ["⌘K or ⌘O", "Search or create a note"],
     ["⌘N", "New note"],
     ["⌘D", "Today's note"],
     ["⌘S", "Sync now"],
     ["⌘,", "Settings"],
+    ["⌘\\", "Show or hide the sidebar"],
     ["⌘F", "Find in note"],
     ["[[", "Link a note"],
   ];
@@ -439,7 +440,7 @@
                   <span class="row-label"><Cloud size={14} /> {app.vault.remote.owner}/{app.vault.remote.repo}</span>
                   <span class="row-desc">Synced {ago(app.lastSync)}. Changes sync about 20 seconds after you stop typing.</span>
                 </div>
-                <button class="btn" onclick={() => app.sync()} disabled={app.syncing}>{app.syncing ? "Syncing…" : "Sync now"}</button>
+                <button class="btn" onclick={() => app.sync(true)} disabled={app.syncing}>{app.syncing ? "Syncing…" : "Sync now"}</button>
               </div>
               {#if app.syncError}<div class="row"><span class="error small">Last sync: {app.syncError.message}</span></div>{/if}
               <div class="row">

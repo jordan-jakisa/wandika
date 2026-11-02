@@ -126,6 +126,8 @@ export const api = {
   templateRender: (path: string, title: string) => call<string>("template_render", { path, title }),
   /** Removes a note left empty and still named "Untitled". True when it was removed. */
   noteDiscardIfEmpty: (path: string) => call<boolean>("note_discard_if_empty", { path }),
+  /** Puts something moved to the trash back where it was. */
+  entryRestore: (path: string) => call<void>("entry_restore", { path }),
   noteRead: (path: string) => call<string>("note_read", { path }),
   noteWrite: (path: string, content: string) => call<void>("note_write", { path, content }),
   noteCreate: (folder: string, title: string, body?: string) =>

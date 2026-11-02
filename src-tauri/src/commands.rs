@@ -301,6 +301,13 @@ pub async fn entry_rename(app: S<'_>, path: String, name: String) -> Result<Stri
 }
 
 #[tauri::command]
+pub async fn entry_restore(app: S<'_>, path: String) -> Result<()> {
+    vault::restore(&app.root()?, &path)?;
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn entry_trash(app: S<'_>, path: String) -> Result<()> {
     vault::trash(&app.root()?, &path, &app.crypto()?)?;
     changed(&app);

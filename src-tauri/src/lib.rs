@@ -59,6 +59,7 @@ pub fn run() {
             commands::template_render,
             commands::entry_rename,
             commands::entry_trash,
+            commands::entry_restore,
             commands::note_titles,
             commands::search,
             commands::backlinks,

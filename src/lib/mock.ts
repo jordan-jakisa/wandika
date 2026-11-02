@@ -235,6 +235,7 @@ const handlers: Record<string, (a: Args) => unknown> = {
     return { pulled: [], pushed: [], removed: [], merged: [], conflicts: [], too_big: [], head: "abc", at: lastSync };
   },
   tree: () => entries(),
+  entry_restore: () => undefined,
   note_discard_if_empty: ({ path }) => {
     if (!/^Untitled( \d+)?$/.test(titleOf(path)) || (notes.get(path) ?? "x").trim()) return false;
     notes.delete(path);

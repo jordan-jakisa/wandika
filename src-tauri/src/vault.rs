@@ -328,6 +328,23 @@ pub fn trash(root: &Path, rel: &str, crypto: &Crypto) -> Result<()> {
     Ok(())
 }
 
+/// Moves something back out of `.trash/` to where it was, unless that place has been taken since.
+pub fn restore(root: &Path, rel: &str) -> Result<()> {
+    let from = root.join(".trash").join(rel);
+    let to = safe(root, rel)?;
+    if !from.exists() {
+        return Err(msg("It isn't in the trash any more."));
+    }
+    if to.exists() {
+        return Err(msg("Something new has the same name there now, so it stays in the trash."));
+    }
+    if let Some(p) = to.parent() {
+        std::fs::create_dir_all(p)?;
+    }
+    std::fs::rename(from, to)?;
+    Ok(())
+}
+
 /// Encrypts or decrypts one note, or every note in a folder (and marks the folder for new notes).
 pub fn set_encrypted(root: &Path, rel: &str, encrypt: bool, crypto: &mut Crypto) -> Result<String> {
     if encrypt && !crypto.unlocked() {
@@ -882,6 +899,21 @@ mod tests {
         assert!(discard_if_empty(&root, "Untitled 2.md", &crypto).unwrap());
         assert!(!discard_if_empty(&root, "Untitled.md", &crypto).unwrap());
         assert!(!discard_if_empty(&root, "Plan.md", &crypto).unwrap());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn trash_and_restore_round_trip() {
+        let root = std::env::temp_dir().join(format!("wandika-restore-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("Projects")).unwrap();
+        std::fs::write(root.join("Projects/Plan.md"), "Plan").unwrap();
+        let crypto = Crypto::load(&root, &crate::secrets::Secrets::new(root.clone()), "test/restore");
+        trash(&root, "Projects/Plan.md", &crypto).unwrap();
+        assert!(!root.join("Projects/Plan.md").exists());
+        restore(&root, "Projects/Plan.md").unwrap();
+        assert_eq!(std::fs::read_to_string(root.join("Projects/Plan.md")).unwrap(), "Plan");
+        assert!(restore(&root, "Projects/Plan.md").is_err(), "nothing left to restore");
         let _ = std::fs::remove_dir_all(&root);
     }
 

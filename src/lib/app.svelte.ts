@@ -1,6 +1,7 @@
 import { api, codeOf, listen } from "./api";
 import { forgetImages } from "./attachments";
 import { forgetNoteEmbeds } from "./editor/embeds";
+import { tip, touch } from "./tips";
 import { TEMPLATE } from "./kanban";
 import type { Entry, NoteMeta, Snippet, Status, SyncReport, Today } from "./types";
 
@@ -51,6 +52,7 @@ class AppState {
   /** Paths changed on disk by the last sync, so an open editor can reload them. */
   changed = $state<{ paths: string[]; at: number }>({ paths: [], at: 0 });
   toast = $state<string | null>(null);
+  toastAction = $state<{ label: string; run: () => void } | null>(null);
   dialog = $state<Ask | null>(null);
   /** Tag picked in the tag browser, on a card or in a note. */
   tagFilter = $state<string | null>(null);
@@ -153,7 +155,11 @@ class AppState {
 
   /** Shows a vault just opened, created or connected; GitHub vaults then keep syncing. */
   async enterVault(report?: SyncReport) {
-    if (report) this.apply(report);
+    if (report) {
+      const first = this.lastSync === null;
+      this.apply(report);
+      if (first) this.say("Your notes are on GitHub. Every device you sign in on gets them.");
+    }
     const before = this.status?.vault?.id;
     await this.refreshFiles();
     await this.refreshStatus();
@@ -206,15 +212,19 @@ class AppState {
     this.#editTimer = setTimeout(() => void this.sync(), SYNC_AFTER_EDIT_MS);
   }
 
-  async sync() {
+  /** `manual`: you asked for it (button, pull, ⌘S), so it says what happened. */
+  async sync(manual = false) {
     if (this.syncing || !this.status?.vault?.remote) return;
     this.syncing = true;
     clearTimeout(this.#editTimer);
     try {
       await this.flush();
       const report: SyncReport = await api.syncNow();
+      const first = this.lastSync === null;
       this.apply(report);
       this.syncError = null;
+      if (first) this.say("Your notes are on GitHub. Every device you sign in on gets them.");
+      else if (manual) this.say(syncSummary(report));
     } catch (e) {
       const code = codeOf(e);
       if (code !== "sync_busy") this.syncError = { code, message: (e as Error).message };
@@ -236,8 +246,13 @@ class AppState {
     }
   }
 
+  #opened = 0;
+
   open(path: string) {
     if (path !== this.current) this.openCount++;
+    if (touch && ++this.#opened === 3) {
+      tip("long-press", "Tip: press and hold a note in the list for rename, encrypt and more.", (t) => this.say(t));
+    }
     this.current = path;
     this.graphFocus = path;
     this.switcherOpen = false;
@@ -284,7 +299,19 @@ class AppState {
     if (this.current === path || this.current?.startsWith(path + "/")) this.current = null;
     await this.refreshFiles();
     this.edited();
-    this.say(`Moved “${name}” to the trash.`);
+    this.say(`Moved “${name}” to the trash.`, {
+      label: "Undo",
+      run: async () => {
+        try {
+          await api.entryRestore(path);
+          await this.refreshFiles();
+          this.edited();
+          if (!folder) this.open(path);
+        } catch (e) {
+          this.say((e as Error).message);
+        }
+      },
+    });
     return true;
   }
 
@@ -387,10 +414,15 @@ class AppState {
     });
   }
 
-  say(message: string) {
+  /** A short message at the bottom. With `action`, it carries one button (Undo) and stays longer. */
+  say(message: string, action?: { label: string; run: () => void }) {
     this.toast = message;
+    this.toastAction = action ?? null;
     clearTimeout(this.#toastTimer);
-    this.#toastTimer = setTimeout(() => (this.toast = null), 4000);
+    this.#toastTimer = setTimeout(() => {
+      this.toast = null;
+      this.toastAction = null;
+    }, action ? 6000 : 4000);
   }
 
   async switchVault() {
@@ -417,6 +449,16 @@ class AppState {
 }
 
 export const app = new AppState();
+
+/** One line for a sync you started yourself. */
+export function syncSummary(r: SyncReport) {
+  const came = new Set([...r.pulled, ...r.merged, ...r.removed]).size;
+  const notes = (n: number) => `${n} ${n === 1 ? "note" : "notes"}`;
+  if (came && r.pushed.length) return `${notes(came)} updated, and your changes are on GitHub.`;
+  if (came) return `${notes(came)} updated.`;
+  if (r.pushed.length) return "Your changes are on GitHub.";
+  return "Everything is up to date.";
+}
 
 export function titleOf(path: string) {
   return path.split("/").pop()!.replace(/\.age$/, "").replace(/\.md$/, "");
