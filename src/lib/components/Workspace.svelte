@@ -413,15 +413,18 @@
       </div>
 
       <!-- Three places and one action. Tasks live in Today; boards, tags and the graph in Notes. -->
-      <nav class="bar" aria-label="Sections">
-        {#each phoneTabs as t (t.id)}
-          {@const on = parentTab === t.id}
-          <button class:active={on} aria-current={on ? "page" : undefined} onclick={() => (app.tab = t.id)}>
-            <t.icon size={22} strokeWidth={on ? 2.3 : 1.9} />
-            <span>{t.label}</span>
-          </button>
-        {/each}
-        <button class="new" onclick={() => app.newNote()} aria-label="New note"><Plus size={24} /></button>
+      <!-- iOS: the bar floats on Liquid Glass over the content. Android: a flat bar. -->
+      <nav class="bar" class:glassbar={isIOS} aria-label="Sections">
+        <div class="tabs" class:glass={isIOS}>
+          {#each phoneTabs as t (t.id)}
+            {@const on = parentTab === t.id}
+            <button class:active={on} aria-current={on ? "page" : undefined} onclick={() => (app.tab = t.id)}>
+              <t.icon size={22} strokeWidth={on ? 2.3 : 1.9} />
+              <span>{t.label}</span>
+            </button>
+          {/each}
+        </div>
+        <button class="new" class:glass={isIOS} onclick={() => app.newNote()} aria-label="New note"><Plus size={24} /></button>
       </nav>
     {/if}
   </div>
@@ -747,11 +750,11 @@
     font-size: calc(16px * var(--text-scale));
   }
 
-  /* Bottom bar: flat, the same on every phone. Three places and the new-note button. */
+  /* Bottom bar: three places and the new-note button. */
   .bar {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr) 64px;
+    display: flex;
     align-items: center;
+    gap: 8px;
     height: calc(60px + var(--safe-bottom));
     padding: 0 max(8px, var(--safe-right)) var(--safe-bottom) max(8px, var(--safe-left));
     border-top: 1px solid var(--hairline);
@@ -759,6 +762,12 @@
   }
   .typing .bar {
     display: none;
+  }
+  .tabs {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    align-items: center;
   }
   .bar button {
     display: grid;
@@ -776,7 +785,7 @@
     color: var(--ink);
   }
   .bar .new {
-    justify-self: end;
+    flex: none;
     width: 48px;
     height: 48px;
     min-height: 0;
@@ -787,5 +796,74 @@
   }
   .bar .new:active {
     filter: brightness(0.92);
+  }
+
+  /* iOS: a Liquid Glass capsule floating over the content, the new-note button beside it. */
+  .bar.glassbar {
+    position: absolute;
+    left: max(16px, var(--safe-left));
+    right: max(16px, var(--safe-right));
+    bottom: max(10px, calc(var(--safe-bottom) - 8px));
+    z-index: 10;
+    gap: 10px;
+    height: auto;
+    padding: 0;
+    border: 0;
+    background: none;
+    pointer-events: none;
+  }
+  .glass {
+    pointer-events: auto;
+    background: color-mix(in srgb, var(--sheet) 58%, transparent);
+    -webkit-backdrop-filter: blur(22px) saturate(180%);
+    backdrop-filter: blur(22px) saturate(180%);
+    border: 1px solid color-mix(in srgb, white 45%, transparent);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, white 55%, transparent),
+      0 10px 30px rgb(0 0 0 / 0.14);
+  }
+  :global([data-mode="dark"]) .glass {
+    background: color-mix(in srgb, var(--sheet) 55%, transparent);
+    border-color: color-mix(in srgb, white 14%, transparent);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, white 12%, transparent),
+      0 10px 30px rgb(0 0 0 / 0.4);
+  }
+  .glassbar .tabs {
+    height: 62px;
+    padding: 4px;
+    border-radius: 999px;
+  }
+  .glassbar .tabs button {
+    height: 100%;
+    min-height: 0;
+    border-radius: 999px;
+    color: var(--ink);
+    font-size: calc(10px * var(--text-scale));
+    font-weight: 600;
+    transition: background 150ms ease-out;
+  }
+  .glassbar .tabs button.active {
+    color: var(--papyrus);
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
+  }
+  /* The one action is tinted glass in the accent colour. */
+  .glassbar .new {
+    width: 62px;
+    height: 62px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--papyrus) 80%, transparent);
+    color: var(--on-papyrus);
+  }
+  /* The floating bar overlaps content, so lists leave room to scroll past it. */
+  :global([data-platform="ios"]) .phone-body {
+    padding-bottom: calc(96px + var(--safe-bottom));
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    .glass {
+      background: var(--sheet);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
   }
 </style>
