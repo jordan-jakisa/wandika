@@ -244,6 +244,10 @@ const handlers: Record<string, (a: Args) => unknown> = {
 };
 
 export async function invoke(cmd: string, args: Args = {}): Promise<unknown> {
+  // Lets a screen check count backend calls, e.g. to catch an effect that loops.
+  (globalThis as { __mockCalls?: Record<string, number> }).__mockCalls ??= {};
+  const calls = (globalThis as { __mockCalls?: Record<string, number> }).__mockCalls!;
+  calls[cmd] = (calls[cmd] ?? 0) + 1;
   const h = handlers[cmd];
   if (!h) throw `Mock has no command ${cmd}`;
   await sleep(40);

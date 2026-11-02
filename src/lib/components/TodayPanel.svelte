@@ -1,12 +1,13 @@
 <script lang="ts">
   import { CalendarPlus, ExternalLink, FileText, Inbox, NotebookPen } from "@lucide/svelte";
+  import { untrack } from "svelte";
   import { api, openUrl } from "../api";
   import { app } from "../app.svelte";
-  import type { CalEvent, MailItem, Today } from "../types";
+  import type { CalEvent, MailItem } from "../types";
   import TaskRow from "./TaskRow.svelte";
 
-  let data = $state<Today | null>(null);
-  let loading = $state(true);
+  const data = $derived(app.today);
+  let loading = $state(!app.today);
   let busy = $state<string | null>(null);
   const todayIso = new Date().toLocaleDateString("en-CA");
 
@@ -18,25 +19,24 @@
   const remoteDue = $derived((data?.remote_tasks ?? []).filter(isDue));
   const errors = $derived(Object.entries(data?.errors ?? {}));
 
-  async function load() {
+  async function load(force = false) {
     loading = true;
-    try {
-      data = await api.today();
-    } catch (e) {
-      app.say((e as Error).message);
-    } finally {
-      loading = false;
-    }
+    await app.loadToday(force);
+    loading = false;
   }
 
+  // A new connection always fetches; otherwise the shared two-minute cache applies.
+  let lastConnectors = "";
   $effect(() => {
-    void app.status?.connectors;
-    void load();
+    const key = JSON.stringify(app.status?.connectors ?? {});
+    const force = lastConnectors !== "" && key !== lastConnectors;
+    lastConnectors = key;
+    untrack(() => load(force));
   });
 
-  // Refresh after a sync brings in task changes from another device.
+  // After a sync brings in changes, tasks update; mail and calendars wait for their cache.
   $effect(() => {
-    if (app.changed.at) void load();
+    if (app.changed.at) untrack(() => load());
   });
 
   const time = (iso: string) =>
@@ -152,7 +152,7 @@
             where={t.source === "apple" ? `Reminders, ${t.list}` : `Google Tasks, ${t.list}`}
             onToggle={async () => {
               await api.remoteTaskToggle(t.source, t.list_id, t.id, !t.done);
-              await load();
+              await load(true);
             }}
           />
         {/each}

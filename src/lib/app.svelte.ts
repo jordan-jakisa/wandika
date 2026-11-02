@@ -1,6 +1,6 @@
 import { api, listen } from "./api";
 import { TEMPLATE } from "./kanban";
-import type { Entry, NoteMeta, Status, SyncReport } from "./types";
+import type { Entry, NoteMeta, Status, SyncReport, Today } from "./types";
 
 export type Tab = "notes" | "today" | "tasks" | "projects" | "search";
 
@@ -15,6 +15,8 @@ export interface Ask {
 
 const SYNC_AFTER_EDIT_MS = 20_000;
 const SYNC_EVERY_MS = 3 * 60_000;
+/** Mail and calendars are fetched at most this often unless asked; vault tasks are always fresh. */
+const TODAY_TTL_MS = 2 * 60_000;
 
 class AppState {
   status = $state<Status | null>(null);
@@ -37,6 +39,9 @@ class AppState {
   dialog = $state<Ask | null>(null);
   /** Tag picked in the tag browser, on a card or in a note. */
   tagFilter = $state<string | null>(null);
+  today = $state<Today | null>(null);
+  #todayAt = 0;
+  #todayLoading: Promise<void> | null = null;
 
   /** Set by the editor so pending typing is saved before a sync reads the files. */
   flush: () => Promise<void> = async () => {};
@@ -50,7 +55,12 @@ class AppState {
     return t ? `${t.owner}/${t.repo}` : "";
   }
 
+  #started = false;
+
   async init() {
+    // The page can mount twice (dev reloads, a remount); one start, one listener, one sync.
+    if (this.#started) return;
+    this.#started = true;
     try {
       const status = await api.status();
       this.lastSync = status.last_sync;
@@ -187,6 +197,31 @@ class AppState {
     await this.refreshFiles();
     this.open(path);
     this.edited();
+  }
+
+  /**
+   * Today's events, mail and tasks. Network sources are reused for two minutes; within that
+   * window only the vault's own tasks are re-read, which costs no network.
+   */
+  async loadToday(force = false) {
+    if (this.#todayLoading) return this.#todayLoading;
+    const fresh = Date.now() - this.#todayAt < TODAY_TTL_MS;
+    this.#todayLoading = (async () => {
+      try {
+        if (!force && fresh && this.today) {
+          const tasks = await api.tasksVault();
+          this.today = { ...this.today, tasks: tasks.filter((t) => !t.done) };
+        } else {
+          this.today = await api.today();
+          this.#todayAt = Date.now();
+        }
+      } catch (e) {
+        this.say((e as Error).message);
+      } finally {
+        this.#todayLoading = null;
+      }
+    })();
+    return this.#todayLoading;
   }
 
   /** In-app replacement for confirm()/prompt(), which mobile web views don't reliably show. */

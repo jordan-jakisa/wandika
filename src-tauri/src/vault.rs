@@ -9,7 +9,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
 use std::sync::LazyLock;
-use std::time::SystemTime;
+use std::time::{Duration, Instant, SystemTime};
 use walkdir::WalkDir;
 
 pub const TMP_SUFFIX: &str = ".wandika-tmp";
@@ -320,18 +320,27 @@ pub fn set_encrypted(root: &Path, rel: &str, encrypt: bool, crypto: &mut Crypto)
     }
 }
 
+/// What the index keeps per note. The note text itself is not kept: only a lowercase copy for
+/// search, and the tasks. Snippets are read from disk for the few results shown.
 struct Cached {
     mtime: SystemTime,
     meta: NoteMeta,
-    text: String,
-    lower: String,
+    lower: Box<str>,
+    title_lower: Box<str>,
+    path_lower: Box<str>,
+    tasks: Vec<VaultTask>,
 }
+
+/// Folder scans are skipped for this long unless Wandika itself changed a file.
+const RESCAN_AFTER: Duration = Duration::from_secs(20);
 
 #[derive(Default)]
 pub struct Index {
     root: PathBuf,
     notes: HashMap<String, Cached>,
     unlocked: bool,
+    checked: Option<Instant>,
+    stale: bool,
 }
 
 fn parse(rel: &str, text: &str, modified: i64, encrypted: bool, locked: bool) -> NoteMeta {
@@ -368,13 +377,13 @@ fn strip_code(text: &str) -> String {
     out
 }
 
-fn snippet(text: &str, lower: &str, needle: &str) -> String {
+fn snippet(text: &str, needle: &str) -> String {
+    let lower = text.to_lowercase();
     let Some(pos) = lower.find(needle) else {
         return text.chars().take(140).collect::<String>().replace('\n', " ");
     };
-    // `lower` can differ in byte length from `text` for some scripts; fall back to the start.
-    let start = if lower.len() == text.len() { pos.saturating_sub(60) } else { 0 };
-    let mut s = start;
+    // Lowercasing can change byte lengths in some scripts; then start from the top.
+    let mut s = if lower.len() == text.len() { pos.saturating_sub(60) } else { 0 };
     while s > 0 && !text.is_char_boundary(s) {
         s -= 1;
     }
@@ -383,7 +392,48 @@ fn snippet(text: &str, lower: &str, needle: &str) -> String {
     if s > 0 { format!("…{}", piece.trim_start()) } else { piece }
 }
 
+fn tasks_in(rel: &str, title: &str, text: &str) -> Vec<VaultTask> {
+    let mut out = Vec::new();
+    let mut fenced = false;
+    for (i, line) in text.lines().enumerate() {
+        if line.trim_start().starts_with("```") {
+            fenced = !fenced;
+        }
+        if fenced {
+            continue;
+        }
+        if let Some(m) = TASK.captures(line) {
+            let text = m[4].to_string();
+            out.push(VaultTask {
+                path: rel.to_string(),
+                title: title.to_string(),
+                line: i,
+                due: DUE.captures(&text).map(|d| d[1].to_string()),
+                done: &m[2] != " ",
+                text,
+            });
+        }
+    }
+    out
+}
+
 impl Index {
+    /// Called after Wandika writes, renames or syncs files.
+    pub fn mark_stale(&mut self) {
+        self.stale = true;
+    }
+
+    /// Rescans only when something changed, or now and then for edits made outside the app.
+    pub fn ensure_fresh(&mut self, root: &Path, crypto: &Crypto) {
+        let due = self.stale
+            || self.root != root
+            || self.unlocked != crypto.unlocked()
+            || self.checked.is_none_or(|t| t.elapsed() > RESCAN_AFTER);
+        if due {
+            self.refresh(root, crypto);
+        }
+    }
+
     pub fn refresh(&mut self, root: &Path, crypto: &Crypto) {
         if self.root != root || self.unlocked != crypto.unlocked() {
             self.notes.clear();
@@ -410,10 +460,20 @@ impl Index {
                 Err(_) => (String::new(), encrypted),
             };
             let meta = parse(&rel, &text, mtime_ms(mtime), encrypted, locked);
-            let lower = text.to_lowercase();
-            self.notes.insert(rel, Cached { mtime, meta, text, lower });
+            let cached = Cached {
+                mtime,
+                lower: text.to_lowercase().into_boxed_str(),
+                title_lower: meta.title.to_lowercase().into_boxed_str(),
+                path_lower: rel.to_lowercase().into_boxed_str(),
+                tasks: tasks_in(&rel, &meta.title, &text),
+                meta,
+            };
+            self.notes.insert(rel, cached);
         }
         self.notes.retain(|k, _| seen.contains(k));
+        self.notes.shrink_to_fit();
+        self.checked = Some(Instant::now());
+        self.stale = false;
     }
 
     pub fn titles(&self) -> Vec<NoteMeta> {
@@ -425,14 +485,16 @@ impl Index {
     pub fn resolve(&self, target: &str) -> Option<String> {
         let target = target.trim().trim_end_matches(".md");
         let t = target.to_lowercase();
+        let suffix = format!("/{t}");
         // A link with a folder (`Projects/Plan`) matches that path; a bare name matches any folder.
         let mut matches: Vec<&String> = self
             .notes
-            .keys()
-            .filter(|rel| {
-                let stem = rel.trim_end_matches(".age").trim_end_matches(".md").to_lowercase();
-                stem == t || stem.ends_with(&format!("/{t}"))
+            .iter()
+            .filter(|(_, c)| {
+                let stem = c.path_lower.trim_end_matches(".age").trim_end_matches(".md");
+                stem == t || stem.ends_with(&suffix)
             })
+            .map(|(k, _)| k)
             .collect();
         matches.sort_by_key(|r| r.len());
         matches.first().map(|s| s.to_string())
@@ -446,7 +508,17 @@ impl Index {
             .collect()
     }
 
-    pub fn backlinks(&self, rel: &str) -> Vec<SearchHit> {
+    fn hit(&self, c: &Cached, needle: &str, crypto: &Crypto) -> SearchHit {
+        let text = read_note(&self.root, &c.meta.path, crypto).unwrap_or_default();
+        SearchHit {
+            path: c.meta.path.clone(),
+            title: c.meta.title.clone(),
+            snippet: snippet(&text, needle),
+            encrypted: c.meta.encrypted,
+        }
+    }
+
+    pub fn backlinks(&self, rel: &str, crypto: &Crypto) -> Vec<SearchHit> {
         let title = title_of(rel);
         let needle = format!("[[{}", title.to_lowercase());
         let mut out: Vec<SearchHit> = self
@@ -454,18 +526,13 @@ impl Index {
             .into_iter()
             .filter(|p| p != rel)
             .filter_map(|p| self.notes.get(&p))
-            .map(|c| SearchHit {
-                path: c.meta.path.clone(),
-                title: c.meta.title.clone(),
-                snippet: snippet(&c.text, &c.lower, &needle),
-                encrypted: c.meta.encrypted,
-            })
+            .map(|c| self.hit(c, &needle, crypto))
             .collect();
         out.sort_by_key(|h| h.title.to_lowercase());
         out
     }
 
-    pub fn search(&self, query: &str) -> Vec<SearchHit> {
+    pub fn search(&self, query: &str, crypto: &Crypto) -> Vec<SearchHit> {
         let q = query.trim().to_lowercase();
         if q.is_empty() {
             return Vec::new();
@@ -475,9 +542,8 @@ impl Index {
             .notes
             .values()
             .filter_map(|c| {
-                let title = c.meta.title.to_lowercase();
-                let path = c.meta.path.to_lowercase();
-                if !words.iter().all(|w| title.contains(w) || path.contains(w) || c.lower.contains(w)) {
+                let (title, path, body) = (&*c.title_lower, &*c.path_lower, &*c.lower);
+                if !words.iter().all(|w| title.contains(w) || path.contains(w) || body.contains(w)) {
                     return None;
                 }
                 let mut score = 0i64;
@@ -491,48 +557,17 @@ impl Index {
                     if title.contains(w) {
                         score += 100;
                     }
-                    score += c.lower.matches(w).count().min(20) as i64;
+                    score += body.matches(w).take(20).count() as i64;
                 }
                 Some((score, c))
             })
             .collect();
         scored.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.meta.modified.cmp(&a.1.meta.modified)));
-        scored
-            .into_iter()
-            .take(50)
-            .map(|(_, c)| SearchHit {
-                path: c.meta.path.clone(),
-                title: c.meta.title.clone(),
-                snippet: snippet(&c.text, &c.lower, words[0]),
-                encrypted: c.meta.encrypted,
-            })
-            .collect()
+        scored.into_iter().take(50).map(|(_, c)| self.hit(c, words[0], crypto)).collect()
     }
 
     pub fn tasks(&self) -> Vec<VaultTask> {
-        let mut out = Vec::new();
-        for c in self.notes.values() {
-            let mut fenced = false;
-            for (i, line) in c.text.lines().enumerate() {
-                if line.trim_start().starts_with("```") {
-                    fenced = !fenced;
-                }
-                if fenced {
-                    continue;
-                }
-                if let Some(m) = TASK.captures(line) {
-                    let text = m[4].to_string();
-                    out.push(VaultTask {
-                        path: c.meta.path.clone(),
-                        title: c.meta.title.clone(),
-                        line: i,
-                        due: DUE.captures(&text).map(|d| d[1].to_string()),
-                        done: &m[2] != " ",
-                        text,
-                    });
-                }
-            }
-        }
+        let mut out: Vec<VaultTask> = self.notes.values().flat_map(|c| c.tasks.iter().cloned()).collect();
         out.sort_by(|a, b| {
             a.due.is_none().cmp(&b.due.is_none()).then(a.due.cmp(&b.due)).then(a.path.cmp(&b.path)).then(a.line.cmp(&b.line))
         });
@@ -644,6 +679,34 @@ mod tests {
         assert_eq!(title_of("Private/Diary.md.age"), "Diary");
         assert!(is_board("---\n\nkanban-plugin: basic\n\n---\n\n## To do\n"));
         assert!(!is_board("# Plan\n\nkanban-plugin: basic\n"));
+    }
+
+    #[test]
+    fn index_searches_links_and_tasks() {
+        let root = std::env::temp_dir().join(format!("wandika-index-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("Projects")).unwrap();
+        std::fs::write(root.join("Projects/Plan.md"), "Ship the Kampala release.\n- [ ] Call Amina 📅 2026-11-02\n").unwrap();
+        std::fs::write(root.join("Daily.md"), "Talked about [[Plan]] today.\n- [x] Done thing\n").unwrap();
+        let crypto = Crypto::load(&root, &crate::secrets::Secrets::new(root.clone()), "test/vault");
+        let mut index = Index::default();
+        index.ensure_fresh(&root, &crypto);
+
+        let hits = index.search("kampala", &crypto);
+        assert_eq!(hits.len(), 1);
+        assert!(hits[0].snippet.contains("Kampala"), "snippet keeps the original case");
+        assert_eq!(index.backlinks("Projects/Plan.md", &crypto)[0].title, "Daily");
+        assert_eq!(index.resolve("plan").as_deref(), Some("Projects/Plan.md"));
+        let tasks = index.tasks();
+        assert_eq!(tasks.len(), 2);
+        assert_eq!(tasks[0].due.as_deref(), Some("2026-11-02"));
+
+        // A write through the app marks the index stale, and the next lookup sees it.
+        std::fs::write(root.join("New.md"), "kampala again").unwrap();
+        index.mark_stale();
+        index.ensure_fresh(&root, &crypto);
+        assert_eq!(index.search("kampala", &crypto).len(), 2);
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

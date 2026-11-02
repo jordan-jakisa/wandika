@@ -1,20 +1,20 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { api } from "../api";
   import { app } from "../app.svelte";
   import type { RemoteTask, VaultTask } from "../types";
   import TaskRow from "./TaskRow.svelte";
 
   let tasks = $state<VaultTask[]>([]);
-  let remote = $state<RemoteTask[]>([]);
+  const remote = $derived<RemoteTask[]>(app.today?.remote_tasks ?? []);
   let showDone = $state(false);
   let loading = $state(true);
 
   async function load() {
     loading = true;
     try {
-      const [vaultTasks, today] = await Promise.all([api.tasksVault(), api.today()]);
+      const [vaultTasks] = await Promise.all([api.tasksVault(), app.loadToday()]);
       tasks = vaultTasks;
-      remote = today.remote_tasks;
     } catch (e) {
       app.say((e as Error).message);
     } finally {
@@ -24,7 +24,7 @@
 
   $effect(() => {
     void app.changed.at;
-    void load();
+    untrack(() => load());
   });
 
   const visible = $derived(tasks.filter((t) => showDone || !t.done));
@@ -90,7 +90,7 @@
             where={t.list}
             onToggle={async () => {
               await api.remoteTaskToggle(t.source, t.list_id, t.id, !t.done);
-              await load();
+              await app.loadToday(true);
             }}
           />
         {/each}

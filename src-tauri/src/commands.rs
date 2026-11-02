@@ -123,7 +123,9 @@ pub async fn sync_now(app: S<'_>) -> Result<SyncReport> {
     let Ok(_guard) = app.sync_lock.try_lock() else {
         return Err(msg("A sync is already running."));
     };
-    sync::sync(&gh, &target, &paths).await
+    let report = sync::sync(&gh, &target, &paths).await;
+    changed(&app);
+    report
 }
 
 // Notes
@@ -140,13 +142,17 @@ pub async fn note_read(app: S<'_>, path: String) -> Result<String> {
 
 #[tauri::command]
 pub async fn note_write(app: S<'_>, path: String, content: String) -> Result<()> {
-    vault::write_note(&app.root()?, &path, &content, &app.crypto()?)
+    vault::write_note(&app.root()?, &path, &content, &app.crypto()?)?;
+    changed(&app);
+    Ok(())
 }
 
 #[tauri::command]
 pub async fn note_create(app: S<'_>, folder: String, title: String, body: Option<String>) -> Result<String> {
     let body = body.unwrap_or_default();
-    vault::create_note(&app.root()?, &folder, &title, &body, &app.crypto()?)
+    let path = vault::create_note(&app.root()?, &folder, &title, &body, &app.crypto()?)?;
+    changed(&app);
+    Ok(path)
 }
 
 #[tauri::command]
@@ -158,49 +164,60 @@ pub async fn folder_create(app: S<'_>, path: String) -> Result<()> {
 pub async fn entry_rename(app: S<'_>, path: String, name: String) -> Result<String> {
     let (root, crypto) = (app.root()?, app.crypto()?);
     let mut index = app.index.lock().unwrap();
-    vault::rename(&root, &path, &name, &crypto, &mut index)
+    let to = vault::rename(&root, &path, &name, &crypto, &mut index)?;
+    index.mark_stale();
+    Ok(to)
 }
 
 #[tauri::command]
 pub async fn entry_trash(app: S<'_>, path: String) -> Result<()> {
-    vault::trash(&app.root()?, &path, &app.crypto()?)
+    vault::trash(&app.root()?, &path, &app.crypto()?)?;
+    changed(&app);
+    Ok(())
 }
 
-fn with_index<T>(app: &App, f: impl FnOnce(&vault::Index) -> T) -> Result<T> {
+fn with_index<T>(app: &App, f: impl FnOnce(&vault::Index, &Crypto) -> T) -> Result<T> {
     let (root, crypto) = (app.root()?, app.crypto()?);
     let mut index = app.index.lock().unwrap();
-    index.refresh(&root, &crypto);
-    Ok(f(&index))
+    index.ensure_fresh(&root, &crypto);
+    Ok(f(&index, &crypto))
+}
+
+/// Every command that changes files on disk calls this, so the next lookup rescans.
+fn changed(app: &App) {
+    app.index.lock().unwrap().mark_stale();
 }
 
 #[tauri::command]
 pub async fn note_titles(app: S<'_>) -> Result<Vec<NoteMeta>> {
-    with_index(&app, |i| i.titles())
+    with_index(&app, |i, _| i.titles())
 }
 
 #[tauri::command]
 pub async fn search(app: S<'_>, query: String) -> Result<Vec<SearchHit>> {
-    with_index(&app, |i| i.search(&query))
+    with_index(&app, |i, c| i.search(&query, c))
 }
 
 #[tauri::command]
 pub async fn backlinks(app: S<'_>, path: String) -> Result<Vec<SearchHit>> {
-    with_index(&app, |i| i.backlinks(&path))
+    with_index(&app, |i, c| i.backlinks(&path, c))
 }
 
 #[tauri::command]
 pub async fn resolve_link(app: S<'_>, target: String) -> Result<Option<String>> {
-    with_index(&app, |i| i.resolve(&target))
+    with_index(&app, |i, _| i.resolve(&target))
 }
 
 #[tauri::command]
 pub async fn tasks_vault(app: S<'_>) -> Result<Vec<VaultTask>> {
-    with_index(&app, |i| i.tasks())
+    with_index(&app, |i, _| i.tasks())
 }
 
 #[tauri::command]
 pub async fn task_toggle(app: S<'_>, path: String, line: usize, text: String) -> Result<bool> {
-    vault::toggle_task(&app.root()?, &path, line, &text, &app.crypto()?)
+    let done = vault::toggle_task(&app.root()?, &path, line, &text, &app.crypto()?)?;
+    changed(&app);
+    Ok(done)
 }
 
 fn parse_date(date: Option<String>) -> Result<NaiveDate> {
@@ -212,7 +229,9 @@ fn parse_date(date: Option<String>) -> Result<NaiveDate> {
 
 #[tauri::command]
 pub async fn daily_note(app: S<'_>, date: Option<String>) -> Result<String> {
-    vault::daily_note(&app.root()?, parse_date(date)?, &app.crypto()?)
+    let path = vault::daily_note(&app.root()?, parse_date(date)?, &app.crypto()?)?;
+    changed(&app);
+    Ok(path)
 }
 
 // Encryption
@@ -236,7 +255,9 @@ pub async fn encryption_lock(app: S<'_>) -> Result<CryptoStatus> {
 #[tauri::command]
 pub async fn set_encrypted(app: S<'_>, path: String, encrypt: bool) -> Result<String> {
     let mut crypto = app.crypto()?;
-    vault::set_encrypted(&app.root()?, &path, encrypt, &mut crypto)
+    let to = vault::set_encrypted(&app.root()?, &path, encrypt, &mut crypto)?;
+    changed(&app);
+    Ok(to)
 }
 
 // Connectors
@@ -401,7 +422,7 @@ pub async fn today(app: S<'_>, date: Option<String>) -> Result<Today> {
     collect(&mut out, "Reminders", apple.1, |o, v| o.remote_tasks.extend(v));
 
     if app.target().is_ok() {
-        out.tasks = with_index(&app, |i| i.tasks())?.into_iter().filter(|t| !t.done).collect();
+        out.tasks = with_index(&app, |i, _| i.tasks())?.into_iter().filter(|t| !t.done).collect();
     }
     out.events.sort_by(|a, b| b.all_day.cmp(&a.all_day).then(a.start.cmp(&b.start)));
     out.mail.sort_by(|a, b| b.date.cmp(&a.date));
@@ -445,7 +466,9 @@ pub async fn mail_to_note(app: S<'_>, source: String, id: String) -> Result<Stri
     }
     body.push_str(&format!("---\n\n# {}\n\n{}\n", m.subject.trim(), m.text.trim()));
     let title = if m.subject.trim().is_empty() { "Email".to_string() } else { m.subject.trim().chars().take(80).collect() };
-    vault::create_note(&app.root()?, "Mail", &title, &body, &app.crypto()?)
+    let path = vault::create_note(&app.root()?, "Mail", &title, &body, &app.crypto()?)?;
+    changed(&app);
+    Ok(path)
 }
 
 #[tauri::command]
@@ -477,11 +500,13 @@ pub async fn event_to_note(app: S<'_>, event: CalEvent) -> Result<String> {
     let crypto = app.crypto()?;
     let title = format!("{day} {}", event.title);
     // Opening the same meeting twice returns the note made the first time.
-    let existing = with_index(&app, |i| i.resolve(&format!("Meetings/{}", title.replace('/', "-"))))?;
+    let existing = with_index(&app, |i, _| i.resolve(&format!("Meetings/{}", title.replace('/', "-"))))?;
     if let Some(p) = existing {
         return Ok(p);
     }
-    vault::create_note(&root, "Meetings", &title, &body, &crypto)
+    let path = vault::create_note(&root, "Meetings", &title, &body, &crypto)?;
+    changed(&app);
+    Ok(path)
 }
 
 /// Adds today's events to the daily note under "## Agenda", skipping ones already there.
@@ -521,5 +546,6 @@ pub async fn agenda_to_daily(app: S<'_>, date: Option<String>, events: Vec<CalEv
         None => format!("{}\n\n## Agenda\n\n{block}\n", text.trim_end()),
     };
     vault::write_note(&root, &path, &updated, &crypto)?;
+    changed(&app);
     Ok(path)
 }
