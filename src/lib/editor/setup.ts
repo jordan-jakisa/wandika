@@ -142,7 +142,7 @@ export function extensions(opts: {
     formatting,
     keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
     placeholder("Start writing. Type [[ to link a note."),
-    embeds(opts.getPath),
+    embeds(opts.getPath, opts.onOpenLink),
     fileDrops(opts.onFiles),
     livePreview(opts.onOpenLink, opts.onTag),
     diagrams,
