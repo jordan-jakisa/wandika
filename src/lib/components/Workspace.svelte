@@ -382,7 +382,7 @@
     justify-items: start;
     gap: 16px;
     padding: 40px 56px;
-    max-width: calc(68ch + 112px);
+    max-width: calc(var(--measure) + 112px);
     margin: 0 auto;
     width: 100%;
   }

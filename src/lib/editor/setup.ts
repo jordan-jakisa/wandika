@@ -24,7 +24,7 @@ const theme = EditorView.theme({
   "&": { height: "100%", background: "transparent", color: "var(--ink)", fontSize: "var(--note-size)" },
   "&.cm-focused": { outline: "none" },
   ".cm-scroller": { fontFamily: "var(--font-note)", lineHeight: "1.65", overflow: "visible" },
-  ".cm-content": { padding: "0 0 2em", caretColor: "var(--papyrus)", maxWidth: "68ch" },
+  ".cm-content": { padding: "0 0 2em", caretColor: "var(--papyrus)", maxWidth: "var(--measure)" },
   ".cm-line": { padding: "0" },
   ".cm-cursor": { borderLeftColor: "var(--papyrus)", borderLeftWidth: "2px" },
   "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": {

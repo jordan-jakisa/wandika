@@ -342,12 +342,12 @@
     max-width: none;
   }
   .page > * {
-    max-width: 68ch;
+    max-width: var(--measure);
     margin-left: auto;
     margin-right: auto;
   }
   .cm-host :global(.cm-editor) {
-    max-width: 68ch;
+    max-width: var(--measure);
   }
   .title {
     display: block;

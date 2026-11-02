@@ -187,6 +187,7 @@
       redraw();
     };
     media.addEventListener("change", onTheme);
+    window.addEventListener("wandika:theme", onTheme);
     const ro = new ResizeObserver(() => {
       const dpr = window.devicePixelRatio || 1;
       width = box.clientWidth;
@@ -201,6 +202,7 @@
     ro.observe(box);
     return () => {
       media.removeEventListener("change", onTheme);
+      window.removeEventListener("wandika:theme", onTheme);
       ro.disconnect();
     };
   });

@@ -16,6 +16,8 @@
   --font-code: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   --note-size: 18px;
+  /* Line length of note text; Settings can change it. */
+  --measure: 68ch;
   --ui-size: 15px;
   --small: 13px;
   --radius-sm: 6px;
@@ -33,8 +35,9 @@
   color-scheme: light;
 }
 
+/* Dark: follows the system until Settings picks a mode (data-mode on <html>). */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-mode="light"]) {
     --paper: #151917;
     --sheet: #1c211e;
     --ink: #e3e7e2;
@@ -47,6 +50,20 @@
     --on-papyrus: #151917;
     color-scheme: dark;
   }
+}
+
+:root[data-mode="dark"] {
+  --paper: #151917;
+  --sheet: #1c211e;
+  --ink: #e3e7e2;
+  --graphite: #9aa49e;
+  --rule: #2c332f;
+  --papyrus: #7fc19c;
+  --papyrus-wash: #7fc19c1f;
+  --amber: #e0a94f;
+  --alarm: #f08a78;
+  --on-papyrus: #151917;
+  color-scheme: dark;
 }
 
 @media (max-width: 899px) {

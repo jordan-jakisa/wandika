@@ -4,7 +4,11 @@
   import Settings from "$lib/components/Settings.svelte";
   import Start from "$lib/components/Start.svelte";
   import Workspace from "$lib/components/Workspace.svelte";
+  import { prefs } from "$lib/prefs.svelte";
   import { onMount } from "svelte";
+
+  // Before the first screen draws, so it opens in the chosen colours.
+  prefs.apply();
 
   onMount(() => {
     void app.init();
