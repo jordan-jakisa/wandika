@@ -166,7 +166,7 @@
     min-height: 54px;
     border: 0;
     background: none;
-    font-size: 1.05rem;
+    font-size: var(--text-lg);
     color: var(--ink);
   }
   input:focus {
@@ -191,13 +191,13 @@
     display: flex;
     gap: 10px;
     align-items: flex-start;
-    padding: 9px 10px;
+    padding: 8px 10px;
     border-radius: var(--radius-sm);
     cursor: pointer;
     color: var(--graphite);
   }
   li[role="option"] :global(svg) {
-    margin-top: 3px;
+    margin-top: 4px;
     flex: none;
   }
   li.selected {

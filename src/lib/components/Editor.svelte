@@ -450,24 +450,10 @@
   .cm-host.writing {
     padding-bottom: 64px;
   }
-  .back {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    min-height: var(--target);
-    padding: 0 8px 0 0;
-    border: 0;
-    background: none;
-    color: var(--graphite);
-    font-size: calc(16px * var(--text-scale));
-  }
-  .back:active {
-    opacity: 0.5;
-  }
   .badge {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: 4px;
     font-size: var(--small);
     color: var(--graphite);
     margin-right: 4px;

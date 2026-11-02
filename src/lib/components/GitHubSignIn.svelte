@@ -97,7 +97,7 @@
   }
   .big {
     min-height: 50px;
-    padding: 0 22px;
+    padding: 0 20px;
   }
   .small {
     font-size: var(--small);
@@ -111,9 +111,6 @@
     user-select: all;
   }
   .quiet {
-    border-color: transparent;
-    background: none;
     padding: 0;
-    color: var(--graphite);
   }
 </style>

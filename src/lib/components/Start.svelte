@@ -146,7 +146,7 @@
   }
   .lead {
     margin: 0;
-    font-size: 1.15rem;
+    font-size: var(--text-lg);
     line-height: 1.55;
     color: var(--graphite);
   }
@@ -163,7 +163,7 @@
   }
   h2 {
     margin: 0;
-    font-size: 1.05rem;
+    font-size: var(--text-lg);
     font-weight: 650;
   }
   p {
@@ -223,16 +223,8 @@
     white-space: nowrap;
   }
   .quiet {
-    border-color: transparent;
-    background: none;
     padding: 0;
-    color: var(--graphite);
     white-space: normal;
     text-align: left;
-  }
-  @media (hover: hover) {
-    .quiet:hover {
-      color: var(--ink);
-    }
   }
 </style>

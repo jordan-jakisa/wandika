@@ -140,7 +140,7 @@ function meta(): NoteMeta[] {
 function tasks(): VaultTask[] {
   const out: VaultTask[] = [];
   for (const [path, text] of notes) {
-    if (path.endsWith(".age") && !encryption.unlocked) continue;
+    if ((path.endsWith(".age") && !encryption.unlocked) || path.startsWith("Templates/")) continue;
     text.split("\n").forEach((line, i) => {
       const m = line.match(/^\s*[-*+] \[([ xX])\] (.*)$/);
       if (m) out.push({ path, title: titleOf(path), line: i, text: m[2], done: m[1] !== " ", due: m[2].match(/📅\s?(\d{4}-\d{2}-\d{2})/)?.[1] ?? null });

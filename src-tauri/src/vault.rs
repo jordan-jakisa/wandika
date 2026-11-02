@@ -619,8 +619,15 @@ impl Index {
         scored.into_iter().take(50).map(|(_, c)| self.hit(c, words[0], crypto)).collect()
     }
 
+    /// Every task in the vault, except the blanks in templates.
     pub fn tasks(&self) -> Vec<VaultTask> {
-        let mut out: Vec<VaultTask> = self.notes.values().flat_map(|c| c.tasks.iter().cloned()).collect();
+        let templates = templates_folder(&self.root).map(|f| format!("{}/", f.to_lowercase()));
+        let mut out: Vec<VaultTask> = self
+            .notes
+            .values()
+            .filter(|c| templates.as_ref().is_none_or(|t| !c.path_lower.starts_with(t.as_str())))
+            .flat_map(|c| c.tasks.iter().cloned())
+            .collect();
         out.sort_by(|a, b| {
             a.due.is_none().cmp(&b.due.is_none()).then(a.due.cmp(&b.due)).then(a.path.cmp(&b.path)).then(a.line.cmp(&b.line))
         });

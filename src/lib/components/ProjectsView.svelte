@@ -86,7 +86,7 @@
   }
   h3 {
     margin: 0 0 8px;
-    font-size: 1rem;
+    font-size: var(--text-md);
     font-weight: 600;
   }
   p {
@@ -128,30 +128,15 @@
     flex-wrap: wrap;
     gap: 6px;
   }
-  .chip {
-    min-height: 32px;
-    padding: 0 12px;
-    border: 1px solid var(--rule);
-    border-radius: 999px;
-    background: var(--sheet);
-    color: var(--ink);
-    font-size: var(--small);
-  }
-  .chip.on {
-    border-color: var(--papyrus);
-    background: var(--papyrus);
-    color: var(--on-papyrus);
-  }
   .count {
-    opacity: 0.7;
+    font-weight: 400;
     font-variant-numeric: tabular-nums;
   }
   .tagged {
     margin-top: 12px;
   }
   @media (pointer: coarse) {
-    .list button,
-    .chip {
+    .list button {
       min-height: var(--target);
     }
   }

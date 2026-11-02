@@ -491,38 +491,13 @@
   }
   h2 {
     margin: 0 8px 0 0;
-    font-size: 1.3rem;
-    font-weight: 650;
-    letter-spacing: -0.01em;
+    font-size: var(--view-title-size);
+    font-weight: var(--view-title-weight);
+    letter-spacing: var(--view-title-tracking);
   }
   header .field {
     width: 200px;
     min-height: 36px;
-  }
-  .segmented {
-    display: inline-flex;
-    border: 1px solid var(--rule);
-    border-radius: var(--radius-sm);
-    overflow: hidden;
-  }
-  .segmented button {
-    min-height: 34px;
-    padding: 0 12px;
-    border: 0;
-    background: var(--sheet);
-    color: var(--graphite);
-    font-size: var(--small);
-  }
-  .segmented button + button {
-    border-left: 1px solid var(--rule);
-  }
-  .segmented button.on {
-    background: var(--papyrus);
-    color: var(--on-papyrus);
-  }
-  .segmented button:disabled {
-    opacity: 0.5;
-    cursor: default;
   }
   .opt {
     display: inline-flex;
@@ -580,7 +555,7 @@
     border: 1px solid var(--rule);
     border-radius: var(--radius);
     background: var(--sheet);
-    box-shadow: 0 8px 24px rgb(0 0 0 / 0.14);
+    box-shadow: var(--shadow-pop);
     font-size: var(--small);
   }
   .check {
@@ -611,14 +586,14 @@
   .group {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
-    min-height: 26px;
+    gap: var(--space-2);
+    min-height: 28px;
     padding: 0 8px;
     border: 0;
     border-radius: var(--radius-sm);
     background: color-mix(in srgb, var(--sheet) 80%, transparent);
     color: var(--ink);
-    font-size: calc(12px * var(--text-scale));
+    font-size: var(--text-xs);
   }
   @media (hover: hover) {
     .group:hover {
@@ -644,5 +619,13 @@
     margin: 0;
     font-size: var(--small);
     pointer-events: none;
+  }
+  /* Touch: the graph's controls reach 44px. */
+  @media (pointer: coarse) {
+    header .field,
+    .small-btn,
+    .group {
+      min-height: var(--target);
+    }
   }
 </style>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { duration } from "../motion";
   import {
     ChevronLeft,
     Cloud,
@@ -80,7 +81,6 @@
    * close. The same sheet on every phone.
    */
   const sheet = $derived(phone);
-  const reduceMotion = typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
   let closing = $state(false);
   let dragY = $state(0);
   let dragFrom = $state<number | null>(null);
@@ -110,13 +110,14 @@
     connecting = false;
     device = null;
     waiting = null;
-    if (sheet && !reduceMotion && app.settingsOpen) {
+    const ms = duration("--dur-base");
+    if (sheet && ms && app.settingsOpen) {
       closing = true;
       setTimeout(() => {
         closing = false;
         dragY = 0;
         app.settingsOpen = false;
-      }, 260);
+      }, ms);
       return;
     }
     dragY = 0;
@@ -643,7 +644,7 @@
     border-radius: var(--radius-lg);
     background: var(--sheet);
     color: var(--ink);
-    box-shadow: 0 24px 60px rgb(0 0 0 / 0.2);
+    box-shadow: var(--shadow-modal);
     overflow: hidden;
   }
   .settings[open] {
@@ -662,7 +663,7 @@
     border-radius: 0;
   }
   .settings::backdrop {
-    background: rgb(0 0 0 / 0.35);
+    background: var(--scrim);
   }
 
   /* Phone sheet: rounded top, grabber, slides up from the bottom, follows a drag down. */
@@ -671,21 +672,21 @@
     bottom: 0;
     height: calc(100dvh - var(--safe-top) - 10px);
     max-height: none;
-    border-radius: 20px 20px 0 0;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
     background: var(--sheet);
     transform: translateY(var(--drag, 0px));
-    transition: transform 280ms cubic-bezier(0.32, 0.72, 0, 1);
-    animation: sheet-in 380ms cubic-bezier(0.32, 0.72, 0, 1);
+    transition: transform var(--dur-base) var(--ease-sheet);
+    animation: sheet-in var(--dur-slow) var(--ease-sheet);
   }
   .settings.sheet.dragging {
     transition: none;
   }
   .settings.sheet.closing {
     transform: translateY(100%);
-    transition: transform 260ms cubic-bezier(0.32, 0.72, 0, 1);
+    transition: transform var(--dur-base) var(--ease-sheet);
   }
   .settings.sheet::backdrop {
-    background: rgb(0 0 0 / 0.4);
+    background: var(--scrim);
   }
   @keyframes sheet-in {
     from {
@@ -702,7 +703,7 @@
   .grabber {
     width: 36px;
     height: 5px;
-    border-radius: 3px;
+    border-radius: var(--radius-xs);
     background: color-mix(in srgb, var(--graphite) 45%, transparent);
   }
   .sheet .nav-head,
@@ -735,7 +736,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 18px 16px 10px;
+    padding: 20px 16px 10px;
   }
   .phone .nav-head {
     padding: calc(14px + var(--safe-top)) 12px 10px 20px;
@@ -745,7 +746,7 @@
   }
   h2 {
     margin: 0;
-    font-size: 1.15rem;
+    font-size: var(--text-lg);
     font-weight: 650;
   }
   .sections ul {
@@ -766,28 +767,19 @@
     color: var(--ink);
     text-align: left;
   }
-  /* Phone sheet: plain text buttons in the header. */
-  .done,
-  .back {
+  /* Phone sheet: "Done" closes it; the back row is the shared .back. */
+  .done {
     display: inline-flex;
     align-items: center;
-    gap: 2px;
     min-height: var(--target);
+    padding: 0 var(--space-3);
     border: 0;
     background: none;
-    font-size: calc(16px * var(--text-scale));
-  }
-  .done {
-    padding: 0 10px;
     color: var(--papyrus);
+    font-size: var(--text-md);
     font-weight: 600;
   }
-  .back {
-    padding: 0 8px 0 4px;
-    color: var(--graphite);
-  }
-  .done:active,
-  .back:active {
+  .done:active {
     opacity: 0.5;
   }
   .sec-text {
@@ -844,7 +836,7 @@
   .pane-head h3 {
     flex: 1;
     margin: 0;
-    font-size: 1.25rem;
+    font-size: var(--text-xl);
     font-weight: 650;
   }
   .pane-body {
@@ -856,7 +848,7 @@
     padding: 8px 16px calc(28px + var(--safe-bottom));
   }
   h4 {
-    margin: 22px 0 8px 2px;
+    margin: 20px 0 8px 2px;
     font-size: var(--small);
     font-weight: 600;
     color: var(--graphite);
@@ -904,7 +896,7 @@
   .row-desc {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: 4px;
     font-size: var(--small);
     color: var(--graphite);
     overflow-wrap: anywhere;
@@ -931,28 +923,6 @@
   .small {
     font-size: var(--small);
   }
-  .segmented {
-    display: inline-flex;
-    flex: none;
-    border: 1px solid var(--rule);
-    border-radius: var(--radius-sm);
-    overflow: hidden;
-  }
-  .segmented button {
-    min-height: 32px;
-    padding: 0 12px;
-    border: 0;
-    background: var(--sheet);
-    color: var(--ink);
-    font-size: var(--small);
-  }
-  .segmented button + button {
-    border-left: 1px solid var(--rule);
-  }
-  .segmented button.on {
-    background: var(--papyrus);
-    color: var(--on-papyrus);
-  }
   .swatches {
     display: flex;
     flex-wrap: wrap;
@@ -960,6 +930,7 @@
     gap: 10px;
   }
   .swatch {
+    position: relative;
     width: 26px;
     height: 26px;
     border-radius: 50%;
@@ -969,6 +940,16 @@
   }
   .swatch.on {
     box-shadow: 0 0 0 2px var(--ink);
+  }
+  @media (pointer: coarse) {
+    .swatches {
+      gap: var(--space-4);
+    }
+    .swatch::after {
+      content: "";
+      position: absolute;
+      inset: -9px;
+    }
   }
   .size {
     display: flex;
@@ -993,13 +974,6 @@
   label.row {
     cursor: pointer;
   }
-  .link-btn {
-    border: 0;
-    background: none;
-    padding: 0;
-    color: var(--papyrus);
-    font-size: var(--small);
-  }
   kbd {
     font: inherit;
     font-size: var(--small);
@@ -1011,7 +985,7 @@
   }
   .device .code {
     font-family: var(--font-note);
-    font-size: 1.8rem;
+    font-size: var(--text-2xl);
     font-weight: 600;
     letter-spacing: 0.08em;
   }

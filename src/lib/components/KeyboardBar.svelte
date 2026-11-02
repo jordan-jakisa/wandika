@@ -113,7 +113,7 @@
     width: 44px;
     height: 44px;
     border: 0;
-    border-radius: 10px;
+    border-radius: var(--radius);
     background: none;
     color: var(--ink);
   }

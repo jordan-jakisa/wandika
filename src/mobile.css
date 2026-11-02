@@ -3,19 +3,14 @@
    behaviour (back gestures, safe areas, the keyboard). */
 
 @media (max-width: 899px) {
-  :root {
-    --press: color-mix(in srgb, var(--ink) 8%, transparent);
-    --hairline: color-mix(in srgb, var(--graphite) 30%, transparent);
-  }
-
   /* Nested under html[data-platform] so these win over each component's own scoped styles. */
   html[data-platform] {
     /* Buttons: 44px tall, 12px corners. Primary is filled with the accent; the rest are quiet text. */
-    .btn {
-      min-height: 44px;
-      padding: 0 18px;
+    .btn:not(.quiet) {
+      min-height: var(--target);
+      padding: 0 var(--space-5);
       border: 0;
-      border-radius: 12px;
+      border-radius: var(--radius-md);
       background: var(--press);
       font-weight: 500;
     }
@@ -29,15 +24,15 @@
     }
     .field {
       border-color: var(--hairline);
-      border-radius: 12px;
+      border-radius: var(--radius-md);
     }
 
     /* Dialogs: centred, plain sheet colour, buttons side by side. */
     dialog[aria-labelledby="dialog-title"] {
       width: min(340px, calc(100vw - 40px));
-      padding: 22px 20px 18px;
+      padding: var(--space-6) var(--space-5) var(--space-5);
       border: 0;
-      border-radius: 20px;
+      border-radius: var(--radius-xl);
     }
     dialog[aria-labelledby="dialog-title"] .buttons {
       display: grid;
@@ -57,8 +52,8 @@
       min-width: 230px;
       padding: 4px 0;
       border: 0;
-      border-radius: 14px;
-      box-shadow: 0 10px 32px rgb(0 0 0 / 0.22);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-pop);
     }
     .menu .list [role="menuitem"] {
       min-height: 48px;
@@ -81,17 +76,17 @@
       max-width: none;
       bottom: calc(64px + var(--safe-bottom) + 12px);
       padding: 12px 16px;
-      border-radius: 12px;
-      font-size: calc(15px * var(--text-scale));
+      border-radius: var(--radius-md);
+      font-size: var(--text-md);
     }
 
     /* Search: one rounded field. */
     .search.page .input-row {
       margin: 4px 16px 8px;
-      height: 44px;
+      height: var(--target);
       padding: 0 12px;
       border: 0;
-      border-radius: 12px;
+      border-radius: var(--radius-md);
       background: var(--press);
     }
     .search.page .heading {
@@ -124,7 +119,7 @@
     }
     .settings .nav-head h2,
     .settings .pane-head h3 {
-      font-size: calc(22px * var(--text-scale));
+      font-size: var(--text-xl);
       font-weight: 650;
     }
     .settings .pane-body {
@@ -133,7 +128,7 @@
     }
     .settings h4 {
       margin: 24px 20px 4px;
-      font-size: calc(13px * var(--text-scale));
+      font-size: var(--text-sm);
       font-weight: 600;
       color: var(--graphite);
     }
@@ -161,13 +156,13 @@
       padding: 2px;
       gap: 2px;
       border: 0;
-      border-radius: 10px;
+      border-radius: var(--radius);
       background: var(--press);
     }
     .segmented button {
       min-height: 32px;
       border: 0;
-      border-radius: 8px;
+      border-radius: var(--radius-sm);
       background: transparent;
     }
     .segmented button + button {
@@ -176,7 +171,7 @@
     .segmented button.on {
       background: var(--sheet);
       color: var(--ink);
-      box-shadow: 0 1px 3px rgb(0 0 0 / 0.16);
+      box-shadow: var(--shadow-raise);
     }
 
     /* Switches. */
@@ -190,7 +185,7 @@
       margin: 0;
       border-radius: 999px;
       background: color-mix(in srgb, var(--graphite) 35%, transparent);
-      transition: background 150ms ease-out;
+      transition: background var(--dur-quick) var(--ease-out);
     }
     input.toggle::after {
       content: "";
@@ -201,20 +196,50 @@
       height: 22px;
       border-radius: 50%;
       background: #fff;
-      box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
-      transition: left 150ms ease-out;
+      box-shadow: var(--shadow-raise);
+      transition: transform var(--dur-quick) var(--ease-out);
     }
     input.toggle:checked {
       background: var(--papyrus);
     }
     input.toggle:checked::after {
-      left: 23px;
+      transform: translateX(20px);
     }
 
-    /* Rows answer a press. */
+    /* Everything you can tap answers the press: rows and cards tint, text buttons dim. */
     .tree .row:active,
-    .list button:active {
+    .list button:active,
+    .settings .row:has(input.toggle):active,
+    .settings .swatch:active,
+    .bar .tabs button:active,
+    .vault-row:active,
+    .picker li button:active,
+    .backlinks li button:active,
+    .board .card:active,
+    .board .add:active,
+    .board .add-lane:active,
+    .graph .group:active,
+    .tasks h3 button:active {
       background: var(--press);
+    }
+    .where:active,
+    .tree .more:active,
+    .tasks .more:active,
+    .sync:active,
+    .cm-note-embed-title:active {
+      opacity: 0.5;
+    }
+
+    /* Dark mode: menus and dialogs carry a hairline so they stand off the page. */
+    &[data-mode="dark"] .menu .list,
+    &[data-mode="dark"] dialog[aria-labelledby="dialog-title"] {
+      border: 1px solid var(--rule);
+    }
+
+    /* One icon size per job on phones: menu items and list rows 18, whatever the call site says. */
+    .menu .list [role="menuitem"] svg {
+      width: 18px;
+      height: 18px;
     }
   }
 }

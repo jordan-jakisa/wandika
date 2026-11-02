@@ -22,9 +22,52 @@
   --measure: 68ch;
   --ui-size: calc(15px * var(--text-scale));
   --small: calc(13px * var(--text-scale));
+  /* Type scale for interface text; every step follows the phone's text size. */
+  --text-2xs: calc(11px * var(--text-scale));
+  --text-xs: calc(12px * var(--text-scale));
+  --text-sm: var(--small);
+  --text-md: var(--ui-size);
+  --text-lg: calc(18px * var(--text-scale));
+  --text-xl: calc(22px * var(--text-scale));
+  --text-2xl: calc(28px * var(--text-scale));
+
+  /* Spacing: a 4px grid. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+
+  --radius-xs: 4px;
   --radius-sm: 6px;
   --radius: 10px;
+  --radius-md: 12px;
   --radius-lg: 14px;
+  --radius-xl: 20px;
+
+  /* Elevation: popovers and menus, sheets and dialogs, small raised parts; the dim behind modals. */
+  --shadow-raise: 0 1px 3px rgb(0 0 0 / 0.16);
+  --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.14);
+  --shadow-modal: 0 24px 60px rgb(0 0 0 / 0.2);
+  --scrim: rgb(0 0 0 / 0.35);
+
+  /* Motion: only in answer to an action. Reduced motion sets every duration to 0. */
+  --dur-instant: 100ms;
+  --dur-quick: 160ms;
+  --dur-base: 240ms;
+  --dur-slow: 360ms;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* Pressed rows and buttons on touch; hairline separators. */
+  --press: color-mix(in srgb, var(--ink) 8%, transparent);
+  --hairline: color-mix(in srgb, var(--graphite) 30%, transparent);
+  /* Room for the Mac window's traffic lights above the first row. */
+  --titlebar: 28px;
   --sidebar: 268px;
   --today: 320px;
   --target: 44px;
@@ -50,10 +93,16 @@
     --amber: #e0a94f;
     --alarm: #f08a78;
     --on-papyrus: #151917;
+    --shadow-raise: 0 1px 3px rgb(0 0 0 / 0.4);
+    --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.45);
+    --shadow-modal: 0 24px 60px rgb(0 0 0 / 0.55);
+    --scrim: rgb(0 0 0 / 0.5);
     color-scheme: dark;
   }
 }
 
+/* The same values again for a chosen dark mode; CSS can't share a block between a media query and
+   an attribute, and both are needed before the interface script runs. */
 :root[data-mode="dark"] {
   --paper: #151917;
   --sheet: #1c211e;
@@ -65,6 +114,10 @@
   --amber: #e0a94f;
   --alarm: #f08a78;
   --on-papyrus: #151917;
+  --shadow-raise: 0 1px 3px rgb(0 0 0 / 0.4);
+  --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.45);
+  --shadow-modal: 0 24px 60px rgb(0 0 0 / 0.55);
+  --scrim: rgb(0 0 0 / 0.5);
   color-scheme: dark;
 }
 
@@ -152,7 +205,7 @@ a {
   justify-content: center;
   gap: 8px;
   min-height: var(--target);
-  padding: 0 18px;
+  padding: 0 20px;
   border-radius: var(--radius);
   border: 1px solid var(--rule);
   background: var(--sheet);
@@ -180,6 +233,136 @@ a {
 .btn:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/* Quiet: a text button, for the second choice beside a primary one. */
+.btn.quiet {
+  border-color: transparent;
+  background: none;
+  color: var(--graphite);
+}
+@media (hover: hover) {
+  .btn.quiet:hover {
+    color: var(--ink);
+  }
+}
+.btn:not(.primary):active,
+.icon-btn:active {
+  background: var(--press);
+}
+
+/* Text button in the accent colour: "All tasks", "Reconnect", "Show more". */
+.link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--papyrus);
+  font-size: inherit;
+  text-align: left;
+}
+@media (hover: hover) {
+  .link-btn:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+}
+.link-btn:active {
+  opacity: 0.5;
+}
+.link-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Back: "‹ Notes", "‹ Settings". */
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: var(--target);
+  padding: 0 var(--space-2) 0 0;
+  border: 0;
+  background: none;
+  color: var(--graphite);
+  font-size: var(--text-md);
+}
+.back:active {
+  opacity: 0.5;
+}
+
+/* Chip: a filter or tag that switches on and off. */
+.chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--sheet);
+  color: var(--ink);
+  font-size: var(--small);
+  font-weight: 500;
+}
+.chip.on {
+  border-color: var(--papyrus);
+  background: var(--papyrus);
+  color: var(--on-papyrus);
+}
+@media (hover: hover) {
+  .chip:not(.on):hover {
+    border-color: var(--graphite);
+  }
+}
+.chip:active {
+  filter: brightness(0.94);
+}
+
+/* Segmented control: two to four choices, one on. */
+.segmented {
+  display: inline-flex;
+  flex: none;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.segmented button {
+  position: relative;
+  min-height: 32px;
+  padding: 0 var(--space-3);
+  border: 0;
+  background: var(--sheet);
+  color: var(--ink);
+  font-size: var(--small);
+}
+.segmented button + button {
+  border-left: 1px solid var(--rule);
+}
+.segmented button.on {
+  background: var(--papyrus);
+  color: var(--on-papyrus);
+}
+.segmented button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Touch: small controls keep their look but get a 44px tap area. */
+@media (pointer: coarse) {
+  .chip::after,
+  .segmented button::after,
+  .link-btn::after {
+    content: "";
+    position: absolute;
+    inset: calc((var(--target) - 100%) / -2) 0;
+  }
+  .link-btn {
+    position: relative;
+  }
 }
 
 .icon-btn {
@@ -236,6 +419,12 @@ a {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-instant: 0ms;
+    --dur-quick: 0ms;
+    --dur-base: 0ms;
+    --dur-slow: 0ms;
+  }
   *,
   *::before,
   *::after {

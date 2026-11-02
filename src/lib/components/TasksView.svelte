@@ -145,29 +145,12 @@
     margin: 6px 0 20px;
   }
   /* Filter chip: 32dp, 8dp corners, check mark when on. */
-  .chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 32px;
-    padding: 0 12px;
-    border: 1px solid var(--rule);
-    border-radius: 8px;
-    background: none;
-    color: var(--ink);
-    font-size: calc(14px * var(--text-scale));
-    font-weight: 500;
-  }
-  .chip.on {
-    border-color: transparent;
-    background: color-mix(in srgb, var(--papyrus) 22%, var(--sheet));
-  }
   .group {
-    margin-bottom: 22px;
+    margin-bottom: 20px;
   }
   h3 {
     margin: 0 0 4px;
-    font-size: 1rem;
+    font-size: var(--text-md);
     font-weight: 600;
   }
   h3 button {

@@ -55,7 +55,7 @@
 </script>
 
 <li class="task" class:done={checked}>
-  <input type="checkbox" {checked} disabled={busy} onchange={toggle} aria-label={label} />
+  <label class="box"><input type="checkbox" {checked} disabled={busy} onchange={toggle} aria-label={label} /></label>
   <div class="body">
     <span class="text">{label}</span>
     <span class="meta">
@@ -74,7 +74,7 @@
     display: flex;
     gap: 10px;
     align-items: flex-start;
-    padding: 7px 0;
+    padding: 8px 0;
   }
   input {
     width: 18px;
@@ -83,10 +83,21 @@
     accent-color: var(--papyrus);
     flex: none;
   }
+  .box {
+    position: relative;
+    display: flex;
+    flex: none;
+  }
   @media (pointer: coarse) {
     input {
       width: 22px;
       height: 22px;
+    }
+    /* A 44px tap area around the box, the box itself stays small. */
+    .box::after {
+      content: "";
+      position: absolute;
+      inset: -11px;
     }
   }
   .body {

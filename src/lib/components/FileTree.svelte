@@ -308,7 +308,7 @@
   .chev {
     display: inline-grid;
     width: 14px;
-    transition: transform 120ms ease-out;
+    transition: transform var(--dur-instant) var(--ease-out);
   }
   .chev.open {
     transform: rotate(90deg);
@@ -316,9 +316,13 @@
   .actions {
     opacity: 0;
   }
-  .row:hover .actions,
   .row:focus-within .actions {
     opacity: 1;
+  }
+  @media (hover: hover) {
+    .row:hover .actions {
+      opacity: 1;
+    }
   }
   /* Phones: rows are full-height targets and actions come from touch and hold, so the ⋯ buttons
      stay out of the way (they still open with a pointer). */

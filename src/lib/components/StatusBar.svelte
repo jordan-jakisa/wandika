@@ -42,7 +42,7 @@
     padding: 0 12px;
     border-top: 1px solid var(--rule);
     background: var(--paper);
-    font-size: calc(12px * var(--text-scale));
+    font-size: var(--text-xs);
     color: var(--graphite);
     white-space: nowrap;
     overflow: hidden;
@@ -55,12 +55,12 @@
     min-width: 0;
   }
   .status :global(.sync) {
-    font-size: calc(12px * var(--text-scale));
+    font-size: var(--text-xs);
   }
   .item {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: 4px;
     font-variant-numeric: tabular-nums;
   }
   button.item {

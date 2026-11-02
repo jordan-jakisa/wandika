@@ -86,7 +86,7 @@
   {#if !calendarConnected && !mailConnected && !loading}
     <p class="connect muted">
       See your calendar and inbox here.
-      <button class="link" onclick={() => app.openSettings("connections")}>Connect an account</button>
+      <button class="link-btn" onclick={() => app.openSettings("connections")}>Connect an account</button>
     </p>
   {/if}
 
@@ -96,7 +96,7 @@
         <li>
           <span>{e.message}</span>
           {#if e.code === "provider_auth" || e.code === "provider_forbidden"}
-            <button class="link" onclick={() => app.openSettings("connections")}>Reconnect</button>
+            <button class="link-btn" onclick={() => app.openSettings("connections")}>Reconnect</button>
           {/if}
         </li>
       {/each}
@@ -108,7 +108,7 @@
     <div class="section-head">
       <h3 id="cal-h">Calendar</h3>
       {#if data?.events.length}
-        <button class="link" onclick={addAgenda} disabled={busy === "agenda"}>
+        <button class="link-btn" onclick={addAgenda} disabled={busy === "agenda"}>
           <CalendarPlus size={14} /> Add to today's note
         </button>
       {/if}
@@ -126,11 +126,11 @@
               <span class="title">{e.title}</span>
               <span class="meta">{[e.calendar, e.location].filter(Boolean).join(", ")}</span>
               <span class="row-actions">
-                <button class="link" onclick={() => meetingNote(e)} disabled={busy === `event-${e.id}`}>
+                <button class="link-btn" onclick={() => meetingNote(e)} disabled={busy === `event-${e.id}`}>
                   <FileText size={14} /> Meeting note
                 </button>
                 {#if e.url}
-                  <button class="link" onclick={() => openUrl(e.url!)}><ExternalLink size={14} /> Open</button>
+                  <button class="link-btn" onclick={() => openUrl(e.url!)}><ExternalLink size={14} /> Open</button>
                 {/if}
               </span>
             </div>
@@ -152,7 +152,7 @@
   <section aria-labelledby="tasks-h">
     <div class="section-head">
       <h3 id="tasks-h">{hasOverdue ? "Due and overdue" : "Due today"}</h3>
-      <button class="link" onclick={() => (app.tab = "tasks")}>All tasks</button>
+      <button class="link-btn" onclick={() => (app.tab = "tasks")}>All tasks</button>
     </div>
     {#if dueTasks.length || remoteDue.length}
       <ul class="tasks">
@@ -214,11 +214,11 @@
             <span class="subject">{m.subject || "(No subject)"}</span>
             <span class="snippet">{m.snippet}</span>
             <span class="row-actions">
-              <button class="link" onclick={() => saveMail(m)} disabled={busy === `mail-${m.id}`}>
+              <button class="link-btn" onclick={() => saveMail(m)} disabled={busy === `mail-${m.id}`}>
                 <FileText size={14} /> Save as note
               </button>
               {#if m.url}
-                <button class="link" onclick={() => openUrl(m.url!)}><ExternalLink size={14} /> Open</button>
+                <button class="link-btn" onclick={() => openUrl(m.url!)}><ExternalLink size={14} /> Open</button>
               {/if}
             </span>
           </li>
@@ -254,15 +254,14 @@
   }
   h3 {
     margin: 0;
-    font-size: 1rem;
+    font-size: var(--text-md);
     font-weight: 600;
   }
   .connect {
     margin: 0 0 8px;
   }
-  .connect .link {
+  .connect .link-btn {
     display: inline;
-    padding: 0;
   }
   .section-head {
     display: flex;
@@ -349,7 +348,12 @@
     display: none;
   }
   @media (max-width: 899px) {
-    .row-actions {
+    .row-actions .link-btn,
+  .section-head .link-btn {
+    font-size: var(--small);
+    font-weight: 500;
+  }
+  .row-actions {
       display: none !important;
     }
     .row-menu {
@@ -368,25 +372,6 @@
     flex-wrap: wrap;
     gap: 14px;
     margin-top: 4px;
-  }
-  .link {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    border: 0;
-    background: none;
-    padding: 2px 0;
-    color: var(--papyrus);
-    font-size: var(--small);
-    font-weight: 500;
-  }
-  .link:disabled {
-    opacity: 0.5;
-  }
-  @media (pointer: coarse) {
-    .link {
-      min-height: 36px;
-    }
   }
   .errors {
     list-style: none;

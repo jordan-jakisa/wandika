@@ -338,20 +338,6 @@
     flex-wrap: wrap;
     gap: 6px;
   }
-  .chip {
-    min-height: 30px;
-    padding: 0 12px;
-    border: 1px solid var(--rule);
-    border-radius: 999px;
-    background: var(--sheet);
-    color: var(--graphite);
-    font-size: var(--small);
-  }
-  .chip.on {
-    border-color: var(--papyrus);
-    background: var(--papyrus);
-    color: var(--on-papyrus);
-  }
   .lanes {
     display: flex;
     align-items: flex-start;
@@ -427,6 +413,13 @@
     height: 28px;
     margin: -4px -4px 0 0;
   }
+  @media (pointer: coarse) {
+    .card-top :global(.menu .trigger) {
+      width: var(--target);
+      height: var(--target);
+      margin: -12px -12px -8px 0;
+    }
+  }
   .text {
     flex: 1;
     min-width: 0;
@@ -470,7 +463,7 @@
   }
   .drop-line {
     height: 3px;
-    border-radius: 2px;
+    border-radius: var(--radius-xs);
     background: var(--papyrus);
   }
   .edit,

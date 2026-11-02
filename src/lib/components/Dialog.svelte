@@ -55,15 +55,15 @@
 <style>
   dialog {
     width: min(420px, calc(100vw - 32px));
-    padding: 22px;
+    padding: 20px;
     border: 1px solid var(--rule);
     border-radius: var(--radius-lg);
     background: var(--sheet);
     color: var(--ink);
-    box-shadow: 0 24px 60px rgb(0 0 0 / 0.2);
+    box-shadow: var(--shadow-modal);
   }
   dialog::backdrop {
-    background: rgb(0 0 0 / 0.35);
+    background: var(--scrim);
   }
   form {
     display: grid;
@@ -71,7 +71,7 @@
   }
   h2 {
     margin: 0;
-    font-size: 1.1rem;
+    font-size: var(--text-lg);
     font-weight: 600;
     line-height: 1.35;
   }

@@ -37,8 +37,11 @@
     }
   }
 
+  /** Opened from the keyboard (Enter or Space): the first item takes focus, as menus do. A tap or
+   * click leaves focus alone, so nothing looks pressed before you choose. */
+  let fromKeyboard = false;
   $effect(() => {
-    if (open) queueMicrotask(() => root.querySelector<HTMLElement>('[role="menuitem"]')?.focus());
+    if (open && fromKeyboard) queueMicrotask(() => root.querySelector<HTMLElement>('[role="menuitem"]')?.focus());
   });
 </script>
 
@@ -51,6 +54,7 @@
     aria-expanded={open}
     onclick={(e) => {
       e.stopPropagation();
+      fromKeyboard = e.detail === 0;
       open = !open;
     }}
   >
@@ -77,7 +81,7 @@
     background: var(--sheet);
     border: 1px solid var(--rule);
     border-radius: var(--radius);
-    box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+    box-shadow: var(--shadow-pop);
     z-index: 30;
   }
   .list :global([role="menuitem"]) {
@@ -93,10 +97,14 @@
     text-align: left;
     white-space: nowrap;
   }
-  .list :global([role="menuitem"]:hover),
-  .list :global([role="menuitem"]:focus) {
+  .list :global([role="menuitem"]:focus-visible) {
     background: var(--papyrus-wash);
     outline: none;
+  }
+  @media (hover: hover) {
+    .list :global([role="menuitem"]:hover) {
+      background: var(--papyrus-wash);
+    }
   }
   .list :global(.danger) {
     color: var(--alarm);

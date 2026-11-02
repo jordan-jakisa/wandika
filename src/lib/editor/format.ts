@@ -120,7 +120,7 @@ export const formatTheme = EditorView.theme({
     border: "1px solid var(--rule)",
     borderRadius: "var(--radius)",
     background: "var(--sheet)",
-    boxShadow: "0 8px 24px rgb(0 0 0 / 0.16)",
+    boxShadow: "var(--shadow-pop)",
   },
   ".cm-format": { display: "flex", alignItems: "center", gap: "2px", padding: "4px" },
   ".cm-format button": {
@@ -134,7 +134,10 @@ export const formatTheme = EditorView.theme({
     color: "var(--ink)",
     cursor: "pointer",
   },
-  ".cm-format button:hover": { background: "var(--papyrus-wash)", color: "var(--papyrus)" },
+  "@media (hover: hover)": {
+    ".cm-format button:hover": { background: "var(--papyrus-wash)", color: "var(--papyrus)" },
+  },
+  ".cm-format button:active": { background: "var(--press)" },
   ".cm-format-sep": { width: "1px", height: "20px", margin: "0 4px", background: "var(--rule)" },
   "@media (pointer: coarse)": {
     ".cm-format button": { width: "40px", height: "40px" },

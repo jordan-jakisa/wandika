@@ -99,9 +99,8 @@
     left: 4px;
     width: 1px;
     background: transparent;
-    transition: background 120ms;
+    transition: background var(--dur-instant);
   }
-  .resizer:hover::after,
   .resizer:focus-visible::after,
   .resizer.dragging::after {
     background: var(--papyrus);
@@ -110,5 +109,12 @@
   }
   .resizer:focus-visible {
     outline: none;
+  }
+  @media (hover: hover) {
+    .resizer:hover::after {
+      background: var(--papyrus);
+      width: 2px;
+      left: 3.5px;
+    }
   }
 </style>

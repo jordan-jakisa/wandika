@@ -208,7 +208,7 @@
         {app.conflicts.length === 1 ? "A note was" : `${app.conflicts.length} notes were`} edited on two devices at once.
         Both versions are kept:
         {#each app.conflicts as c, i (c)}
-          <button class="inline-link" onclick={() => app.open(c)}>{titleOf(c)}</button>{i < app.conflicts.length - 1 ? ", " : "."}
+          <button class="link-btn" onclick={() => app.open(c)}>{titleOf(c)}</button>{i < app.conflicts.length - 1 ? ", " : "."}
         {/each}
         Open each copy, keep what you need in the note, then move the copy to the trash.
       </p>
@@ -375,8 +375,8 @@
         {/if}
         {@render conflictsBanner()}
         {#if subView}
-          <button class="up" onclick={() => (app.tab = subView.parent)}>
-            <ChevronLeft size={20} /> {subView.parentLabel}
+          <button class="back up" onclick={() => (app.tab = subView.parent)}>
+            <ChevronLeft size={22} /> {subView.parentLabel}
           </button>
         {/if}
         {#if app.tab === "notes"}
@@ -486,7 +486,7 @@
   }
   kbd {
     font: inherit;
-    font-size: calc(12px * var(--text-scale));
+    font-size: var(--text-xs);
     color: var(--graphite);
   }
   .side-nav {
@@ -534,7 +534,7 @@
     min-height: 0;
   }
   .mac .main :global(.bar) {
-    padding-top: 30px;
+    padding-top: 32px;
   }
   .scroll {
     flex: 1;
@@ -549,7 +549,7 @@
     min-height: 0;
   }
   .mac .graph-host {
-    padding-top: 22px;
+    padding-top: 20px;
   }
   .phone-graph {
     height: 100%;
@@ -605,7 +605,7 @@
     overflow-x: hidden;
   }
   .mac .today-col {
-    padding-top: 22px;
+    padding-top: 20px;
   }
   .empty {
     flex: 1;
@@ -620,7 +620,7 @@
   }
   .empty-title {
     margin: 0;
-    font-size: 1.6rem;
+    font-size: var(--text-xl);
     font-weight: 650;
     letter-spacing: -0.01em;
     line-height: 1.2;
@@ -644,7 +644,7 @@
     background: color-mix(in srgb, var(--amber) 14%, var(--sheet));
   }
   .mac .main > .banner:first-child {
-    margin-top: 34px;
+    margin-top: 32px;
   }
   .banner.conflict {
     background: color-mix(in srgb, var(--alarm) 12%, var(--sheet));
@@ -654,14 +654,6 @@
     margin: 0;
     font-size: var(--small);
   }
-  .inline-link {
-    border: 0;
-    background: none;
-    padding: 0;
-    color: var(--papyrus);
-    text-decoration: underline;
-    font-size: inherit;
-  }
   .switcher {
     width: min(620px, calc(100vw - 32px));
     margin-top: 14vh;
@@ -670,10 +662,10 @@
     border-radius: var(--radius-lg);
     background: var(--sheet);
     color: var(--ink);
-    box-shadow: 0 24px 60px rgb(0 0 0 / 0.22);
+    box-shadow: var(--shadow-modal);
   }
   .switcher::backdrop {
-    background: rgb(0 0 0 / 0.25);
+    background: var(--scrim);
   }
 
   /* Phone */
@@ -691,11 +683,11 @@
     display: flex;
     flex-direction: column;
     transform: translateX(var(--swipe, 0));
-    transition: transform 200ms ease-out;
+    transition: transform var(--dur-base) var(--ease-out);
   }
   .note-host.swiping {
     transition: none;
-    box-shadow: -8px 0 24px rgb(0 0 0 / 0.15);
+    box-shadow: -8px 0 24px rgb(0 0 0 / 0.15); /* the edge of the page being swiped away */
   }
   .note-host > :global(.note) {
     flex: 1;
@@ -736,16 +728,7 @@
     padding: 0 20px 10px max(20px, var(--safe-left));
   }
   .up {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    min-height: var(--target);
-    margin: 4px 0 -8px 8px;
-    padding: 0 8px 0 0;
-    border: 0;
-    background: none;
-    color: var(--graphite);
-    font-size: calc(16px * var(--text-scale));
+    margin: var(--space-1) 0 calc(-1 * var(--space-2)) var(--space-2);
   }
 
   /* Bottom bar: three places and the new-note button. */
@@ -776,7 +759,7 @@
     border: 0;
     background: none;
     color: var(--graphite);
-    font-size: calc(11px * var(--text-scale));
+    font-size: var(--text-2xs);
     font-weight: 500;
   }
   .bar button.active {
@@ -788,7 +771,7 @@
     height: 48px;
     min-height: 0;
     place-items: center;
-    border-radius: 14px;
+    border-radius: var(--radius-lg);
     background: var(--papyrus);
     color: var(--on-papyrus);
   }
@@ -837,9 +820,9 @@
     min-height: 0;
     border-radius: 999px;
     color: var(--ink);
-    font-size: calc(10px * var(--text-scale));
+    font-size: var(--text-2xs);
     font-weight: 600;
-    transition: background 150ms ease-out;
+    transition: background var(--dur-quick) var(--ease-out);
   }
   .glassbar .tabs button.active {
     color: var(--papyrus);
