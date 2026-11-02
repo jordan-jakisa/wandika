@@ -508,10 +508,12 @@
     background: none;
     color: var(--graphite);
   }
-  .add:hover,
-  .add-lane:hover {
-    background: var(--papyrus-wash);
-    color: var(--ink);
+  @media (hover: hover) {
+    .add:hover,
+    .add-lane:hover {
+      background: var(--papyrus-wash);
+      color: var(--ink);
+    }
   }
   .add-lane {
     flex: 0 0 auto;

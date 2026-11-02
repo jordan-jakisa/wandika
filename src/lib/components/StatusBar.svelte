@@ -72,7 +72,9 @@
   .warn {
     color: var(--amber);
   }
-  .warn:hover {
-    color: var(--ink);
+  @media (hover: hover) {
+    .warn:hover {
+      color: var(--ink);
+    }
   }
 </style>

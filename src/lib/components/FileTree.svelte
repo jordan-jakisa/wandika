@@ -263,9 +263,13 @@
     align-items: center;
     border-radius: var(--radius-sm);
   }
-  .row:hover,
   .row:focus-within {
     background: var(--papyrus-wash);
+  }
+  @media (hover: hover) {
+    .row:hover {
+      background: var(--papyrus-wash);
+    }
   }
   .row.current {
     background: color-mix(in srgb, var(--papyrus) 16%, transparent);
@@ -357,7 +361,9 @@
     color: var(--graphite);
     font-size: var(--small);
   }
-  .new-folder:hover {
-    color: var(--ink);
+  @media (hover: hover) {
+    .new-folder:hover {
+      color: var(--ink);
+    }
   }
 </style>

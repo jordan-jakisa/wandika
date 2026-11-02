@@ -161,8 +161,10 @@
     border-radius: var(--radius-sm);
     background: none;
   }
-  li button:hover {
-    background: var(--papyrus-wash);
+  @media (hover: hover) {
+    li button:hover {
+      background: var(--papyrus-wash);
+    }
   }
   .name {
     display: flex;

@@ -52,8 +52,10 @@
     color: var(--graphite);
     text-align: left;
   }
-  .sync:hover:not(:disabled) {
-    color: var(--ink);
+  @media (hover: hover) {
+    .sync:hover:not(:disabled) {
+      color: var(--ink);
+    }
   }
   .sync:disabled {
     cursor: default;

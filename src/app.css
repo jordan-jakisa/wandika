@@ -165,16 +165,20 @@ a {
   font-weight: 500;
   white-space: nowrap;
 }
-.btn:hover {
-  border-color: var(--graphite);
+@media (hover: hover) {
+  .btn:hover {
+    border-color: var(--graphite);
+  }
 }
 .btn.primary {
   background: var(--papyrus);
   border-color: var(--papyrus);
   color: var(--on-papyrus);
 }
-.btn.primary:hover {
-  filter: brightness(1.08);
+@media (hover: hover) {
+  .btn.primary:hover {
+    filter: brightness(1.08);
+  }
 }
 .btn.danger {
   color: var(--alarm);
@@ -194,9 +198,11 @@ a {
   background: none;
   color: var(--graphite);
 }
-.icon-btn:hover {
-  background: var(--papyrus-wash);
-  color: var(--ink);
+@media (hover: hover) {
+  .icon-btn:hover {
+    background: var(--papyrus-wash);
+    color: var(--ink);
+  }
 }
 @media (pointer: coarse) {
   .icon-btn {

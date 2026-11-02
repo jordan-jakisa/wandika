@@ -101,8 +101,10 @@
     text-decoration: underline;
     text-underline-offset: 2px;
   }
-  .where:hover {
-    color: var(--papyrus);
+  @media (hover: hover) {
+    .where:hover {
+      color: var(--papyrus);
+    }
   }
   .overdue {
     color: var(--alarm);

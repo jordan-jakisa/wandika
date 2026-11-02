@@ -202,8 +202,10 @@
     color: var(--graphite);
     text-align: left;
   }
-  .vault-row:hover {
-    background: var(--papyrus-wash);
+  @media (hover: hover) {
+    .vault-row:hover {
+      background: var(--papyrus-wash);
+    }
   }
   .grow {
     flex: 1;
@@ -228,7 +230,9 @@
     white-space: normal;
     text-align: left;
   }
-  .quiet:hover {
-    color: var(--ink);
+  @media (hover: hover) {
+    .quiet:hover {
+      color: var(--ink);
+    }
   }
 </style>

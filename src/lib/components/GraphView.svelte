@@ -619,8 +619,10 @@
     color: var(--ink);
     font-size: 12px;
   }
-  .group:hover {
-    background: var(--papyrus-wash);
+  @media (hover: hover) {
+    .group:hover {
+      background: var(--papyrus-wash);
+    }
   }
   .group.dim {
     opacity: 0.45;
