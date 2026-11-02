@@ -9,6 +9,7 @@ import { tags as t } from "@lezer/highlight";
 import type { NoteMeta } from "../types";
 import { diagrams, diagramTheme } from "./diagrams";
 import { livePreview } from "./livePreview";
+import { tables, tableTheme } from "./tables";
 
 const highlight = HighlightStyle.define([
   { tag: t.url, color: "var(--graphite)" },
@@ -126,8 +127,10 @@ export function extensions(opts: {
     placeholder("Start writing. Type [[ to link a note."),
     livePreview(opts.onOpenLink, opts.onTag),
     diagrams,
+    tables(opts.onOpenLink),
     theme,
     diagramTheme,
+    tableTheme,
     EditorView.contentAttributes.of({ spellcheck: "true", autocorrect: "on", autocapitalize: "sentences" }),
     EditorView.updateListener.of((u) => {
       if (u.docChanged) opts.onChange(u.state.doc.toString());

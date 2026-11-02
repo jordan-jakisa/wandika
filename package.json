@@ -11,7 +11,7 @@
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "tauri": "tauri",
-    "test": "node --test src/lib/*.test.ts"
+    "test": "node --test src/lib/*.test.ts src/lib/**/*.test.ts"
   },
   "license": "UNLICENSED",
   "dependencies": {

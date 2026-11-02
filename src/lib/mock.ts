@@ -37,6 +37,10 @@ const notes = new Map<string, string>([
     "Projects/Sync design.md",
     "How a change travels between devices.\n\n```mermaid\nflowchart LR\n  A[Edit on Mac] --> B[Save to disk]\n  B --> C{Changed on GitHub too?}\n  C -- no --> D[Push commit]\n  C -- yes --> E[Three-way merge]\n  E --> D\n  D --> F[Phone pulls]\n```\n\n```mermaid\npie title Notes by folder\n  \"Daily\" : 42\n  \"Projects\" : 18\n  \"Mail\" : 9\n```\n",
   ],
+  [
+    "START_HERE.md",
+    "The dashboard is [[Welcome]]. Open that.\n\n## Vault layout (PARA-ish)\n\n| Folder | Purpose | When to add here |\n|---|---|---|\n| `00_Inbox/` | Capture | Anything you don't want to think about right now. **Triage to empty weekly.** |\n| `01_Atlas/` | Knowledge base + MOCs | Cross-cutting maps, journals |\n| `02_Projects/` | Active work | When you start something with a clear \"done\" #para |\n\n## Conventions\n\nOne concept per file.\n",
+  ],
   ["Reading list.md", "# Reading list\n\n- The Elements of Typographic Style\n- [[Projects/Wandika]] notes on sync #reading\n"],
   [
     "Daily/" + iso(today) + ".md",
