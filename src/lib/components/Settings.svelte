@@ -1,25 +1,80 @@
 <script lang="ts">
-  import { X } from "@lucide/svelte";
+  import {
+    ChevronLeft,
+    ChevronRight,
+    Cloud,
+    FolderOpen,
+    HardDrive,
+    Info,
+    KeyRound,
+    Lock,
+    Paintbrush,
+    Plug,
+    Type,
+    UserRound,
+    X,
+  } from "@lucide/svelte";
   import { api, openUrl } from "../api";
-  import { ago, app } from "../app.svelte";
+  import { ago, app, type SettingsSection } from "../app.svelte";
+  import { ACCENTS, FONTS, WIDTHS, prefs, type NoteFont, type Theme, type Width } from "../prefs.svelte";
   import type { AppleAccess } from "../types";
   import GitHubSignIn from "./GitHubSignIn.svelte";
   import RepoPicker from "./RepoPicker.svelte";
   import Unlock from "./Unlock.svelte";
-  import { ACCENTS, FONTS, WIDTHS, prefs, type NoteFont, type Theme, type Width } from "../prefs.svelte";
+
+  const SECTIONS: { id: SettingsSection; label: string; icon: typeof Cloud }[] = [
+    { id: "vault", label: "Vault", icon: HardDrive },
+    { id: "appearance", label: "Appearance", icon: Paintbrush },
+    { id: "editor", label: "Editor", icon: Type },
+    { id: "encryption", label: "Encryption", icon: KeyRound },
+    { id: "connections", label: "Connections", icon: Plug },
+    { id: "account", label: "Account", icon: UserRound },
+    { id: "about", label: "About", icon: Info },
+  ];
 
   let dialogEl: HTMLDialogElement;
+  let width = $state(typeof window === "undefined" ? 1200 : window.innerWidth);
+  const phone = $derived(width < 700);
+  /** On phones the category list is its own screen; `null` shows it. */
+  let phoneSection = $state<SettingsSection | null>(null);
+  const section = $derived(phone ? phoneSection : app.settingsSection);
+
   let device = $state<{ user_code: string; verification_uri: string } | null>(null);
   let waiting = $state<string | null>(null);
   let pollTimer: ReturnType<typeof setTimeout> | undefined;
+  let connecting = $state(false);
+  const defaultSize = typeof window !== "undefined" && window.innerWidth < 900 ? 17 : 18;
 
   $effect(() => {
-    if (app.settingsOpen && !dialogEl.open) dialogEl.showModal();
+    if (app.settingsOpen && !dialogEl.open) {
+      phoneSection = app.settingsDirect ? app.settingsSection : null;
+      dialogEl.showModal();
+    }
     if (!app.settingsOpen && dialogEl.open) dialogEl.close();
   });
 
-  let connecting = $state(false);
-  const defaultSize = typeof window !== "undefined" && window.innerWidth < 900 ? 17 : 18;
+  function go(id: SettingsSection) {
+    app.settingsSection = id;
+    phoneSection = id;
+    connecting = false;
+  }
+
+  function close() {
+    clearTimeout(pollTimer);
+    connecting = false;
+    device = null;
+    waiting = null;
+    app.settingsOpen = false;
+  }
+
+  const s = $derived(app.status);
+  const c = $derived(s?.connectors);
+  const appleText: Record<AppleAccess, string> = {
+    granted: "Allowed on this device",
+    not_asked: "Not connected",
+    denied: "Turned off in system Settings, under Privacy",
+    unsupported: "Only on iPhone and Mac",
+  };
 
   async function toggleSnippet(name: string, enabled: boolean) {
     try {
@@ -57,23 +112,6 @@
     if (ok === null) return;
     await app.signOut();
   }
-
-  function close() {
-    clearTimeout(pollTimer);
-    connecting = false;
-    device = null;
-    waiting = null;
-    app.settingsOpen = false;
-  }
-
-  const s = $derived(app.status);
-  const c = $derived(s?.connectors);
-  const appleText: Record<AppleAccess, string> = {
-    granted: "Allowed on this device",
-    not_asked: "Not connected",
-    denied: "Turned off in Settings, under Privacy",
-    unsupported: "Only on iPhone and Mac",
-  };
 
   async function connect(provider: string) {
     waiting = provider;
@@ -131,315 +169,531 @@
     await app.refreshFiles();
     if (app.current?.endsWith(".age")) app.current = null;
   }
+
+  const SHORTCUTS = [
+    ["⌘K", "Search or create a note"],
+    ["⌘N", "New note"],
+    ["⌘D", "Today's note"],
+    ["⌘S", "Sync now"],
+    ["⌘,", "Settings"],
+    ["⌘F", "Find in note"],
+    ["[[", "Link a note"],
+  ];
+
+  const label = (id: SettingsSection | null) => SECTIONS.find((x) => x.id === id)?.label ?? "Settings";
 </script>
 
-<dialog bind:this={dialogEl} oncancel={close} aria-labelledby="settings-title" class="settings">
-  <header>
-    <h2 id="settings-title">Settings</h2>
-    <button class="icon-btn" onclick={close} aria-label="Close settings"><X size={20} /></button>
-  </header>
+<svelte:window bind:innerWidth={width} />
 
-  <div class="body">
-    <section aria-labelledby="vault-h">
-      <h3 id="vault-h">Vault</h3>
-      <div class="row">
-        <div class="grow">
-          <div>{app.vault?.name}</div>
-          <div class="muted small">
-            {#if app.vault?.remote}
-              Syncs with {app.vault.remote.owner}/{app.vault.remote.repo}. Synced {ago(app.lastSync)}.
-            {:else if app.vault?.folder}
-              Only on this device, in {app.vault.folder}.
-            {:else}
-              Only on this device.
-            {/if}
-          </div>
-        </div>
-      </div>
+{#snippet google()}
+  {@render connRow("Google", "Gmail, Calendar and Tasks", c?.google ?? null, "google", !!s?.configured.google, true)}
+{/snippet}
 
-      {#if connecting}
-        <div class="connect">
-          {#if !s?.user}
-            <p>Sign in with GitHub, then choose the repository to sync this vault with.</p>
-            <GitHubSignIn />
-          {:else}
-            <RepoPicker mode="connect" ondone={() => (connecting = false)} />
-          {/if}
-          <button class="btn" onclick={() => (connecting = false)}>Cancel</button>
-        </div>
-      {:else}
-        <div class="buttons">
-          {#if app.vault?.remote}
-            <button class="btn" onclick={() => app.sync()} disabled={app.syncing}>{app.syncing ? "Syncing…" : "Sync now"}</button>
-            <button class="btn" onclick={disconnectRemote}>Disconnect from GitHub</button>
-          {:else}
-            <button class="btn primary" onclick={() => (connecting = true)}>Connect to GitHub</button>
-          {/if}
-          <button class="btn" onclick={() => app.switchVault()}>Switch vault</button>
-        </div>
-      {/if}
-      {#if app.syncError && app.vault?.remote}<p class="error small">Last sync: {app.syncError}</p>{/if}
-    </section>
-
-    <section aria-labelledby="look-h">
-      <h3 id="look-h">Appearance</h3>
-      <p class="muted small">These choices are kept on this device.</p>
-
-      <div class="pref">
-        <span class="pref-label" id="theme-l">Theme</span>
-        <div class="segmented" role="radiogroup" aria-labelledby="theme-l">
-          {#each [["system", "System"], ["light", "Light"], ["dark", "Dark"]] as [id, label] (id)}
-            <button role="radio" aria-checked={prefs.value.theme === id} class:on={prefs.value.theme === id} onclick={() => prefs.set({ theme: id as Theme })}>{label}</button>
-          {/each}
-        </div>
-      </div>
-
-      <div class="pref">
-        <span class="pref-label" id="accent-l">Accent</span>
-        <div class="swatches" role="radiogroup" aria-labelledby="accent-l">
-          {#each ACCENTS as a (a.id)}
-            <button
-              role="radio"
-              aria-checked={prefs.value.accent === a.id}
-              aria-label={a.label}
-              title={a.label}
-              class="swatch"
-              class:on={prefs.value.accent === a.id}
-              style="--swatch: {prefs.mode === 'dark' ? a.dark : a.light}"
-              onclick={() => prefs.set({ accent: a.id })}
-            ></button>
-          {/each}
-        </div>
-      </div>
-
-      <div class="pref">
-        <span class="pref-label" id="font-l">Note font</span>
-        <div class="segmented" role="radiogroup" aria-labelledby="font-l">
-          {#each Object.entries(FONTS) as [id, f] (id)}
-            <button role="radio" aria-checked={prefs.value.font === id} class:on={prefs.value.font === id} style="font-family: {f.css}" onclick={() => prefs.set({ font: id as NoteFont })}>{f.label}</button>
-          {/each}
-        </div>
-      </div>
-
-      <div class="pref">
-        <label class="pref-label" for="size-r">Text size</label>
-        <div class="size">
-          <input
-            id="size-r"
-            type="range"
-            min="14"
-            max="24"
-            step="1"
-            value={prefs.value.size ?? defaultSize}
-            oninput={(e) => prefs.set({ size: Number((e.currentTarget as HTMLInputElement).value) })}
-          />
-          <span class="size-value">{prefs.value.size ?? defaultSize} px</span>
-          {#if prefs.value.size}<button class="link-btn" onclick={() => prefs.set({ size: null })}>Default</button>{/if}
-        </div>
-      </div>
-
-      <div class="pref">
-        <span class="pref-label" id="width-l">Line width</span>
-        <div class="segmented" role="radiogroup" aria-labelledby="width-l">
-          {#each Object.entries(WIDTHS) as [id, w] (id)}
-            <button role="radio" aria-checked={prefs.value.width === id} class:on={prefs.value.width === id} onclick={() => prefs.set({ width: id as Width })}>{w.label}</button>
-          {/each}
-        </div>
-      </div>
-
-      <div class="pref snippets">
-        <span class="pref-label">CSS snippets</span>
-        {#if app.snippets.length}
-          <ul>
-            {#each app.snippets as sn (sn.name)}
-              <li>
-                <label><input type="checkbox" checked={sn.enabled} onchange={(e) => toggleSnippet(sn.name, (e.currentTarget as HTMLInputElement).checked)} /> {sn.name}</label>
-              </li>
-            {/each}
-          </ul>
+{#snippet connRow(name: string, what: string, account: string | null, provider: string, configured: boolean, canDisconnect: boolean)}
+  <div class="row">
+    <div class="row-text">
+      <span class="row-label">{name}</span>
+      <span class="row-desc">
+        {#if !configured}
+          {provider === "google" && /Android/.test(navigator.userAgent)
+            ? "Not available on Android yet. Connect Google on your Mac or iPhone."
+            : "Not set up in this build. See docs/setup.md."}
+        {:else if account}
+          {account}
         {:else}
-          <p class="muted small">Put .css files in the vault's .obsidian/snippets folder, then reload. They sync with the vault.</p>
+          {what}
         {/if}
-        <button class="link-btn" onclick={() => app.loadSnippets()}>Reload snippets</button>
-      </div>
-
-      <button class="btn" onclick={() => prefs.reset()}>Reset appearance</button>
-    </section>
-
-    <section aria-labelledby="enc-h">
-      <h3 id="enc-h">Encryption</h3>
-      {#if s?.encryption?.set_up && s.encryption.unlocked}
-        <p class="muted">
-          Encrypted notes are unlocked on this device.
-          {#if s.encryption.folders.length}Encrypted folders: {s.encryption.folders.join(", ")}.{/if}
-          Encrypt a note or folder from its menu.
-        </p>
-        <button class="btn" onclick={lock}>Lock encrypted notes</button>
-      {:else}
-        <p class="muted">
-          Encrypted notes are stored as age files on GitHub and on your devices. Only your passphrase opens them,
-          and they also open with the age command-line tool.
-        </p>
-        <Unlock context="settings" />
-      {/if}
-    </section>
-
-    <section aria-labelledby="conn-h">
-      <h3 id="conn-h">Connections</h3>
-      <p class="muted">Your calendar, inbox and task lists appear in Today. Wandika reads mail and calendars; it never sends or changes them.</p>
-
-      {#snippet connection(name: string, detail: string, connected: boolean, provider: string, configured: boolean, canDisconnect = true)}
-        <div class="conn">
-          <div class="grow">
-            <div>{name}</div>
-            <div class="muted small">{configured ? detail : provider === "google" && /Android/.test(navigator.userAgent) ? "Not available on Android yet. Connect Google on your Mac or iPhone." : "Not set up in this build. See docs/setup.md."}</div>
-          </div>
-          {#if connected && canDisconnect}
-            <button class="btn" onclick={() => disconnect(provider)}>Disconnect</button>
-          {:else if !connected && configured}
-            <button class="btn" onclick={() => connect(provider)} disabled={waiting === provider}>
-              {waiting === provider ? "Waiting…" : "Connect"}
-            </button>
-          {/if}
-        </div>
-      {/snippet}
-
-      {@render connection("Google", c?.google ?? "Gmail, Calendar and Tasks", !!c?.google, "google", !!s?.configured.google)}
-      {@render connection("Outlook", c?.microsoft ?? "Outlook mail and calendar", !!c?.microsoft, "microsoft", !!s?.configured.microsoft)}
-
-      {#if device}
-        <div class="device" role="status">
-          <p>Enter this code on Microsoft's sign-in page:</p>
-          <p class="code">{device.user_code}</p>
-          <button class="btn primary" onclick={copyAndOpen}>Copy code and open Microsoft</button>
-        </div>
-      {/if}
-
-      {@render connection("Apple Calendar", appleText[c?.apple_calendar ?? "unsupported"], c?.apple_calendar === "granted", "apple_calendar", c?.apple_calendar === "not_asked" || c?.apple_calendar === "granted", false)}
-      {@render connection("Apple Reminders", appleText[c?.apple_reminders ?? "unsupported"], c?.apple_reminders === "granted", "apple_reminders", c?.apple_reminders === "not_asked" || c?.apple_reminders === "granted", false)}
-    </section>
-    {#if s?.user}
-      <section aria-labelledby="gh-h">
-        <h3 id="gh-h">GitHub</h3>
-        <div class="row">
-          {#if s.user.avatar_url}<img src={s.user.avatar_url} alt="" width="36" height="36" />{/if}
-          <div class="grow">Signed in as {s.user.login}</div>
-          <button class="btn danger" onclick={signOut}>Sign out</button>
-        </div>
-      </section>
+      </span>
+    </div>
+    {#if account && canDisconnect}
+      <button class="btn" onclick={() => disconnect(provider)}>Disconnect</button>
+    {:else if !account && configured}
+      <button class="btn" onclick={() => connect(provider)} disabled={waiting === provider}>
+        {waiting === provider ? "Waiting…" : "Connect"}
+      </button>
     {/if}
   </div>
+{/snippet}
+
+{#snippet appleRow(name: string, kind: "apple_calendar" | "apple_reminders")}
+  {@const access = c?.[kind] ?? "unsupported"}
+  <div class="row">
+    <div class="row-text">
+      <span class="row-label">{name}</span>
+      <span class="row-desc">{appleText[access]}</span>
+    </div>
+    {#if access === "not_asked"}
+      <button class="btn" onclick={() => connect(kind)} disabled={waiting === kind}>{waiting === kind ? "Waiting…" : "Connect"}</button>
+    {/if}
+  </div>
+{/snippet}
+
+<dialog bind:this={dialogEl} oncancel={close} aria-labelledby="settings-title" class="settings" class:phone>
+  {#if !phone || section === null}
+    <nav class="sections" aria-label="Settings sections">
+      <header class="nav-head">
+        <h2 id="settings-title">Settings</h2>
+        {#if phone}<button class="icon-btn" onclick={close} aria-label="Close settings"><X size={20} /></button>{/if}
+      </header>
+      <ul>
+        {#each SECTIONS as sec (sec.id)}
+          <li>
+            <button class:on={!phone && section === sec.id} aria-current={!phone && section === sec.id ? "page" : undefined} onclick={() => go(sec.id)}>
+              <sec.icon size={17} />
+              <span>{sec.label}</span>
+              {#if phone}<ChevronRight size={16} class="chev" />{/if}
+            </button>
+          </li>
+        {/each}
+      </ul>
+    </nav>
+  {/if}
+
+  {#if section}
+    <div class="pane">
+      <header class="pane-head">
+        {#if phone}
+          <button class="icon-btn" onclick={() => (phoneSection = null)} aria-label="All settings"><ChevronLeft size={22} /></button>
+        {/if}
+        <h3>{label(section)}</h3>
+        <button class="icon-btn" onclick={close} aria-label="Close settings"><X size={20} /></button>
+      </header>
+
+      <div class="pane-body">
+        {#if section === "vault"}
+          <div class="group">
+            <div class="row">
+              <div class="row-text">
+                <span class="row-label">{app.vault?.name}</span>
+                <span class="row-desc">
+                  {#if app.vault?.folder}<FolderOpen size={13} /> {app.vault.folder}{:else}<HardDrive size={13} /> In Wandika's storage on this device{/if}
+                </span>
+              </div>
+              <button class="btn" onclick={() => app.switchVault()}>Switch vault</button>
+            </div>
+          </div>
+
+          <h4>Sync</h4>
+          <div class="group">
+            {#if connecting}
+              <div class="row stack">
+                {#if !s?.user}
+                  <p class="row-desc">Sign in with GitHub, then choose the repository to sync this vault with.</p>
+                  <GitHubSignIn />
+                {:else}
+                  <RepoPicker mode="connect" ondone={() => (connecting = false)} />
+                {/if}
+                <button class="btn" onclick={() => (connecting = false)}>Cancel</button>
+              </div>
+            {:else if app.vault?.remote}
+              <div class="row">
+                <div class="row-text">
+                  <span class="row-label"><Cloud size={14} /> {app.vault.remote.owner}/{app.vault.remote.repo}</span>
+                  <span class="row-desc">Synced {ago(app.lastSync)}. Changes sync a few seconds after you stop typing.</span>
+                </div>
+                <button class="btn" onclick={() => app.sync()} disabled={app.syncing}>{app.syncing ? "Syncing…" : "Sync now"}</button>
+              </div>
+              {#if app.syncError}<div class="row"><span class="error small">Last sync: {app.syncError}</span></div>{/if}
+              <div class="row">
+                <div class="row-text">
+                  <span class="row-label">Disconnect from GitHub</span>
+                  <span class="row-desc">Stops syncing. Notes stay here and on GitHub.</span>
+                </div>
+                <button class="btn" onclick={disconnectRemote}>Disconnect</button>
+              </div>
+            {:else}
+              <div class="row">
+                <div class="row-text">
+                  <span class="row-label">Only on this device</span>
+                  <span class="row-desc">Connect a GitHub repository to sync this vault to your other devices.</span>
+                </div>
+                <button class="btn primary" onclick={() => (connecting = true)}>Connect to GitHub</button>
+              </div>
+            {/if}
+          </div>
+        {:else if section === "appearance"}
+          <h4>Colours</h4>
+          <div class="group">
+            <div class="row">
+              <span class="row-label" id="theme-l">Theme</span>
+              <div class="segmented" role="radiogroup" aria-labelledby="theme-l">
+                {#each [["system", "System"], ["light", "Light"], ["dark", "Dark"]] as [id, text] (id)}
+                  <button role="radio" aria-checked={prefs.value.theme === id} class:on={prefs.value.theme === id} onclick={() => prefs.set({ theme: id as Theme })}>{text}</button>
+                {/each}
+              </div>
+            </div>
+            <div class="row">
+              <span class="row-label" id="accent-l">Accent</span>
+              <div class="swatches" role="radiogroup" aria-labelledby="accent-l">
+                {#each ACCENTS as a (a.id)}
+                  <button
+                    role="radio"
+                    aria-checked={prefs.value.accent === a.id}
+                    aria-label={a.label}
+                    title={a.label}
+                    class="swatch"
+                    class:on={prefs.value.accent === a.id}
+                    style="--swatch: {prefs.mode === 'dark' ? a.dark : a.light}"
+                    onclick={() => prefs.set({ accent: a.id })}
+                  ></button>
+                {/each}
+              </div>
+            </div>
+          </div>
+          <p class="note">Kept on this device, so each device can look different.</p>
+
+          <h4>CSS snippets</h4>
+          <div class="group">
+            {#each app.snippets as sn (sn.name)}
+              <label class="row">
+                <span class="row-label">{sn.name}</span>
+                <input type="checkbox" class="toggle" checked={sn.enabled} onchange={(e) => toggleSnippet(sn.name, (e.currentTarget as HTMLInputElement).checked)} />
+              </label>
+            {:else}
+              <div class="row"><span class="row-desc">No snippets yet. Add .css files to the vault's .obsidian/snippets folder.</span></div>
+            {/each}
+          </div>
+          <p class="note">
+            Snippets live in the vault and sync with it.
+            <button class="link-btn" onclick={() => app.loadSnippets()}>Reload snippets</button>
+          </p>
+
+          <div class="footer-actions">
+            <button class="btn" onclick={() => prefs.reset()}>Reset appearance and editor</button>
+          </div>
+        {:else if section === "editor"}
+          <h4>Text</h4>
+          <div class="group">
+            <div class="row">
+              <span class="row-label" id="font-l">Font</span>
+              <div class="segmented" role="radiogroup" aria-labelledby="font-l">
+                {#each Object.entries(FONTS) as [id, f] (id)}
+                  <button role="radio" aria-checked={prefs.value.font === id} class:on={prefs.value.font === id} style="font-family: {f.css}" onclick={() => prefs.set({ font: id as NoteFont })}>{f.label}</button>
+                {/each}
+              </div>
+            </div>
+            <div class="row">
+              <label class="row-label" for="size-r">Size</label>
+              <div class="size">
+                <input
+                  id="size-r"
+                  type="range"
+                  min="14"
+                  max="24"
+                  step="1"
+                  value={prefs.value.size ?? defaultSize}
+                  oninput={(e) => prefs.set({ size: Number((e.currentTarget as HTMLInputElement).value) })}
+                />
+                <span class="size-value">{prefs.value.size ?? defaultSize} px</span>
+              </div>
+            </div>
+            <div class="row">
+              <span class="row-label" id="width-l">Line width</span>
+              <div class="segmented" role="radiogroup" aria-labelledby="width-l">
+                {#each Object.entries(WIDTHS) as [id, w] (id)}
+                  <button role="radio" aria-checked={prefs.value.width === id} class:on={prefs.value.width === id} onclick={() => prefs.set({ width: id as Width })}>{w.label}</button>
+                {/each}
+              </div>
+            </div>
+          </div>
+          <p class="note">
+            Kept on this device.
+            {#if prefs.value.size}<button class="link-btn" onclick={() => prefs.set({ size: null })}>Use the default size</button>{/if}
+          </p>
+        {:else if section === "encryption"}
+          {#if s?.encryption?.set_up && s.encryption.unlocked}
+            <div class="group">
+              <div class="row">
+                <div class="row-text">
+                  <span class="row-label"><Lock size={14} /> Unlocked on this device</span>
+                  <span class="row-desc">
+                    {#if s.encryption.folders.length}Encrypted folders: {s.encryption.folders.join(", ")}.{:else}Encrypt a note or folder from its menu.{/if}
+                  </span>
+                </div>
+                <button class="btn" onclick={lock}>Lock</button>
+              </div>
+            </div>
+          {:else}
+            <div class="group"><div class="row stack"><Unlock context="settings" /></div></div>
+          {/if}
+          <p class="note">
+            Encrypted notes are stored as age files on GitHub and on your devices. Only your passphrase opens them, and
+            they also open with the age command-line tool.
+          </p>
+        {:else if section === "connections"}
+          <h4>Mail and calendars</h4>
+          <div class="group">
+            {@render google()}
+            {@render connRow("Outlook", "Outlook mail and calendar", c?.microsoft ?? null, "microsoft", !!s?.configured.microsoft, true)}
+            {#if device}
+              <div class="row stack device" role="status">
+                <span class="row-desc">Enter this code on Microsoft's sign-in page:</span>
+                <span class="code">{device.user_code}</span>
+                <button class="btn primary" onclick={copyAndOpen}>Copy code and open Microsoft</button>
+              </div>
+            {/if}
+          </div>
+          <h4>On this device</h4>
+          <div class="group">
+            {@render appleRow("Apple Calendar", "apple_calendar")}
+            {@render appleRow("Apple Reminders", "apple_reminders")}
+          </div>
+          <p class="note">Connected sources appear in Today. Wandika reads mail and calendars; it never sends or changes them.</p>
+        {:else if section === "account"}
+          <div class="group">
+            {#if s?.user}
+              <div class="row">
+                <div class="row-text account">
+                  {#if s.user.avatar_url}<img src={s.user.avatar_url} alt="" width="36" height="36" />{/if}
+                  <span>
+                    <span class="row-label">{s.user.name ?? s.user.login}</span>
+                    <span class="row-desc">GitHub: {s.user.login}</span>
+                  </span>
+                </div>
+                <button class="btn danger" onclick={signOut}>Sign out</button>
+              </div>
+            {:else}
+              <div class="row stack">
+                <span class="row-desc">Not signed in. Sign in to sync vaults through GitHub.</span>
+                <GitHubSignIn />
+              </div>
+            {/if}
+          </div>
+        {:else if section === "about"}
+          <div class="group">
+            <div class="row">
+              <span class="row-label">Wandika</span>
+              <span class="row-desc">Version 0.1.0</span>
+            </div>
+            <div class="row">
+              <span class="row-label">Source</span>
+              <button class="link-btn" onclick={() => openUrl("https://github.com/jordan-jakisa/wandika")}>github.com/jordan-jakisa/wandika</button>
+            </div>
+          </div>
+          <h4>Keyboard shortcuts</h4>
+          <div class="group">
+            {#each SHORTCUTS as [keys, what] (keys)}
+              <div class="row">
+                <span class="row-label">{what}</span>
+                <kbd>{keys}</kbd>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    </div>
+  {/if}
 </dialog>
 
 <style>
   .settings {
-    width: min(560px, 100vw);
-    max-height: min(760px, 100dvh);
+    width: min(780px, calc(100vw - 32px));
+    height: min(600px, calc(100dvh - 48px));
     padding: 0;
     border: 1px solid var(--rule);
     border-radius: var(--radius-lg);
     background: var(--sheet);
     color: var(--ink);
     box-shadow: 0 24px 60px rgb(0 0 0 / 0.2);
+    overflow: hidden;
   }
   .settings[open] {
+    display: grid;
+    grid-template-columns: 200px minmax(0, 1fr);
+  }
+  .settings.phone[open] {
     display: flex;
     flex-direction: column;
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
   }
   .settings::backdrop {
     background: rgb(0 0 0 / 0.35);
   }
-  @media (max-width: 599px) {
-    .settings {
-      max-width: 100vw;
-      width: 100vw;
-      height: 100dvh;
-      max-height: 100dvh;
-      margin: 0;
-      border-radius: 0;
-      border: 0;
-    }
+
+  .sections {
+    background: var(--paper);
+    border-right: 1px solid var(--rule);
+    overflow-y: auto;
   }
-  header {
+  .phone .sections {
+    flex: 1;
+    border: 0;
+    background: var(--sheet);
+  }
+  .nav-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: calc(14px + var(--safe-top)) 14px 10px 22px;
-    border-bottom: 1px solid var(--rule);
+    padding: 18px 16px 10px;
+  }
+  .phone .nav-head {
+    padding: calc(14px + var(--safe-top)) 12px 10px 20px;
   }
   h2 {
     margin: 0;
     font-size: 1.15rem;
+    font-weight: 650;
+  }
+  .sections ul {
+    list-style: none;
+    margin: 0;
+    padding: 0 8px 12px;
+  }
+  .sections button {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 34px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--ink);
+    text-align: left;
+  }
+  .sections button span {
+    flex: 1;
+  }
+  .sections button:hover {
+    background: var(--papyrus-wash);
+  }
+  .sections button.on {
+    background: color-mix(in srgb, var(--papyrus) 16%, transparent);
     font-weight: 600;
   }
-  .body {
+  .phone .sections button {
+    min-height: var(--target);
+    padding: 0 12px;
+  }
+  .sections :global(svg) {
+    color: var(--graphite);
+    flex: none;
+  }
+
+  .pane {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+  }
+  .phone .pane {
+    flex: 1;
+  }
+  .pane-head {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 12px 12px 4px 24px;
+  }
+  .phone .pane-head {
+    padding: calc(10px + var(--safe-top)) 8px 4px 4px;
+  }
+  .pane-head h3 {
+    flex: 1;
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 650;
+  }
+  .pane-body {
+    flex: 1;
     overflow-y: auto;
-    padding: 4px 22px calc(24px + var(--safe-bottom));
+    padding: 8px 24px calc(28px + var(--safe-bottom));
   }
-  section {
-    padding: 18px 0;
+  .phone .pane-body {
+    padding: 8px 16px calc(28px + var(--safe-bottom));
   }
-  section + section {
+  h4 {
+    margin: 22px 0 8px 2px;
+    font-size: var(--small);
+    font-weight: 600;
+    color: var(--graphite);
+  }
+  .pane-body > .group:first-child {
+    margin-top: 10px;
+  }
+
+  /* One level of grouping: rows separated by hairlines inside a quiet container. */
+  .group {
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    background: var(--sheet);
+  }
+  .row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 52px;
+    padding: 10px 14px;
+  }
+  .row + .row {
     border-top: 1px solid var(--rule);
   }
-  h3 {
-    margin: 0 0 10px;
-    font-size: 1rem;
-    font-weight: 600;
+  .row.stack {
+    flex-direction: column;
+    align-items: flex-start;
   }
-  p {
-    margin: 0 0 12px;
+  .row.stack > :global(.picker),
+  .row.stack > :global(.unlock) {
+    width: 100%;
   }
-  .row,
-  .conn {
+  .row-text {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+  .row-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 500;
+  }
+  .row-desc {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: var(--small);
+    color: var(--graphite);
+    overflow-wrap: anywhere;
+  }
+  .account {
     display: flex;
     align-items: center;
     gap: 12px;
   }
-  .conn {
-    padding: 10px 0;
-  }
-  .row img {
+  .account img {
     border-radius: 50%;
   }
-  .grow {
-    flex: 1;
-    min-width: 0;
+  .account > span {
+    display: grid;
+  }
+  .note {
+    margin: 8px 2px 0;
+    font-size: var(--small);
+    color: var(--graphite);
+  }
+  .footer-actions {
+    margin-top: 24px;
   }
   .small {
     font-size: var(--small);
   }
-  .buttons {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 14px;
-  }
-  .pref {
-    display: grid;
-    grid-template-columns: 110px 1fr;
-    align-items: center;
-    gap: 8px 14px;
-    margin-bottom: 14px;
-  }
-  @media (max-width: 480px) {
-    .pref {
-      grid-template-columns: 1fr;
-    }
-  }
-  .pref-label {
-    font-size: var(--small);
-    color: var(--graphite);
-  }
   .segmented {
     display: inline-flex;
-    justify-self: start;
+    flex: none;
     border: 1px solid var(--rule);
     border-radius: var(--radius-sm);
     overflow: hidden;
   }
   .segmented button {
-    min-height: 34px;
+    min-height: 32px;
     padding: 0 12px;
     border: 0;
     background: var(--sheet);
@@ -456,11 +710,12 @@
   .swatches {
     display: flex;
     flex-wrap: wrap;
+    justify-content: flex-end;
     gap: 10px;
   }
   .swatch {
-    width: 28px;
-    height: 28px;
+    width: 26px;
+    height: 26px;
     border-radius: 50%;
     border: 2px solid var(--sheet);
     background: var(--swatch);
@@ -475,14 +730,22 @@
     gap: 10px;
   }
   .size input {
-    flex: 1;
-    max-width: 220px;
+    width: 180px;
     accent-color: var(--papyrus);
   }
   .size-value {
     font-size: var(--small);
     font-variant-numeric: tabular-nums;
     min-width: 3.5em;
+    text-align: right;
+  }
+  .toggle {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--papyrus);
+  }
+  label.row {
+    cursor: pointer;
   }
   .link-btn {
     border: 0;
@@ -490,53 +753,25 @@
     padding: 0;
     color: var(--papyrus);
     font-size: var(--small);
-    justify-self: start;
   }
-  .snippets {
-    align-items: start;
+  kbd {
+    font: inherit;
+    font-size: var(--small);
+    padding: 2px 8px;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-sm);
+    background: var(--paper);
+    color: var(--graphite);
   }
-  .snippets ul {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    gap: 6px;
-  }
-  .snippets label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .snippets input {
-    accent-color: var(--papyrus);
-  }
-  .snippets .link-btn {
-    grid-column: 2;
-  }
-  @media (max-width: 480px) {
-    .snippets .link-btn {
-      grid-column: 1;
-    }
-  }
-  .connect {
-    display: grid;
-    gap: 12px;
-    justify-items: start;
-  }
-  .connect > :global(.picker) {
-    width: 100%;
-  }
-  .device {
-    margin: 4px 0 10px;
-    padding: 14px;
-    border-radius: var(--radius);
-    background: var(--papyrus-wash);
-  }
-  .code {
+  .device .code {
     font-family: var(--font-note);
     font-size: 1.8rem;
     font-weight: 600;
     letter-spacing: 0.08em;
-    margin: 0 0 12px;
+  }
+  @media (max-width: 520px) {
+    .row {
+      flex-wrap: wrap;
+    }
   }
 </style>

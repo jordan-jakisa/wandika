@@ -21,7 +21,7 @@
 </script>
 
 {#if !app.synced}
-  <button class="sync" onclick={() => (app.settingsOpen = true)} title="Connect this vault to GitHub in Settings">
+  <button class="sync" onclick={() => (app.openSettings("vault"))} title="Connect this vault to GitHub in Settings">
     <span class="icon"><HardDrive size={13} /></span>
     <span>On this device only</span>
   </button>

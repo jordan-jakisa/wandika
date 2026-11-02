@@ -99,7 +99,7 @@
   async function encrypt(e: Entry, on: boolean) {
     const enc = app.status?.encryption;
     if (!enc?.set_up || !enc.unlocked) {
-      app.settingsOpen = true;
+      app.openSettings("encryption");
       app.say(enc?.set_up ? "Unlock encrypted notes first." : "Set up encryption in Settings first.");
       return;
     }

@@ -97,7 +97,7 @@
       <p class="muted">Loading your day…</p>
     {:else if !calendarConnected}
       <p class="muted">Connect a calendar to see today's events here.</p>
-      <button class="btn" onclick={() => (app.settingsOpen = true)}>Connect a calendar</button>
+      <button class="btn" onclick={() => (app.openSettings("connections"))}>Connect a calendar</button>
     {:else if !data?.events.length}
       <p class="muted">Nothing on your calendar today.</p>
     {:else}
@@ -168,7 +168,7 @@
     </div>
     {#if !mailConnected}
       <p class="muted">Connect Gmail or Outlook to save emails as notes.</p>
-      <button class="btn" onclick={() => (app.settingsOpen = true)}><Inbox size={16} /> Connect email</button>
+      <button class="btn" onclick={() => (app.openSettings("connections"))}><Inbox size={16} /> Connect email</button>
     {:else if !data?.mail.length && !loading}
       <p class="muted">Your inbox is empty.</p>
     {:else if data}
