@@ -22,12 +22,39 @@
   import SyncStatus from "./SyncStatus.svelte";
   import TasksView from "./TasksView.svelte";
   import TodayPanel from "./TodayPanel.svelte";
+  import Resizer from "./Resizer.svelte";
 
   let width = $state(typeof window === "undefined" ? 1200 : window.innerWidth);
   const wide = $derived(width >= 900);
   // A board needs the width; the Today column steps aside while one is open.
   const boardOpen = $derived(!!app.current && !!app.titles.find((t) => t.path === app.current)?.board);
-  const roomForToday = $derived(width >= 1180 && !boardOpen && !(app.tab === "graph" && !app.current));
+  // Column widths, dragged by their edges and kept per device.
+  const SIDEBAR = { initial: 268, min: 200, max: 420 };
+  const TODAY = { initial: 320, min: 260, max: 520 };
+  const LAYOUT_KEY = "wandika.layout";
+  const MAIN_MIN = 460;
+  let cols = $state(loadLayout());
+  function loadLayout() {
+    try {
+      const v = JSON.parse(localStorage.getItem(LAYOUT_KEY) ?? "{}");
+      return { sidebar: Number(v.sidebar) || SIDEBAR.initial, today: Number(v.today) || TODAY.initial };
+    } catch {
+      return { sidebar: SIDEBAR.initial, today: TODAY.initial };
+    }
+  }
+  function setCols(patch: Partial<typeof cols>) {
+    cols = { ...cols, ...patch };
+    try {
+      localStorage.setItem(LAYOUT_KEY, JSON.stringify(cols));
+    } catch {
+      /* private mode: widths reset next launch */
+    }
+  }
+  // On a narrow window the sidebar gives way first, so the note always keeps room.
+  const sidebarW = $derived(Math.max(SIDEBAR.min, Math.min(cols.sidebar, width - MAIN_MIN)));
+  const roomForToday = $derived(
+    width - sidebarW - cols.today >= MAIN_MIN && !boardOpen && !(app.tab === "graph" && !app.current),
+  );
   const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform) && !("ontouchend" in document);
 
   function onKey(e: KeyboardEvent) {
@@ -109,8 +136,22 @@
 {/snippet}
 
 {#if wide}
-  <div class="shell" class:mac={isMac} class:with-today={app.showToday && roomForToday}>
+  <div
+    class="shell"
+    class:mac={isMac}
+    class:with-today={app.showToday && roomForToday}
+    style="--sidebar: {sidebarW}px; --today: {cols.today}px"
+  >
     <aside class="sidebar" aria-label="Vault">
+      <Resizer
+        edge="right"
+        value={sidebarW}
+        min={SIDEBAR.min}
+        max={SIDEBAR.max}
+        initial={SIDEBAR.initial}
+        label="Resize the sidebar"
+        onchange={(w) => setCols({ sidebar: w })}
+      />
       <div class="side-head" data-tauri-drag-region>
         <div class="vault" data-tauri-drag-region>
           <span class="vault-name" title={app.vaultName}>{app.vault?.name}</span>
@@ -176,7 +217,16 @@
 
     {#if app.showToday && roomForToday}
       <aside class="today-col" aria-label="Today">
-        <TodayPanel />
+        <Resizer
+          edge="left"
+          value={cols.today}
+          min={TODAY.min}
+          max={Math.min(TODAY.max, width - sidebarW - MAIN_MIN)}
+          initial={TODAY.initial}
+          label="Resize the Today column"
+          onchange={(w) => setCols({ today: w })}
+        />
+        <div class="today-scroll"><TodayPanel /></div>
       </aside>
     {/if}
     <StatusBar />
@@ -241,6 +291,7 @@
     grid-template-columns: var(--sidebar) minmax(0, 1fr) var(--today);
   }
   .sidebar {
+    position: relative;
     display: flex;
     flex-direction: column;
     min-height: 0;
@@ -369,10 +420,19 @@
     padding-right: 52px;
   }
   .today-col {
+    position: relative;
     min-height: 0;
-    overflow-y: auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
     border-left: 1px solid var(--rule);
     background: var(--paper);
+  }
+  .today-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
   .mac .today-col {
     padding-top: 22px;
@@ -390,9 +450,9 @@
   }
   .empty-title {
     margin: 0;
-    font-family: var(--font-note);
-    font-size: 1.8rem;
-    font-weight: 600;
+    font-size: 1.6rem;
+    font-weight: 650;
+    letter-spacing: -0.01em;
     line-height: 1.2;
   }
   .empty-actions {
@@ -467,9 +527,9 @@
     padding: 12px 8px 4px max(20px, var(--safe-left));
   }
   .phone-head .vault-name {
-    font-family: var(--font-note);
-    font-size: 1.6rem;
-    font-weight: 620;
+    font-size: 1.5rem;
+    font-weight: 650;
+    letter-spacing: -0.01em;
   }
   .daily {
     display: flex;

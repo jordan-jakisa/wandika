@@ -79,6 +79,7 @@
     min-width: 0;
     display: grid;
     gap: 1px;
+    overflow-wrap: anywhere;
   }
   .done .text {
     color: var(--graphite);

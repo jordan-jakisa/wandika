@@ -199,6 +199,8 @@
 <style>
   .today {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
     gap: 28px;
     padding: 20px 20px calc(32px + var(--safe-bottom));
     align-content: start;
@@ -209,9 +211,9 @@
   }
   h2 {
     margin: 0;
-    font-family: var(--font-note);
-    font-size: 1.6rem;
-    font-weight: 600;
+    font-size: 1.45rem;
+    font-weight: 650;
+    letter-spacing: -0.01em;
     line-height: 1.2;
   }
   header .btn {
@@ -224,9 +226,10 @@
   }
   .section-head {
     display: flex;
+    flex-wrap: wrap;
     align-items: baseline;
     justify-content: space-between;
-    gap: 12px;
+    gap: 4px 12px;
     margin-bottom: 8px;
   }
   section > p {
@@ -239,7 +242,7 @@
   }
   .events li {
     display: grid;
-    grid-template-columns: 4.2em 1fr;
+    grid-template-columns: 4.2em minmax(0, 1fr);
     gap: 10px;
     padding: 8px 0;
   }
@@ -258,11 +261,19 @@
   .title,
   .subject {
     font-weight: 500;
+    overflow-wrap: anywhere;
   }
   .meta,
   .snippet {
     font-size: var(--small);
     color: var(--graphite);
+    overflow-wrap: anywhere;
+  }
+  /* Calendar and account details can be long lists; keep them to one line. */
+  .events .meta {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .snippet {
     display: -webkit-box;
