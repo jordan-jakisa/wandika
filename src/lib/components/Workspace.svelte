@@ -13,9 +13,13 @@
     Network,
     PanelLeftClose,
     PanelLeftOpen,
-    SquarePen,
+    ChevronLeft,
+    FolderPlus,
+    RefreshCw,
   } from "@lucide/svelte";
-  import { isAndroid, isIOS } from "../platform";
+  import { api } from "../api";
+  import Menu from "./Menu.svelte";
+  import { isIOS } from "../platform";
   import { app, titleOf, type Tab } from "../app.svelte";
   import Editor from "./Editor.svelte";
   import FileTree from "./FileTree.svelte";
@@ -134,14 +138,24 @@
     swipeX = 0;
   }
 
-  let scrolled = $state(false);
-  const compactTitle = $derived(
-    ({ notes: app.vault?.name ?? "", today: "Today", tasks: "Tasks", projects: "Projects" } as Record<string, string>)[app.tab] ?? "",
+  // Phones show three places. Views that live inside one of them show "‹ Today" or "‹ Notes".
+  const phoneTabs: { id: Tab; label: string; icon: typeof FolderClosed }[] = [
+    { id: "notes", label: "Notes", icon: FolderClosed },
+    { id: "today", label: "Today", icon: CalendarDays },
+    { id: "search", label: "Search", icon: SearchIcon },
+  ];
+  const PARENT: Partial<Record<Tab, Tab>> = { tasks: "today", projects: "notes", graph: "notes" };
+  const parentTab = $derived(PARENT[app.tab] ?? app.tab);
+  const subView = $derived(
+    PARENT[app.tab] ? { parent: PARENT[app.tab]!, parentLabel: PARENT[app.tab] === "today" ? "Today" : "Notes" } : null,
   );
-  $effect(() => {
-    void app.tab;
-    scrolled = false;
-  });
+
+  async function newFolderFromMenu() {
+    const name = await app.ask({ title: "New folder", confirm: "Create folder", input: { label: "Folder name", value: "" } });
+    if (!name?.trim()) return;
+    await api.folderCreate(name.trim());
+    await app.newNote(name.trim());
+  }
 
   // Pull down at the top of a list to sync.
   const PULL_TRIGGER = 64;
@@ -337,7 +351,6 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="phone"
-    class:behind-sheet={isIOS && app.settingsOpen}
     class:typing
     ontouchstart={swipeStart}
     ontouchmove={swipeMove}
@@ -351,7 +364,7 @@
         {/key}
       </div>
     {:else}
-      <!-- Pull to sync is a shortcut for the sync status button. -->
+      <!-- Pull to sync is a shortcut for the sync status line. -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         class="phone-body"
@@ -359,31 +372,32 @@
         ontouchstart={pullStart}
         ontouchmove={pullMove}
         ontouchend={pullEnd}
-        onscroll={(e) => (scrolled = (e.currentTarget as HTMLElement).scrollTop > 48)}
       >
-        {#if isIOS && compactTitle}
-          <!-- iOS: once the large title scrolls away, a small centred title stays on a blurred bar. -->
-          <div class="nav-compact" class:shown={scrolled} aria-hidden={!scrolled}>{compactTitle}</div>
-        {/if}
         {#if app.synced && (pull > 0 || app.syncing)}
           <div class="pull" style="height: {app.syncing && !pull ? 44 : pull}px" aria-live="polite">
             {app.syncing ? "Syncing…" : pull >= PULL_TRIGGER ? "Release to sync" : "Pull to sync"}
           </div>
         {/if}
         {@render conflictsBanner()}
+        {#if subView}
+          <button class="up" onclick={() => (app.tab = subView.parent)}>
+            <ChevronLeft size={20} /> {subView.parentLabel}
+          </button>
+        {/if}
         {#if app.tab === "notes"}
           <header class="phone-head">
-            <div class="head-actions">
-              <button class="icon-btn" onclick={() => app.showGraph()} aria-label="Graph"><Network size={22} /></button>
-              <button class="icon-btn" onclick={() => app.openSettings()} aria-label="Settings"><SettingsIcon size={22} /></button>
-              {#if !isAndroid}
-                <button class="icon-btn" onclick={() => app.newNote()} aria-label="New note"><SquarePen size={22} /></button>
-              {/if}
-            </div>
             <h1 class="vault-name">{app.vault?.name}</h1>
-            <SyncStatus />
+            <Menu label="More" size={22}>
+              <button role="menuitem" onclick={() => app.showGraph()}><Network size={18} /> Graph</button>
+              <button role="menuitem" onclick={() => (app.tab = "projects")}><Columns3 size={18} /> Projects</button>
+              <button role="menuitem" onclick={() => newFolderFromMenu()}><FolderPlus size={18} /> New folder</button>
+              {#if app.synced}
+                <button role="menuitem" onclick={() => app.sync()}><RefreshCw size={18} /> Sync now</button>
+              {/if}
+              <button role="menuitem" onclick={() => app.openSettings()}><SettingsIcon size={18} /> Settings</button>
+            </Menu>
           </header>
-          <button class="daily" onclick={() => app.openDaily()}><NotebookPen size={18} /> Open today's note</button>
+          <div class="phone-status"><SyncStatus /></div>
           <FileTree />
         {:else if app.tab === "today"}
           <TodayPanel />
@@ -397,55 +411,17 @@
           <Search mode="page" />
         {/if}
       </div>
-      {#if isAndroid && app.tab === "notes"}
-        <!-- Material 3: the screen's main action is a floating action button. -->
-        <button class="fab" onclick={() => app.newNote()} aria-label="New note"><Plus size={24} /></button>
-      {/if}
-    {/if}
 
-    {#if isAndroid}
-      {#if !app.current}
-        <nav class="navbar" aria-label="Sections">
-          {#each tabs as t (t.id)}
-            {@const on = app.tab === t.id || (t.id === "notes" && app.tab === "graph")}
-            <button class:active={on} aria-current={on ? "page" : undefined} onclick={() => (app.tab = t.id)}>
-              <span class="indicator"><t.icon size={24} /></span>
-              <span class="label">{t.label}</span>
-            </button>
-          {/each}
-        </nav>
-      {/if}
-    {:else}
-      <!-- iOS: the tab bar floats on Liquid Glass, with search as its own button at the trailing end. -->
-      <nav class="glassbar" aria-label="Sections">
-        <div class="glass tabs">
-          {#each tabs.filter((t) => t.id !== "search") as t (t.id)}
-            {@const on = !app.current && (app.tab === t.id || (t.id === "notes" && app.tab === "graph"))}
-            <button
-              class:active={on || (t.id === "notes" && !!app.current)}
-              aria-current={on ? "page" : undefined}
-              onclick={() => {
-                app.current = null;
-                app.tab = t.id;
-              }}
-            >
-              <t.icon size={22} strokeWidth={on ? 2.4 : 2} />
-              <span>{t.label}</span>
-            </button>
-          {/each}
-        </div>
-        <button
-          class="glass search-tab"
-          class:active={!app.current && app.tab === "search"}
-          aria-label="Search"
-          aria-current={!app.current && app.tab === "search" ? "page" : undefined}
-          onclick={() => {
-            app.current = null;
-            app.tab = "search";
-          }}
-        >
-          <SearchIcon size={22} />
-        </button>
+      <!-- Three places and one action. Tasks live in Today; boards, tags and the graph in Notes. -->
+      <nav class="bar" aria-label="Sections">
+        {#each phoneTabs as t (t.id)}
+          {@const on = parentTab === t.id}
+          <button class:active={on} aria-current={on ? "page" : undefined} onclick={() => (app.tab = t.id)}>
+            <t.icon size={22} strokeWidth={on ? 2.3 : 1.9} />
+            <span>{t.label}</span>
+          </button>
+        {/each}
+        <button class="new" onclick={() => app.newNote()} aria-label="New note"><Plus size={24} /></button>
       </nav>
     {/if}
   </div>
@@ -708,26 +684,6 @@
     background: var(--paper);
     overflow: hidden;
   }
-  /* iOS: the screen behind a sheet shrinks back with rounded corners, as when UIKit presents one. */
-  .phone {
-    transition:
-      transform 380ms cubic-bezier(0.32, 0.72, 0, 1),
-      border-radius 380ms cubic-bezier(0.32, 0.72, 0, 1);
-  }
-  .phone.behind-sheet {
-    transform: scale(0.93) translateY(calc(var(--safe-top) * 0.4));
-    border-radius: 38px;
-  }
-  :global(html:has(.phone.behind-sheet)),
-  :global(html:has(.phone.behind-sheet) body) {
-    background: #000;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .phone.behind-sheet {
-      transform: none;
-      border-radius: 0;
-    }
-  }
   .note-host {
     flex: 1;
     min-height: 0;
@@ -750,27 +706,6 @@
     padding-top: var(--safe-top);
     -webkit-overflow-scrolling: touch;
   }
-  .nav-compact {
-    position: sticky;
-    top: calc(-1 * var(--safe-top));
-    z-index: 4;
-    height: calc(44px + var(--safe-top));
-    margin: calc(-1 * var(--safe-top)) 0 calc(-44px);
-    padding-top: var(--safe-top);
-    display: grid;
-    place-items: center;
-    font-size: 17px;
-    font-weight: 600;
-    background: color-mix(in srgb, var(--paper) 72%, transparent);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
-    backdrop-filter: blur(20px) saturate(180%);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 150ms ease-out;
-  }
-  .nav-compact.shown {
-    opacity: 1;
-  }
   .pull {
     display: grid;
     place-items: center;
@@ -779,212 +714,78 @@
     color: var(--graphite);
   }
   .phone-head {
-    display: grid;
-    gap: 2px;
-    padding: 4px 8px 6px max(20px, var(--safe-left));
-  }
-  .head-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 2px;
-  }
-  /* Material 3 small top app bar: title and actions share one 64dp row. */
-  :global([data-platform="android"]) .phone-head {
-    grid-template-columns: 1fr auto;
-    grid-template-areas:
-      "title actions"
-      "status status";
-    align-items: center;
-    padding-left: max(16px, var(--safe-left));
-  }
-  :global([data-platform="android"]) .phone-head .vault-name {
-    grid-area: title;
-    min-height: 64px;
     display: flex;
     align-items: center;
-  }
-  :global([data-platform="android"]) .head-actions {
-    grid-area: actions;
-  }
-  :global([data-platform="android"]) .phone-head :global(.sync) {
-    grid-area: status;
-    margin-top: -12px;
+    gap: 8px;
+    padding: 12px 8px 0 max(20px, var(--safe-left));
   }
   .phone-head .vault-name {
+    flex: 1;
+    min-width: 0;
     margin: 0;
     font-size: var(--view-title-size);
     font-weight: var(--view-title-weight);
     letter-spacing: var(--view-title-tracking);
-    line-height: 1.15;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
-  .daily {
-    display: flex;
+  .phone-status {
+    padding: 0 20px 10px max(20px, var(--safe-left));
+  }
+  .up {
+    display: inline-flex;
     align-items: center;
-    gap: 10px;
-    width: calc(100% - 32px);
-    margin: 10px 16px 6px;
+    gap: 2px;
     min-height: var(--target);
-    padding: 0 14px;
-    border: 0;
-    border-radius: var(--radius);
-    background: var(--sheet);
-    font-weight: 500;
-  }
-  .daily:active {
-    background: var(--papyrus-wash);
-  }
-
-  /* iOS: Liquid Glass tab bar floating over the content. */
-  .glassbar {
-    position: absolute;
-    left: max(16px, var(--safe-left));
-    right: max(16px, var(--safe-right));
-    bottom: max(10px, calc(var(--safe-bottom) - 8px));
-    z-index: 10;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    pointer-events: none;
-    transition:
-      transform 200ms ease-out,
-      opacity 200ms ease-out;
-  }
-  .typing .glassbar {
-    transform: translateY(140%);
-    opacity: 0;
-  }
-  .glass {
-    pointer-events: auto;
-    background: color-mix(in srgb, var(--sheet) 58%, transparent);
-    -webkit-backdrop-filter: blur(22px) saturate(180%);
-    backdrop-filter: blur(22px) saturate(180%);
-    border: 1px solid color-mix(in srgb, white 45%, transparent);
-    box-shadow:
-      inset 0 1px 0 color-mix(in srgb, white 55%, transparent),
-      0 10px 30px rgb(0 0 0 / 0.14);
-  }
-  :global([data-mode="dark"]) .glass {
-    background: color-mix(in srgb, var(--sheet) 55%, transparent);
-    border-color: color-mix(in srgb, white 14%, transparent);
-    box-shadow:
-      inset 0 1px 0 color-mix(in srgb, white 12%, transparent),
-      0 10px 30px rgb(0 0 0 / 0.4);
-  }
-  .tabs {
-    flex: 1;
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    height: 62px;
-    padding: 4px;
-    border-radius: 999px;
-  }
-  .tabs button {
-    display: grid;
-    justify-items: center;
-    align-content: center;
-    gap: 1px;
-    border: 0;
-    border-radius: 999px;
-    background: none;
-    color: var(--ink);
-    font-size: 10px;
-    font-weight: 600;
-    transition: background 150ms ease-out;
-  }
-  .tabs button.active {
-    color: var(--papyrus);
-    background: color-mix(in srgb, var(--ink) 8%, transparent);
-  }
-  .search-tab {
-    flex: none;
-    display: grid;
-    place-items: center;
-    width: 62px;
-    height: 62px;
-    border-radius: 50%;
-    color: var(--ink);
-  }
-  .search-tab.active {
-    color: var(--papyrus);
-    background: color-mix(in srgb, var(--papyrus) 18%, color-mix(in srgb, var(--sheet) 58%, transparent));
-  }
-  /* The floating bar overlaps content, so lists leave room to scroll past it. */
-  :global([data-platform="ios"]) .phone-body,
-  :global([data-platform="ios"]) .note-host :global(.page) {
-    padding-bottom: calc(96px + var(--safe-bottom));
-  }
-  @media (prefers-reduced-transparency: reduce) {
-    .glass {
-      background: var(--sheet);
-      -webkit-backdrop-filter: none;
-      backdrop-filter: none;
-    }
-  }
-
-  /* Android: Material 3 navigation bar (80dp, 56x32 pill indicator) and FAB (56dp, 16dp corners). */
-  .navbar {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    height: calc(80px + var(--safe-bottom));
-    padding: 12px max(0px, var(--safe-right)) var(--safe-bottom) max(0px, var(--safe-left));
-    background: color-mix(in srgb, var(--papyrus) 6%, var(--sheet));
-  }
-  .typing .navbar {
-    display: none;
-  }
-  .navbar button {
-    display: grid;
-    justify-items: center;
-    align-content: start;
-    gap: 4px;
+    margin: 4px 0 -8px 8px;
+    padding: 0 8px 0 0;
     border: 0;
     background: none;
     color: var(--graphite);
-    font-size: 12px;
-    font-weight: 500;
-    letter-spacing: 0.04em;
+    font-size: 16px;
   }
-  .indicator {
+
+  /* Bottom bar: flat, the same on every phone. Three places and the new-note button. */
+  .bar {
     display: grid;
-    place-items: center;
-    width: 56px;
-    height: 32px;
-    border-radius: 999px;
-    transition: background 150ms ease-out;
+    grid-template-columns: repeat(3, 1fr) 64px;
+    align-items: center;
+    height: calc(60px + var(--safe-bottom));
+    padding: 0 max(8px, var(--safe-right)) var(--safe-bottom) max(8px, var(--safe-left));
+    border-top: 1px solid var(--hairline);
+    background: var(--paper);
   }
-  .navbar button.active {
-    color: var(--ink);
-    font-weight: 600;
-  }
-  .navbar button.active .indicator {
-    background: color-mix(in srgb, var(--papyrus) 24%, var(--sheet));
-    color: var(--ink);
-  }
-  .navbar button:active .indicator {
-    background: color-mix(in srgb, var(--ink) 10%, transparent);
-  }
-  .fab {
-    position: absolute;
-    right: max(16px, var(--safe-right));
-    bottom: calc(80px + var(--safe-bottom) + 16px);
-    z-index: 5;
-    display: grid;
-    place-items: center;
-    width: 56px;
-    height: 56px;
-    border: 0;
-    border-radius: 16px;
-    background: color-mix(in srgb, var(--papyrus) 26%, var(--sheet));
-    color: var(--ink);
-    box-shadow: 0 3px 8px rgb(0 0 0 / 0.18);
-  }
-  .fab:active {
-    box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
-  }
-  .typing .fab {
+  .typing .bar {
     display: none;
   }
-  :global([data-platform="android"]) .phone-body {
-    padding-bottom: 88px;
+  .bar button {
+    display: grid;
+    justify-items: center;
+    gap: 2px;
+    min-height: 52px;
+    align-content: center;
+    border: 0;
+    background: none;
+    color: var(--graphite);
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .bar button.active {
+    color: var(--ink);
+  }
+  .bar .new {
+    justify-self: end;
+    width: 48px;
+    height: 48px;
+    min-height: 0;
+    place-items: center;
+    border-radius: 14px;
+    background: var(--papyrus);
+    color: var(--on-papyrus);
+  }
+  .bar .new:active {
+    filter: brightness(0.92);
   }
 </style>

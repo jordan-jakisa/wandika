@@ -361,6 +361,12 @@
     color: var(--graphite);
     font-size: var(--small);
   }
+  /* Phones create folders from the Notes menu. */
+  @media (max-width: 899px) {
+    .new-folder {
+      display: none;
+    }
+  }
   @media (hover: hover) {
     .new-folder:hover {
       color: var(--ink);
