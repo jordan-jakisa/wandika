@@ -4,6 +4,16 @@ Wandika (Luganda, "write") is Jordan's personal notes app. One sentence of purpo
 finds notes on his Mac, iPhone and Android phone, from one GitHub repo, with his day (meetings, mail,
 tasks) beside the note he is writing.
 
+## Mark
+
+A single-stroke geometric lowercase w, off-white (`#FBFBF9`) on papyrus green (`#2E6A4E`), round
+caps and joins. No nib, no nodes, no page: minimal and modern (Jordan, 2026-11-02). Sources are in
+`src-tauri/icons/source/`: `mark.svg` full-bleed (iPhone, Android, Windows; regenerate with
+`npx tauri icon`), `mark-macos.svg` inside Apple's 824 px rounded square (copy its `icon.icns`
+and the 32/128 px PNGs over the generated ones), `favicon.svg`. In the app, `Mark.svelte` draws it in
+the current accent colour. The wordmark is "Wandika" in the system sans, 650 weight, -0.03em
+tracking, beside the mark.
+
 ## Principles
 
 - **The note is the screen.** Chrome stays quiet; the page of text gets the space and the type.
@@ -26,7 +36,10 @@ tasks) beside the note he is writing.
 | `--amber`    | `#9A5F0E` | `#E0A94F` | Offline, waiting, due today          |
 | `--alarm`    | `#B03C2C` | `#F08A78` | Conflicts, errors, destructive       |
 
-Papyrus green comes from the papyrus swamps around Lake Victoria; it is the only accent. No gradients.
+Papyrus green comes from the papyrus swamps around Lake Victoria; it is the default and only accent
+on screen at a time. No gradients. Settings → Appearance lets each device pick Lake, Indigo, Plum,
+Rose or Graphite instead, a theme (system, light, dark), the note font (serif, sans, mono), text
+size and line width; vault CSS snippets in `.obsidian/snippets` override anything.
 
 ## Type
 

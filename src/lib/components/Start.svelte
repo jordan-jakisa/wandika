@@ -4,6 +4,7 @@
   import { app } from "../app.svelte";
   import type { VaultConfig } from "../types";
   import GitHubSignIn from "./GitHubSignIn.svelte";
+  import Mark from "./Mark.svelte";
   import Menu from "./Menu.svelte";
   import RepoPicker from "./RepoPicker.svelte";
 
@@ -66,7 +67,7 @@
 
 <main class="start">
   <div class="column">
-    <h1 class="wordmark">Wandika</h1>
+    <h1 class="wordmark"><Mark size={44} /> Wandika</h1>
     <p class="lead">Notes as plain Markdown files. Keep them on this device, or sync them through a GitHub repository.</p>
 
     {#if known.length}
@@ -133,11 +134,14 @@
     gap: 32px;
   }
   .wordmark {
-    margin: 0 0 -20px;
-    font-family: var(--font-note);
-    font-size: clamp(3rem, 12vw, 4.5rem);
-    font-weight: 640;
-    letter-spacing: -0.02em;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 0 0 -16px;
+    font-family: var(--font-ui);
+    font-size: clamp(2.2rem, 9vw, 2.75rem);
+    font-weight: 650;
+    letter-spacing: -0.03em;
     line-height: 1;
   }
   .lead {
