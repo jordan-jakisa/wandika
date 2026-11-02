@@ -443,7 +443,7 @@
     border: 0;
     background: none;
     color: var(--graphite);
-    font-size: 16px;
+    font-size: calc(16px * var(--text-scale));
   }
   .back:active {
     opacity: 0.5;

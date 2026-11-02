@@ -755,7 +755,7 @@
     min-height: var(--target);
     border: 0;
     background: none;
-    font-size: 16px;
+    font-size: calc(16px * var(--text-scale));
   }
   .done {
     padding: 0 10px;

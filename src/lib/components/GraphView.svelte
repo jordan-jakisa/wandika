@@ -617,7 +617,7 @@
     border-radius: var(--radius-sm);
     background: color-mix(in srgb, var(--sheet) 80%, transparent);
     color: var(--ink);
-    font-size: 12px;
+    font-size: calc(12px * var(--text-scale));
   }
   @media (hover: hover) {
     .group:hover {

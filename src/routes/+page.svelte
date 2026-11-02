@@ -34,9 +34,8 @@
 <Dialog />
 <ImageViewer />
 
-{#if app.toast}
-  <div class="toast" role="status">{app.toast}</div>
-{/if}
+<!-- Always in the page, so screen readers announce each new message. -->
+<div class="toast" class:shown={!!app.toast} role="status" aria-live="polite">{app.toast ?? ""}</div>
 
 <style>
   .boot {
@@ -45,6 +44,11 @@
     place-content: center;
     gap: 12px;
     padding: 24px;
+  }
+  /* Empty and invisible between messages, but still in the accessibility tree. */
+  .toast:not(.shown) {
+    opacity: 0;
+    pointer-events: none;
   }
   .toast {
     position: fixed;

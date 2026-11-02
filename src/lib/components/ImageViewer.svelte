@@ -75,7 +75,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 15px;
+    font-size: calc(15px * var(--text-scale));
   }
   .icon-btn {
     color: #fff;

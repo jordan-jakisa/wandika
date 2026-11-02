@@ -87,7 +87,7 @@ class PrefsState {
     root.style.setProperty("--papyrus-wash", color + (mode === "dark" ? "1f" : "14"));
     root.style.setProperty("--font-note", FONTS[this.value.font].css);
     root.style.setProperty("--measure", WIDTHS[this.value.width].css);
-    if (this.value.size) root.style.setProperty("--note-size", `${this.value.size}px`);
+    if (this.value.size) root.style.setProperty("--note-size", `calc(${this.value.size}px * var(--text-scale))`);
     else root.style.removeProperty("--note-size");
     for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
       meta.content = mode === "dark" ? "#151917" : "#F2F3EF";

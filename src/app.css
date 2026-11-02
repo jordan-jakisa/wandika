@@ -15,11 +15,13 @@
   --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-code: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
-  --note-size: 18px;
+  /* The phone's text size setting on iOS (Dynamic Type); Android scales the web view instead. */
+  --text-scale: 1;
+  --note-size: calc(18px * var(--text-scale));
   /* Line length of note text; Settings can change it. */
   --measure: 68ch;
-  --ui-size: 15px;
-  --small: 13px;
+  --ui-size: calc(15px * var(--text-scale));
+  --small: calc(13px * var(--text-scale));
   --radius-sm: 6px;
   --radius: 10px;
   --radius-lg: 14px;
@@ -68,8 +70,8 @@
 
 @media (max-width: 899px) {
   :root {
-    --note-size: 17px;
-    --ui-size: 16px;
+    --note-size: calc(17px * var(--text-scale));
+    --ui-size: calc(16px * var(--text-scale));
   }
 }
 
@@ -81,7 +83,7 @@
 }
 @media (max-width: 899px) {
   :root {
-    --view-title-size: 28px;
+    --view-title-size: calc(28px * var(--text-scale));
     --view-title-tracking: -0.015em;
   }
 }

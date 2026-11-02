@@ -155,7 +155,7 @@
     border-radius: 8px;
     background: none;
     color: var(--ink);
-    font-size: 14px;
+    font-size: calc(14px * var(--text-scale));
     font-weight: 500;
   }
   .chip.on {

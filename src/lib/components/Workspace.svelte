@@ -488,7 +488,7 @@
   }
   kbd {
     font: inherit;
-    font-size: 12px;
+    font-size: calc(12px * var(--text-scale));
     color: var(--graphite);
   }
   .side-nav {
@@ -744,7 +744,7 @@
     border: 0;
     background: none;
     color: var(--graphite);
-    font-size: 16px;
+    font-size: calc(16px * var(--text-scale));
   }
 
   /* Bottom bar: flat, the same on every phone. Three places and the new-note button. */
@@ -769,7 +769,7 @@
     border: 0;
     background: none;
     color: var(--graphite);
-    font-size: 11px;
+    font-size: calc(11px * var(--text-scale));
     font-weight: 500;
   }
   .bar button.active {

@@ -42,7 +42,7 @@
     padding: 0 12px;
     border-top: 1px solid var(--rule);
     background: var(--paper);
-    font-size: 12px;
+    font-size: calc(12px * var(--text-scale));
     color: var(--graphite);
     white-space: nowrap;
     overflow: hidden;
@@ -55,7 +55,7 @@
     min-width: 0;
   }
   .status :global(.sync) {
-    font-size: 12px;
+    font-size: calc(12px * var(--text-scale));
   }
   .item {
     display: inline-flex;

@@ -82,7 +82,7 @@
       bottom: calc(64px + var(--safe-bottom) + 12px);
       padding: 12px 16px;
       border-radius: 12px;
-      font-size: 15px;
+      font-size: calc(15px * var(--text-scale));
     }
 
     /* Search: one rounded field. */
@@ -124,7 +124,7 @@
     }
     .settings .nav-head h2,
     .settings .pane-head h3 {
-      font-size: 22px;
+      font-size: calc(22px * var(--text-scale));
       font-weight: 650;
     }
     .settings .pane-body {
@@ -133,7 +133,7 @@
     }
     .settings h4 {
       margin: 24px 20px 4px;
-      font-size: 13px;
+      font-size: calc(13px * var(--text-scale));
       font-weight: 600;
       color: var(--graphite);
     }
