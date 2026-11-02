@@ -278,6 +278,15 @@ pub async fn attachment_read(app: S<'_>, target: String, from: String) -> Result
 }
 
 #[tauri::command]
+pub async fn note_discard_if_empty(app: S<'_>, path: String) -> Result<bool> {
+    let removed = vault::discard_if_empty(&app.root()?, &path, &app.crypto()?)?;
+    if removed {
+        changed(&app);
+    }
+    Ok(removed)
+}
+
+#[tauri::command]
 pub async fn folder_create(app: S<'_>, path: String) -> Result<()> {
     vault::create_folder(&app.root()?, &path)
 }

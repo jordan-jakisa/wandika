@@ -207,6 +207,21 @@ pub fn create_note(root: &Path, folder: &str, title: &str, body: &str, crypto: &
     Ok(rel)
 }
 
+/// Deletes a note that was created and left without a word or a new name, as Apple Notes does.
+/// Anything with text in it, or a name of its own, stays. Returns true when it was removed.
+pub fn discard_if_empty(root: &Path, rel: &str, crypto: &Crypto) -> Result<bool> {
+    static UNTITLED: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^Untitled( \d+)?$").unwrap());
+    if !is_note(rel) || !UNTITLED.is_match(&title_of(rel)) {
+        return Ok(false);
+    }
+    let path = safe(root, rel)?;
+    if !path.is_file() || !read_note(root, rel, crypto)?.trim().is_empty() {
+        return Ok(false);
+    }
+    std::fs::remove_file(path)?;
+    Ok(true)
+}
+
 pub fn create_folder(root: &Path, rel: &str) -> Result<()> {
     std::fs::create_dir_all(safe(root, rel)?)?;
     Ok(())
@@ -845,6 +860,21 @@ mod tests {
         assert_eq!(new_note_folder(&root, Some("Projects/Plan.md")), "Projects");
         std::fs::write(root.join(".obsidian/app.json"), r#"{"newFileLocation":"folder","newFileFolderPath":"00_Inbox"}"#).unwrap();
         assert_eq!(new_note_folder(&root, Some("Projects/Plan.md")), "00_Inbox");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn only_untouched_untitled_notes_are_discarded() {
+        let root = std::env::temp_dir().join(format!("wandika-discard-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let crypto = Crypto::load(&root, &crate::secrets::Secrets::new(root.clone()), "test/discard");
+        std::fs::write(root.join("Untitled 2.md"), "\n").unwrap();
+        std::fs::write(root.join("Untitled.md"), "Buy milk").unwrap();
+        std::fs::write(root.join("Plan.md"), "").unwrap();
+        assert!(discard_if_empty(&root, "Untitled 2.md", &crypto).unwrap());
+        assert!(!discard_if_empty(&root, "Untitled.md", &crypto).unwrap());
+        assert!(!discard_if_empty(&root, "Plan.md", &crypto).unwrap());
         let _ = std::fs::remove_dir_all(&root);
     }
 

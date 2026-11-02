@@ -2,7 +2,7 @@
   import { EditorState } from "@codemirror/state";
   import { EditorView } from "@codemirror/view";
   import { ChevronLeft, Code, ImagePlus, LayoutTemplate, Columns3, Lock, LockOpen, Network, Trash2, Link2 } from "@lucide/svelte";
-  import { onDestroy } from "svelte";
+  import { onDestroy, untrack } from "svelte";
   import { api, codeOf, openUrl } from "../api";
   import { app, titleOf } from "../app.svelte";
   import { pastedName } from "../attachments";
@@ -191,8 +191,17 @@
     }
   }
 
+  // Opening another note mounts a new editor (Workspace keys on app.openCount). A path change
+  // while mounted is this note being renamed, moved or encrypted: same text, so no reload.
   $effect(() => {
-    void load(path);
+    const p = path;
+    untrack(() => {
+      if (loadedPath === null) void load(p);
+      else if (p !== loadedPath) {
+        loadedPath = p;
+        title = titleOf(p);
+      }
+    });
   });
 
   // Reload when a sync changed this note on disk and nothing is waiting to be saved.
@@ -203,6 +212,7 @@
     void (async () => {
       const text = await api.noteRead(loadedPath!).catch(() => null);
       if (text === null) {
+        app.say(`“${titleOf(loadedPath!)}” was deleted on another device.`);
         app.current = null;
         return;
       }
@@ -263,20 +273,8 @@
   }
 
   async function trash() {
-    const ok = await app.ask({
-      title: `Move “${title}” to the trash?`,
-      message: "You can restore it from the .trash folder in the repository.",
-      confirm: "Move to trash",
-      danger: true,
-    });
-    if (ok === null) return;
-    clearTimeout(saveTimer);
-    pending = null;
-    await api.entryTrash(path);
-    app.current = null;
-    await app.refreshFiles();
-    app.edited();
-    app.say("Moved to trash.");
+    await save();
+    await app.trash(path, title);
   }
 
   function onUrl(e: Event) {
@@ -295,7 +293,11 @@
   });
 
   onDestroy(() => {
-    void save();
+    const leaving = loadedPath;
+    const empty = !!view && view.state.doc.length === 0;
+    void save().then(async () => {
+      if (leaving && empty && (await api.noteDiscardIfEmpty(leaving).catch(() => false))) await app.refreshFiles();
+    });
     view?.destroy();
     app.flush = async () => {};
   });

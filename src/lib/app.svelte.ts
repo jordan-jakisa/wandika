@@ -32,6 +32,8 @@ class AppState {
   tab = $state<Tab>("notes");
   showToday = $state(true);
   switcherOpen = $state(false);
+  /** Goes up each time a different note is opened; the editor is keyed on it, so a rename doesn't remount. */
+  openCount = $state(0);
   /** Vault path of the image open in the viewer. */
   viewing = $state<string | null>(null);
   settingsOpen = $state(false);
@@ -194,6 +196,7 @@ class AppState {
   }
 
   open(path: string) {
+    if (path !== this.current) this.openCount++;
     this.current = path;
     this.graphFocus = path;
     this.switcherOpen = false;
@@ -204,6 +207,44 @@ class AppState {
     const path = await api.dailyNote();
     await this.refreshFiles();
     this.open(path);
+  }
+
+  /** Asks for a name, creates the folder under `parent` and starts a note in it. */
+  async newFolder(parent = "") {
+    const name = await this.ask({ title: "New folder", confirm: "Create folder", input: { label: "Folder name", value: "" } });
+    if (!name?.trim()) return null;
+    const path = parent ? `${parent}/${name.trim()}` : name.trim();
+    try {
+      await api.folderCreate(path);
+      await this.newNote(path);
+      return path;
+    } catch (e) {
+      this.say((e as Error).message);
+      return null;
+    }
+  }
+
+  /** Confirms, then moves a note, file or folder to the vault's .trash folder. */
+  async trash(path: string, name: string, folder = false) {
+    const what = folder ? `the folder “${name}” and everything in it` : `“${name}”`;
+    const ok = await this.ask({
+      title: `Move ${what} to the trash?`,
+      message: "It goes to the vault's .trash folder, where you can restore it.",
+      confirm: "Move to trash",
+      danger: true,
+    });
+    if (ok === null) return false;
+    try {
+      await api.entryTrash(path);
+    } catch (e) {
+      this.say((e as Error).message);
+      return false;
+    }
+    if (this.current === path || this.current?.startsWith(path + "/")) this.current = null;
+    await this.refreshFiles();
+    this.edited();
+    this.say(`Moved “${name}” to the trash.`);
+    return true;
   }
 
   /** A note in `folder`, or where Obsidian's settings put new notes. */
@@ -341,7 +382,7 @@ export function titleOf(path: string) {
 }
 
 export function ago(ms: number | null, now = Date.now()) {
-  if (!ms) return "never";
+  if (!ms) return "not yet";
   const s = Math.round((now - ms) / 1000);
   if (s < 45) return "just now";
   const m = Math.round(s / 60);

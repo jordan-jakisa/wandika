@@ -150,12 +150,6 @@
     PARENT[app.tab] ? { parent: PARENT[app.tab]!, parentLabel: PARENT[app.tab] === "today" ? "Today" : "Notes" } : null,
   );
 
-  async function newFolderFromMenu() {
-    const name = await app.ask({ title: "New folder", confirm: "Create folder", input: { label: "Folder name", value: "" } });
-    if (!name?.trim()) return;
-    await api.folderCreate(name.trim());
-    await app.newNote(name.trim());
-  }
 
   // Pull down at the top of a list to sync.
   const PULL_TRIGGER = 64;
@@ -209,13 +203,14 @@
 
 {#snippet conflictsBanner()}
   {#if app.conflicts.length}
-    <div class="banner" role="status">
+    <div class="banner conflict" role="status">
       <p>
         {app.conflicts.length === 1 ? "A note was" : `${app.conflicts.length} notes were`} edited on two devices at once.
         Both versions are kept:
         {#each app.conflicts as c, i (c)}
           <button class="inline-link" onclick={() => app.open(c)}>{titleOf(c)}</button>{i < app.conflicts.length - 1 ? ", " : "."}
         {/each}
+        Open each copy, keep what you need in the note, then move the copy to the trash.
       </p>
       <button class="btn" onclick={() => (app.conflicts = [])}>Dismiss</button>
     </div>
@@ -300,7 +295,7 @@
       {/if}
       {@render conflictsBanner()}
       {#if app.current}
-        {#key app.current}
+        {#key app.openCount}
           <Editor path={app.current} />
         {/key}
       {:else if app.tab === "tasks"}
@@ -359,7 +354,7 @@
   >
     {#if app.current}
       <div class="note-host" class:swiping={swipeX > 0}>
-        {#key app.current}
+        {#key app.openCount}
           <Editor path={app.current} compact />
         {/key}
       </div>
@@ -390,7 +385,7 @@
             <Menu label="More" size={22}>
               <button role="menuitem" onclick={() => app.showGraph()}><Network size={18} /> Graph</button>
               <button role="menuitem" onclick={() => (app.tab = "projects")}><Columns3 size={18} /> Projects</button>
-              <button role="menuitem" onclick={() => newFolderFromMenu()}><FolderPlus size={18} /> New folder</button>
+              <button role="menuitem" onclick={() => app.newFolder()}><FolderPlus size={18} /> New folder</button>
               {#if app.synced}
                 <button role="menuitem" onclick={() => app.sync()}><RefreshCw size={18} /> Sync now</button>
               {/if}
@@ -650,6 +645,9 @@
   }
   .mac .main > .banner:first-child {
     margin-top: 34px;
+  }
+  .banner.conflict {
+    background: color-mix(in srgb, var(--alarm) 12%, var(--sheet));
   }
   .banner p {
     flex: 1;
