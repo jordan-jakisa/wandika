@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Adaptive icon foreground: the w scaled to stay inside Android's 66dp safe zone. -->
+  <g transform="translate(512 512) scale(0.88) translate(-512 -516)">
+    <polyline points="272,356 397,676 512,440 627,676 752,356" fill="none" stroke="#FBFBF9" stroke-width="86" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>
