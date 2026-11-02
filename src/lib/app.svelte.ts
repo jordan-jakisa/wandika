@@ -1,7 +1,8 @@
 import { api, listen } from "./api";
+import { TEMPLATE } from "./kanban";
 import type { Entry, NoteMeta, Status, SyncReport } from "./types";
 
-export type Tab = "notes" | "today" | "tasks" | "search";
+export type Tab = "notes" | "today" | "tasks" | "projects" | "search";
 
 export interface Ask {
   title: string;
@@ -34,6 +35,8 @@ class AppState {
   changed = $state<{ paths: string[]; at: number }>({ paths: [], at: 0 });
   toast = $state<string | null>(null);
   dialog = $state<Ask | null>(null);
+  /** Tag picked in the tag browser, on a card or in a note. */
+  tagFilter = $state<string | null>(null);
 
   /** Set by the editor so pending typing is saved before a sync reads the files. */
   flush: () => Promise<void> = async () => {};
@@ -149,6 +152,22 @@ class AppState {
     this.open(path);
     this.edited();
     return path;
+  }
+
+  async newBoard() {
+    const name = await this.ask({ title: "New board", confirm: "Create board", input: { label: "Board name", value: "" } });
+    if (!name?.trim()) return;
+    const path = await api.noteCreate("Projects", name.trim(), TEMPLATE);
+    await this.refreshFiles();
+    this.open(path);
+    this.edited();
+  }
+
+  /** Shows every note with this tag. */
+  showTag(tag: string) {
+    this.tagFilter = tag;
+    this.current = null;
+    this.tab = "projects";
   }
 
   currentFolder() {

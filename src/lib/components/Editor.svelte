@@ -1,12 +1,14 @@
 <script lang="ts">
   import { EditorState } from "@codemirror/state";
   import { EditorView } from "@codemirror/view";
-  import { ChevronLeft, Lock, LockOpen, Trash2, Link2 } from "@lucide/svelte";
+  import { ChevronLeft, Code, Columns3, Lock, LockOpen, Trash2, Link2 } from "@lucide/svelte";
   import { onDestroy } from "svelte";
   import { api, openUrl } from "../api";
   import { app, titleOf } from "../app.svelte";
   import { extensions } from "../editor/setup";
+  import { isBoard } from "../kanban";
   import type { SearchHit } from "../types";
+  import Board from "./Board.svelte";
   import Menu from "./Menu.svelte";
   import Unlock from "./Unlock.svelte";
 
@@ -15,31 +17,42 @@
   let host: HTMLDivElement;
   let view: EditorView | null = null;
   let loadedPath: string | null = null;
-  let dirty = false;
+  /** Text typed or changed on the board that hasn't reached the disk yet. */
+  let pending: string | null = null;
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
   let title = $state("");
   let error = $state<string | null>(null);
   let locked = $state(false);
   let backlinks = $state<SearchHit[]>([]);
+  /** Board notes show as columns; this switches to their Markdown source. */
+  let boardText = $state<string | null>(null);
+  let boardKey = $state(0);
+  let showSource = $state(false);
   const encrypted = $derived(path.endsWith(".age"));
 
   async function save() {
     clearTimeout(saveTimer);
-    if (!dirty || !view || !loadedPath) return;
-    dirty = false;
+    if (pending === null || !loadedPath) return;
+    const text = pending;
+    pending = null;
     try {
-      await api.noteWrite(loadedPath, view.state.doc.toString());
+      await api.noteWrite(loadedPath, text);
       app.edited();
     } catch (e) {
-      dirty = true;
+      pending ??= text;
       error = `Couldn't save: ${(e as Error).message}`;
     }
   }
 
-  function onChange() {
-    dirty = true;
+  function onChange(text: string) {
+    pending = text;
     clearTimeout(saveTimer);
     saveTimer = setTimeout(save, 400);
+  }
+
+  function onBoardChange(text: string) {
+    boardText = text;
+    onChange(text);
   }
 
   async function load(p: string) {
@@ -60,18 +73,27 @@
       return;
     }
     if (loadedPath !== p) return;
+    backlinks = await api.backlinks(p).catch(() => []);
+    if (isBoard(text) && !showSource) {
+      view?.destroy();
+      view = null;
+      boardText = text;
+      boardKey++;
+      return;
+    }
+    boardText = null;
     const state = EditorState.create({
       doc: text,
       extensions: extensions({
         getTitles: () => app.titles,
         onOpenLink: (target) => void app.follow(target),
+        onTag: (tag) => app.showTag(tag),
         onChange,
       }),
     });
     if (view) view.setState(state);
     else view = new EditorView({ state, parent: host });
-    dirty = false;
-    backlinks = await api.backlinks(p).catch(() => []);
+    pending = null;
     // A new note opens with its title selected so typing renames it.
     if (title === "Untitled" || /^Untitled \d+$/.test(title)) {
       queueMicrotask(() => {
@@ -90,20 +112,25 @@
   $effect(() => {
     const { paths, at } = app.changed;
     if (!at || !loadedPath || !paths.includes(loadedPath)) return;
-    if (dirty) return;
+    if (pending !== null) return;
     void (async () => {
       const text = await api.noteRead(loadedPath!).catch(() => null);
       if (text === null) {
         app.current = null;
         return;
       }
-      if (view && text !== view.state.doc.toString() && !dirty) {
+      if (boardText !== null && pending === null && text !== boardText) {
+        boardText = text;
+        boardKey++;
+        return;
+      }
+      if (view && text !== view.state.doc.toString() && pending === null) {
         const sel = view.state.selection.main.head;
         view.dispatch({
           changes: { from: 0, to: view.state.doc.length, insert: text },
           selection: { anchor: Math.min(sel, text.length) },
         });
-        dirty = false;
+        pending = null;
       }
     })();
   });
@@ -157,7 +184,7 @@
     });
     if (ok === null) return;
     clearTimeout(saveTimer);
-    dirty = false;
+    pending = null;
     await api.entryTrash(path);
     app.current = null;
     await app.refreshFiles();
@@ -199,6 +226,11 @@
       <span class="badge" title="Stored encrypted on GitHub and on this device"><Lock size={14} /> Encrypted</span>
     {/if}
     <Menu label="Note actions">
+      {#if boardText !== null || showSource}
+        <button role="menuitem" onclick={async () => { await save(); showSource = !showSource; await load(path); }}>
+          {#if showSource}<Columns3 size={16} /> Show as board{:else}<Code size={16} /> Edit as Markdown{/if}
+        </button>
+      {/if}
       <button role="menuitem" onclick={toggleEncryption}>
         {#if encrypted}<LockOpen size={16} /> Decrypt note{:else}<Lock size={16} /> Encrypt note{/if}
       </button>
@@ -206,7 +238,7 @@
     </Menu>
   </header>
 
-  <div class="page">
+  <div class="page" class:wide={boardText !== null}>
     <input
       id="note-title"
       class="title"
@@ -235,7 +267,13 @@
       <Unlock onunlocked={() => load(path)} />
     {/if}
 
-    <div class="cm-host" bind:this={host} hidden={locked || !!error}></div>
+    {#if boardText !== null}
+      {#key boardKey}
+        <Board {path} text={boardText} onchange={onBoardChange} />
+      {/key}
+    {/if}
+
+    <div class="cm-host" bind:this={host} hidden={locked || !!error || boardText !== null}></div>
 
     {#if backlinks.length && !locked}
       <section class="backlinks" aria-labelledby="backlinks-h">
@@ -298,6 +336,9 @@
     .page {
       padding: 24px 56px 30vh;
     }
+  }
+  .page.wide > * {
+    max-width: none;
   }
   .page > * {
     max-width: 68ch;

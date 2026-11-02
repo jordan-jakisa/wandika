@@ -62,7 +62,7 @@ const theme = EditorView.theme({
     textUnderlineOffset: "3px",
     cursor: "pointer",
   },
-  ".cm-tag": { color: "var(--papyrus)", fontFamily: "var(--font-ui)", fontSize: "0.85em", fontWeight: "500" },
+  ".cm-tag": { color: "var(--papyrus)", fontFamily: "var(--font-ui)", fontSize: "0.85em", fontWeight: "500", cursor: "pointer" },
   ".cm-list-mark": { color: "var(--graphite)" },
   ".cm-bullet": { color: "var(--graphite)", display: "inline-block", width: "0.6em" },
   ".cm-task": {
@@ -108,6 +108,7 @@ function wikilinks(getTitles: () => NoteMeta[]) {
 export function extensions(opts: {
   getTitles: () => NoteMeta[];
   onOpenLink: (target: string) => void;
+  onTag: (tag: string) => void;
   onChange: (doc: string) => void;
 }): Extension[] {
   return [
@@ -122,7 +123,7 @@ export function extensions(opts: {
     autocompletion({ override: [wikilinks(opts.getTitles)], icons: false }),
     keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
     placeholder("Start writing. Type [[ to link a note."),
-    livePreview(opts.onOpenLink),
+    livePreview(opts.onOpenLink, opts.onTag),
     theme,
     EditorView.contentAttributes.of({ spellcheck: "true", autocorrect: "on", autocapitalize: "sentences" }),
     EditorView.updateListener.of((u) => {

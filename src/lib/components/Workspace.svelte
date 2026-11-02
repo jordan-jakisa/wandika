@@ -9,10 +9,12 @@
     Search as SearchIcon,
     Settings as SettingsIcon,
     FolderClosed,
+    Columns3,
   } from "@lucide/svelte";
   import { app, titleOf, type Tab } from "../app.svelte";
   import Editor from "./Editor.svelte";
   import FileTree from "./FileTree.svelte";
+  import ProjectsView from "./ProjectsView.svelte";
   import Search from "./Search.svelte";
   import SyncStatus from "./SyncStatus.svelte";
   import TasksView from "./TasksView.svelte";
@@ -20,7 +22,9 @@
 
   let width = $state(typeof window === "undefined" ? 1200 : window.innerWidth);
   const wide = $derived(width >= 900);
-  const roomForToday = $derived(width >= 1180);
+  // A board needs the width; the Today column steps aside while one is open.
+  const boardOpen = $derived(!!app.current && !!app.titles.find((t) => t.path === app.current)?.board);
+  const roomForToday = $derived(width >= 1180 && !boardOpen);
   const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform) && !("ontouchend" in document);
 
   function onKey(e: KeyboardEvent) {
@@ -61,6 +65,7 @@
     { id: "notes", label: "Notes", icon: FolderClosed },
     { id: "today", label: "Today", icon: CalendarDays },
     { id: "tasks", label: "Tasks", icon: ListChecks },
+    { id: "projects", label: "Projects", icon: Columns3 },
     { id: "search", label: "Search", icon: SearchIcon },
   ];
 </script>
@@ -121,6 +126,9 @@
         <button class:active={!app.current && app.tab === "tasks"} onclick={() => { app.current = null; app.tab = "tasks"; }}>
           <ListChecks size={16} /> Tasks
         </button>
+        <button class:active={!app.current && app.tab === "projects"} onclick={() => { app.current = null; app.tab = "projects"; }}>
+          <Columns3 size={16} /> Projects
+        </button>
         {#if !roomForToday}
           <button class:active={!app.current && app.tab === "today"} onclick={() => { app.current = null; app.tab = "today"; }}>
             <CalendarDays size={16} /> Today
@@ -140,6 +148,8 @@
         {/key}
       {:else if app.tab === "tasks"}
         <div class="scroll"><TasksView /></div>
+      {:else if app.tab === "projects"}
+        <div class="scroll"><ProjectsView /></div>
       {:else if app.tab === "today" && !roomForToday}
         <div class="scroll"><TodayPanel /></div>
       {:else}
@@ -191,6 +201,8 @@
           <TodayPanel />
         {:else if app.tab === "tasks"}
           <TasksView />
+        {:else if app.tab === "projects"}
+          <ProjectsView />
         {:else}
           <Search mode="page" />
         {/if}
@@ -452,7 +464,7 @@
   }
   .tabbar {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     border-top: 1px solid var(--rule);
     background: var(--sheet);
     padding-bottom: var(--safe-bottom);

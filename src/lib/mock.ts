@@ -1,6 +1,7 @@
 // In-browser stand-in for the Rust core, used only when the interface runs outside Tauri
 // (`npm run dev` in a browser) so screens can be designed and checked without a device.
 
+import { isBoard } from "./kanban";
 import type { CalEvent, Entry, NoteMeta, Status, VaultTask } from "./types";
 
 type Args = Record<string, any>;
@@ -38,6 +39,12 @@ const notes = new Map<string, string>([
     "# " +
       today.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) +
       "\n\n## Agenda\n\n## Notes\n\n## Tasks\n\n",
+  ],
+  [
+    "Projects/Wandika launch.md",
+    "---\n\nkanban-plugin: basic\n\n---\n\n## To do\n\n- [ ] Set up OAuth apps #setup\n- [ ] Test on the Android phone #testing 📅 " +
+      iso(today) +
+      "\n- [ ] Write [[Reading list]] review\n\n\n## Doing\n\n- [ ] [[Projects/Wandika]] sync design #design\n\n\n## Done\n\n**Complete**\n- [x] Pick a stack #design\n\n\n%% kanban:settings\n```\n{\"kanban-plugin\":\"basic\"}\n```\n%%\n",
   ],
   ["Private/Passport renewal.md.age", "# Passport renewal\n\nAppointment reference and documents list.\n"],
 ]);
@@ -77,6 +84,7 @@ function meta(): NoteMeta[] {
     tags: [...text.matchAll(/(?:^|\s)#([A-Za-z][\w/-]*)/g)].map((m) => m[1]),
     encrypted: path.endsWith(".age"),
     locked: path.endsWith(".age") && !encryption.unlocked,
+    board: isBoard(text),
     modified: Date.now(),
   }));
 }

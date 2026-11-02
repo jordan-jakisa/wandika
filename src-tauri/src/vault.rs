@@ -40,6 +40,8 @@ pub struct NoteMeta {
     pub tags: Vec<String>,
     pub encrypted: bool,
     pub locked: bool,
+    /// An Obsidian Kanban board (`kanban-plugin:` in the frontmatter).
+    pub board: bool,
     pub modified: i64,
 }
 
@@ -339,7 +341,14 @@ fn parse(rel: &str, text: &str, modified: i64, encrypted: bool, locked: bool) ->
     let mut tags: Vec<String> = TAG.captures_iter(&body).map(|c| c[1].to_string()).collect();
     tags.sort();
     tags.dedup();
-    NoteMeta { path: rel.to_string(), title: title_of(rel), links, tags, encrypted, locked, modified }
+    let board = is_board(text);
+    NoteMeta { path: rel.to_string(), title: title_of(rel), links, tags, encrypted, locked, board, modified }
+}
+
+pub fn is_board(text: &str) -> bool {
+    let Some(rest) = text.strip_prefix("---") else { return false };
+    let end = rest.find("\n---").unwrap_or(rest.len());
+    rest[..end].lines().any(|l| l.trim_start().starts_with("kanban-plugin:"))
 }
 
 /// Removes fenced code so `#include` or `[[x]]` inside code isn't read as a tag or link.
@@ -633,6 +642,8 @@ mod tests {
         assert_eq!(m.links, vec!["Wandika", "Daily/2026-11-02"]);
         assert_eq!(m.tags, vec!["idea"]);
         assert_eq!(title_of("Private/Diary.md.age"), "Diary");
+        assert!(is_board("---\n\nkanban-plugin: basic\n\n---\n\n## To do\n"));
+        assert!(!is_board("# Plan\n\nkanban-plugin: basic\n"));
     }
 
     #[test]

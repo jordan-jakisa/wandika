@@ -217,7 +217,7 @@ function build(view: EditorView): DecorationSet {
       for (const m of line.text.matchAll(TAG)) {
         if (/^#+\s/.test(line.text) && m.index === 0) continue;
         const start = line.from + m.index! + m[1].length;
-        out.push(Decoration.mark({ class: "cm-tag" }).range(start, start + m[2].length));
+        out.push(Decoration.mark({ class: "cm-tag", attributes: { "data-tag": m[2].slice(1) } }).range(start, start + m[2].length));
       }
     }
   }
@@ -232,7 +232,7 @@ function inCode(state: EditorState, pos: number) {
   return false;
 }
 
-export function livePreview(onOpenLink: (target: string) => void) {
+export function livePreview(onOpenLink: (target: string) => void, onTag: (tag: string) => void) {
   const plugin = ViewPlugin.fromClass(
     class {
       decorations: DecorationSet;
@@ -257,6 +257,12 @@ export function livePreview(onOpenLink: (target: string) => void) {
   const clicks = EditorView.domEventHandlers({
     mousedown(e, view) {
       const target = e.target as HTMLElement;
+      const tag = target.closest<HTMLElement>(".cm-tag");
+      if (tag?.dataset.tag && (e.metaKey || e.ctrlKey || !activeLines(view.state, view.hasFocus).has(view.state.doc.lineAt(view.posAtDOM(tag)).number))) {
+        e.preventDefault();
+        onTag(tag.dataset.tag);
+        return true;
+      }
       const el = target.closest<HTMLElement>(".cm-wikilink") ?? target.closest<HTMLElement>(".cm-md-link");
       if (!el) return false;
       const pos = view.posAtDOM(el);

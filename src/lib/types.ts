@@ -76,6 +76,7 @@ export interface NoteMeta {
   tags: string[];
   encrypted: boolean;
   locked: boolean;
+  board: boolean;
   modified: number;
 }
 
