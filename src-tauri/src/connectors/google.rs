@@ -6,7 +6,9 @@
 use super::oauth::{self, Pkce, TokenSet};
 use super::{CalEvent, MailBody, MailItem, RemoteTask};
 use crate::config;
-use crate::error::{msg, Result};
+#[cfg(desktop)]
+use crate::error::msg;
+use crate::error::Result;
 use crate::secrets::Secrets;
 use base64::Engine;
 use chrono::{DateTime, Utc};

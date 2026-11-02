@@ -1,0 +1,496 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0B82DE869BAF190653EBFF87 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7CE798E2ECD119A7E08295E6 /* Security.framework */; };
+		35BBE8F11620F88B821F9B34 /* main.mm in Sources */ = {isa = PBXBuildFile; fileRef = 7C2FF0A577DA7509EA1FE4A2 /* main.mm */; };
+		396608566BED2A51326B9FFF /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3E8B37145A04F8C117CCA98C /* Assets.xcassets */; };
+		398CCF89E65257E3F830B0F4 /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BDA000E3DD1E348A3FE27599 /* WebKit.framework */; };
+		45A9973F47B6F16EA47A8203 /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CB099439199119372C08C041 /* MetalKit.framework */; };
+		8819DB6CB33F83E1ADCA2E0F /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B4714EFD9FC820B14DD3A9F4 /* UIKit.framework */; };
+		89EF6BC5D927D057B80D165F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = F8CE35B8E6A9A6B210A45D39 /* LaunchScreen.storyboard */; };
+		8CA0E0AD575C28D50CF34D03 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F2EEAA9517E891782F102E23 /* Metal.framework */; };
+		AC0B16F3270AE1FAD38B72E8 /* assets in Resources */ = {isa = PBXBuildFile; fileRef = 442BF47744796195ACECFB5D /* assets */; };
+		B7058887F193846EDE7B7A87 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A21351F41163E804B68C8416 /* CoreGraphics.framework */; };
+		D2BCD7466B20ABC687905E88 /* libapp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 3F43073C0F71F3F66CC8A3E6 /* libapp.a */; };
+		D65948C820EF9B7DACD2DEF9 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B822386389C1BEC40FA124EA /* QuartzCore.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		0E3E5A2C952349369DA793E1 /* commands.rs */ = {isa = PBXFileReference; path = commands.rs; sourceTree = "<group>"; };
+		279CD0D76CF1D11A431D624E /* mod.rs */ = {isa = PBXFileReference; path = mod.rs; sourceTree = "<group>"; };
+		281CFEEB6A48BDF37DF52154 /* wandika_iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = wandika_iOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		29DCF652848AEE3C5559E42E /* secrets.rs */ = {isa = PBXFileReference; path = secrets.rs; sourceTree = "<group>"; };
+		378BECF0CDBE7FAAC49185B0 /* config.rs */ = {isa = PBXFileReference; path = config.rs; sourceTree = "<group>"; };
+		3818C58583349D17892D7238 /* microsoft.rs */ = {isa = PBXFileReference; path = microsoft.rs; sourceTree = "<group>"; };
+		3E8B37145A04F8C117CCA98C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		3F43073C0F71F3F66CC8A3E6 /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
+		442BF47744796195ACECFB5D /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; path = assets; sourceTree = SOURCE_ROOT; };
+		5B3DB1B41E86C078965474DB /* google.rs */ = {isa = PBXFileReference; path = google.rs; sourceTree = "<group>"; };
+		6A1690026292D62149AA1588 /* oauth.rs */ = {isa = PBXFileReference; path = oauth.rs; sourceTree = "<group>"; };
+		6CFEE1F93E6E790B2A0934D2 /* wandika_iOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = wandika_iOS.entitlements; sourceTree = "<group>"; };
+		72D3E451040627DF54C9FA8E /* bindings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bindings.h; sourceTree = "<group>"; };
+		7473C3100AAEDDF06F764A68 /* state.rs */ = {isa = PBXFileReference; path = state.rs; sourceTree = "<group>"; };
+		7829EFD0908EF8A5801E626A /* sync.rs */ = {isa = PBXFileReference; path = sync.rs; sourceTree = "<group>"; };
+		7C2FF0A577DA7509EA1FE4A2 /* main.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = main.mm; sourceTree = "<group>"; };
+		7CE798E2ECD119A7E08295E6 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
+		89CEDD261126BEFF08CEE8D0 /* vault.rs */ = {isa = PBXFileReference; path = vault.rs; sourceTree = "<group>"; };
+		8FAF38665203B783DA666B0D /* error.rs */ = {isa = PBXFileReference; path = error.rs; sourceTree = "<group>"; };
+		9D47166D385E074F1830E20F /* crypto.rs */ = {isa = PBXFileReference; path = crypto.rs; sourceTree = "<group>"; };
+		A21351F41163E804B68C8416 /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
+		A63FCA729B72DE306CD27F83 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		B4714EFD9FC820B14DD3A9F4 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
+		B5E824372C8540EAB2481087 /* lib.rs */ = {isa = PBXFileReference; path = lib.rs; sourceTree = "<group>"; };
+		B786221A5388BD5668C4B2D4 /* apple.rs */ = {isa = PBXFileReference; path = apple.rs; sourceTree = "<group>"; };
+		B822386389C1BEC40FA124EA /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
+		BDA000E3DD1E348A3FE27599 /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebKit.framework; path = System/Library/Frameworks/WebKit.framework; sourceTree = SDKROOT; };
+		C1BFC3C49672FDBED872C36E /* github.rs */ = {isa = PBXFileReference; path = github.rs; sourceTree = "<group>"; };
+		C68471308A315F28DCBE2871 /* main.rs */ = {isa = PBXFileReference; path = main.rs; sourceTree = "<group>"; };
+		CB099439199119372C08C041 /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
+		F2EEAA9517E891782F102E23 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
+		F8CE35B8E6A9A6B210A45D39 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		6A4B47460EA53FCABD412E9E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D2BCD7466B20ABC687905E88 /* libapp.a in Frameworks */,
+				B7058887F193846EDE7B7A87 /* CoreGraphics.framework in Frameworks */,
+				8CA0E0AD575C28D50CF34D03 /* Metal.framework in Frameworks */,
+				45A9973F47B6F16EA47A8203 /* MetalKit.framework in Frameworks */,
+				D65948C820EF9B7DACD2DEF9 /* QuartzCore.framework in Frameworks */,
+				0B82DE869BAF190653EBFF87 /* Security.framework in Frameworks */,
+				8819DB6CB33F83E1ADCA2E0F /* UIKit.framework in Frameworks */,
+				398CCF89E65257E3F830B0F4 /* WebKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0788D94CE18DA6813C8DA7C0 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				A21351F41163E804B68C8416 /* CoreGraphics.framework */,
+				3F43073C0F71F3F66CC8A3E6 /* libapp.a */,
+				F2EEAA9517E891782F102E23 /* Metal.framework */,
+				CB099439199119372C08C041 /* MetalKit.framework */,
+				B822386389C1BEC40FA124EA /* QuartzCore.framework */,
+				7CE798E2ECD119A7E08295E6 /* Security.framework */,
+				B4714EFD9FC820B14DD3A9F4 /* UIKit.framework */,
+				BDA000E3DD1E348A3FE27599 /* WebKit.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		13821AD19E0D0AB1A9E4CE93 /* bindings */ = {
+			isa = PBXGroup;
+			children = (
+				72D3E451040627DF54C9FA8E /* bindings.h */,
+			);
+			path = bindings;
+			sourceTree = "<group>";
+		};
+		1507DF8582A20433CD9A6189 /* connectors */ = {
+			isa = PBXGroup;
+			children = (
+				B786221A5388BD5668C4B2D4 /* apple.rs */,
+				5B3DB1B41E86C078965474DB /* google.rs */,
+				3818C58583349D17892D7238 /* microsoft.rs */,
+				279CD0D76CF1D11A431D624E /* mod.rs */,
+				6A1690026292D62149AA1588 /* oauth.rs */,
+			);
+			path = connectors;
+			sourceTree = "<group>";
+		};
+		300ADE1EAFF30FE00D5F3975 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				E6B638B67E9C5534BCBB75C0 /* wandika */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		33BA5A5C5781F9300CFC5F9D /* wandika_iOS */ = {
+			isa = PBXGroup;
+			children = (
+				A63FCA729B72DE306CD27F83 /* Info.plist */,
+				6CFEE1F93E6E790B2A0934D2 /* wandika_iOS.entitlements */,
+			);
+			path = wandika_iOS;
+			sourceTree = "<group>";
+		};
+		494E2D5F49F33D0FC67F4486 /* Externals */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Externals;
+			sourceTree = "<group>";
+		};
+		5B968ED1A633E2A3116BAF93 /* src */ = {
+			isa = PBXGroup;
+			children = (
+				0E3E5A2C952349369DA793E1 /* commands.rs */,
+				378BECF0CDBE7FAAC49185B0 /* config.rs */,
+				9D47166D385E074F1830E20F /* crypto.rs */,
+				8FAF38665203B783DA666B0D /* error.rs */,
+				C1BFC3C49672FDBED872C36E /* github.rs */,
+				B5E824372C8540EAB2481087 /* lib.rs */,
+				C68471308A315F28DCBE2871 /* main.rs */,
+				29DCF652848AEE3C5559E42E /* secrets.rs */,
+				7473C3100AAEDDF06F764A68 /* state.rs */,
+				7829EFD0908EF8A5801E626A /* sync.rs */,
+				89CEDD261126BEFF08CEE8D0 /* vault.rs */,
+				1507DF8582A20433CD9A6189 /* connectors */,
+			);
+			name = src;
+			path = ../../src;
+			sourceTree = "<group>";
+		};
+		8B702DA5F027A8A126DAECFB /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				281CFEEB6A48BDF37DF52154 /* wandika_iOS.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		BB009C8DC95DB5C0F2D6B1B8 = {
+			isa = PBXGroup;
+			children = (
+				442BF47744796195ACECFB5D /* assets */,
+				3E8B37145A04F8C117CCA98C /* Assets.xcassets */,
+				F8CE35B8E6A9A6B210A45D39 /* LaunchScreen.storyboard */,
+				494E2D5F49F33D0FC67F4486 /* Externals */,
+				300ADE1EAFF30FE00D5F3975 /* Sources */,
+				5B968ED1A633E2A3116BAF93 /* src */,
+				33BA5A5C5781F9300CFC5F9D /* wandika_iOS */,
+				0788D94CE18DA6813C8DA7C0 /* Frameworks */,
+				8B702DA5F027A8A126DAECFB /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		E6B638B67E9C5534BCBB75C0 /* wandika */ = {
+			isa = PBXGroup;
+			children = (
+				7C2FF0A577DA7509EA1FE4A2 /* main.mm */,
+				13821AD19E0D0AB1A9E4CE93 /* bindings */,
+			);
+			path = wandika;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		0504AF4F767FB74E511FD752 /* wandika_iOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B5D3340657F4DB30A8A79257 /* Build configuration list for PBXNativeTarget "wandika_iOS" */;
+			buildPhases = (
+				EC7EF808A46EF1FDA73E8C4C /* Build Rust Code */,
+				1EC76A9D89AF95AEEF0F3946 /* Sources */,
+				905276D4D34027E09C427362 /* Resources */,
+				6A4B47460EA53FCABD412E9E /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = wandika_iOS;
+			packageProductDependencies = (
+			);
+			productName = wandika_iOS;
+			productReference = 281CFEEB6A48BDF37DF52154 /* wandika_iOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		7C0D73635CF2B4EAF4997522 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+				};
+			};
+			buildConfigurationList = CDD09E05CC1D0FCA00F758AC /* Build configuration list for PBXProject "wandika" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = BB009C8DC95DB5C0F2D6B1B8;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 8B702DA5F027A8A126DAECFB /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				0504AF4F767FB74E511FD752 /* wandika_iOS */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		905276D4D34027E09C427362 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				396608566BED2A51326B9FFF /* Assets.xcassets in Resources */,
+				89EF6BC5D927D057B80D165F /* LaunchScreen.storyboard in Resources */,
+				AC0B16F3270AE1FAD38B72E8 /* assets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		EC7EF808A46EF1FDA73E8C4C /* Build Rust Code */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build Rust Code";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/Externals/x86_64/${CONFIGURATION}/libapp.a",
+				"$(SRCROOT)/Externals/arm64/${CONFIGURATION}/libapp.a",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "npm run -- tauri ios xcode-script -v --platform \"${PLATFORM_DISPLAY_NAME:?}\" --sdk-root \"${SDKROOT:?}\" --framework-search-paths \"${FRAMEWORK_SEARCH_PATHS:?}\" --header-search-paths \"${HEADER_SEARCH_PATHS:?}\" --gcc-preprocessor-definitions \"${GCC_PREPROCESSOR_DEFINITIONS:-}\" --configuration \"${CONFIGURATION:?}\" ${FORCE_COLOR} ${ARCHS:?}\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		1EC76A9D89AF95AEEF0F3946 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				35BBE8F11620F88B821F9B34 /* main.mm in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		04A1EF63003841B98964A276 /* debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = debug;
+		};
+		5EFA3657F69B75727C3EAA24 /* release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ARCHS = (
+					arm64,
+				);
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = wandika_iOS/wandika_iOS.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				ENABLE_BITCODE = NO;
+				"EXCLUDED_ARCHS[sdk=iphoneos*]" = x86_64;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"\".\"",
+				);
+				INFOPLIST_FILE = wandika_iOS/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				"LIBRARY_SEARCH_PATHS[arch=arm64]" = "$(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
+				"LIBRARY_SEARCH_PATHS[arch=x86_64]" = "$(inherited) $(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = me.jordanjakisa.wandika;
+				PRODUCT_NAME = Wandika;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALID_ARCHS = arm64;
+			};
+			name = release;
+		};
+		71853D25FF21FFE75C656B25 /* release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = release;
+		};
+		E7FD1C7C5A1051BCD68540CD /* debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ARCHS = (
+					arm64,
+				);
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = wandika_iOS/wandika_iOS.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				ENABLE_BITCODE = NO;
+				"EXCLUDED_ARCHS[sdk=iphoneos*]" = x86_64;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"\".\"",
+				);
+				INFOPLIST_FILE = wandika_iOS/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				"LIBRARY_SEARCH_PATHS[arch=arm64]" = "$(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
+				"LIBRARY_SEARCH_PATHS[arch=x86_64]" = "$(inherited) $(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = me.jordanjakisa.wandika;
+				PRODUCT_NAME = Wandika;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALID_ARCHS = arm64;
+			};
+			name = debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		B5D3340657F4DB30A8A79257 /* Build configuration list for PBXNativeTarget "wandika_iOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E7FD1C7C5A1051BCD68540CD /* debug */,
+				5EFA3657F69B75727C3EAA24 /* release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = debug;
+		};
+		CDD09E05CC1D0FCA00F758AC /* Build configuration list for PBXProject "wandika" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				04A1EF63003841B98964A276 /* debug */,
+				71853D25FF21FFE75C656B25 /* release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 7C0D73635CF2B4EAF4997522 /* Project object */;
+}
