@@ -4,7 +4,7 @@ use crate::connectors::{apple, google, microsoft, oauth, CalEvent, MailItem, Rem
 use crate::crypto::{Crypto, CryptoStatus};
 use crate::error::{msg, Result};
 use crate::github::{self, DeviceCode, Repo, User};
-use crate::state::{App, GITHUB_KEY};
+use crate::state::{App, VaultConfig, GITHUB_KEY};
 use crate::sync::{self, SyncReport, Target};
 use crate::vault::{self, Entry, NoteMeta, SearchHit, VaultTask};
 use chrono::{Duration, Local, NaiveDate, TimeZone};
@@ -19,7 +19,9 @@ type S<'a> = State<'a, App>;
 pub struct Status {
     configured: Value,
     user: Option<User>,
-    target: Option<Target>,
+    vault: Option<VaultConfig>,
+    /// Vaults opened before on this device, for switching.
+    known: Vec<VaultConfig>,
     last_sync: Option<i64>,
     encryption: Option<CryptoStatus>,
     connectors: Value,
@@ -35,15 +37,15 @@ fn account(app: &App, key: &str) -> Option<String> {
 pub async fn status(app: S<'_>) -> Result<Status> {
     let settings = app.settings();
     let signed_in = app.secrets.get(GITHUB_KEY).is_some();
-    let target = settings.target.clone().filter(|_| signed_in);
-    let (last_sync, encryption) = match &target {
+    let (last_sync, encryption) = match &settings.vault {
         Some(_) => (sync::load_state(&app.paths()?).last_sync, Some(app.crypto()?.status())),
         None => (None, None),
     };
     Ok(Status {
         configured: crate::config::configured(),
         user: settings.user.filter(|_| signed_in),
-        target,
+        vault: settings.vault,
+        known: settings.known,
         last_sync,
         encryption,
         connectors: json!({
@@ -55,7 +57,7 @@ pub async fn status(app: S<'_>) -> Result<Status> {
     })
 }
 
-// GitHub sign-in and repository choice
+// GitHub sign-in
 
 #[tauri::command]
 pub async fn github_start_login(app: S<'_>) -> Result<DeviceCode> {
@@ -77,12 +79,15 @@ pub async fn github_poll_login(app: S<'_>, device_code: String) -> Result<Option
     }
 }
 
+/// Local vaults stay open; a vault that syncs with GitHub closes, since it can't sync any more.
 #[tauri::command]
 pub async fn github_sign_out(app: S<'_>) -> Result<()> {
     app.secrets.delete(GITHUB_KEY);
     app.update_settings(|s| {
         s.user = None;
-        s.target = None;
+        if s.vault.as_ref().is_some_and(|v| v.remote.is_some()) {
+            s.vault = None;
+        }
     })
 }
 
@@ -100,25 +105,102 @@ pub async fn repo_create(app: S<'_>, name: String) -> Result<Repo> {
     app.github()?.create_repo(name).await
 }
 
+async fn remote_for(app: &App, owner: String, repo: String) -> Result<Target> {
+    let info = app.github()?.repo(&owner, &repo).await?;
+    Ok(Target { owner, repo, branch: info.default_branch.unwrap_or_else(|| "main".into()) })
+}
+
+// Vaults
+
+/// Opens a GitHub repository as a vault, downloading it on first use.
 #[tauri::command]
 pub async fn vault_open(app: S<'_>, owner: String, repo: String) -> Result<SyncReport> {
-    let gh = app.github()?;
-    let info = gh.repo(&owner, &repo).await?;
-    let target = Target { owner, repo, branch: info.default_branch.unwrap_or_else(|| "main".into()) };
-    app.update_settings(|s| s.target = Some(target))?;
+    let target = remote_for(&app, owner, repo).await?;
+    let id = format!("github/{}/{}", target.owner, target.repo);
+    let existing = app.settings().known.into_iter().find(|k| k.id == id);
+    let vault = existing.unwrap_or(VaultConfig { id, name: target.repo.clone(), folder: None, remote: None });
+    app.update_settings(|s| s.vault = Some(VaultConfig { remote: Some(target), ..vault }))?;
     sync_now(app).await
 }
 
-/// Back to the repository list. Files stay on the device so reopening the vault is instant.
+/// A vault that lives only on this device: in the app's storage, or in a folder chosen on the Mac.
+#[tauri::command]
+pub async fn vault_create_local(app: S<'_>, name: String, folder: Option<String>) -> Result<()> {
+    let folder = folder.map(std::path::PathBuf::from);
+    if let Some(f) = &folder
+        && !f.is_dir()
+    {
+        return Err(msg("That folder doesn't exist any more. Choose it again."));
+    }
+    let name = match (&folder, name.trim()) {
+        (_, n) if !n.is_empty() => n.to_string(),
+        (Some(f), _) => f.file_name().and_then(|n| n.to_str()).unwrap_or("Notes").to_string(),
+        (None, _) => return Err(msg("Give the vault a name.")),
+    };
+    let slug: String = name
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    let id = format!("local/{}-{}", slug.trim_matches('-'), oauth::random_state()[..6].to_lowercase());
+    let vault = VaultConfig { id, name, folder, remote: None };
+    app.update_settings(|s| s.vault = Some(vault))?;
+    app.root()?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn vault_switch(app: S<'_>, id: String) -> Result<()> {
+    let vault = app.settings().known.into_iter().find(|k| k.id == id).ok_or_else(|| msg("That vault is gone."))?;
+    if vault.folder.as_ref().is_some_and(|f| !f.is_dir()) {
+        return Err(msg("That vault's folder was moved or deleted."));
+    }
+    app.update_settings(|s| s.vault = Some(vault))
+}
+
+/// Removes a vault from the list on this device. Its files are left where they are.
+#[tauri::command]
+pub async fn vault_forget(app: S<'_>, id: String) -> Result<()> {
+    app.update_settings(|s| {
+        s.known.retain(|k| k.id != id);
+        if s.vault.as_ref().is_some_and(|v| v.id == id) {
+            s.vault = None;
+        }
+    })
+}
+
+/// Back to the vault list. Files stay on the device so reopening the vault is instant.
 #[tauri::command]
 pub async fn vault_close(app: S<'_>) -> Result<()> {
-    app.update_settings(|s| s.target = None)
+    app.update_settings(|s| s.vault = None)
+}
+
+/// Connects the open local vault to a GitHub repository. The first sync keeps both sides.
+#[tauri::command]
+pub async fn vault_connect_remote(app: S<'_>, owner: String, repo: String) -> Result<SyncReport> {
+    let mut vault = app.vault()?;
+    if vault.remote.is_some() {
+        return Err(msg("This vault already syncs with GitHub. Disconnect it first."));
+    }
+    vault.remote = Some(remote_for(&app, owner, repo).await?);
+    let _ = std::fs::remove_file(app.paths()?.state);
+    app.update_settings(|s| s.vault = Some(vault))?;
+    sync_now(app).await
+}
+
+/// Stops syncing. The files stay; the vault carries on as a local one.
+#[tauri::command]
+pub async fn vault_disconnect_remote(app: S<'_>) -> Result<()> {
+    let mut vault = app.vault()?;
+    vault.remote = None;
+    let _ = std::fs::remove_file(app.paths()?.state);
+    app.update_settings(|s| s.vault = Some(vault))
 }
 
 #[tauri::command]
 pub async fn sync_now(app: S<'_>) -> Result<SyncReport> {
-    let gh = app.github()?;
     let target = app.target()?;
+    let gh = app.github()?;
     let paths = app.paths()?;
     let Ok(_guard) = app.sync_lock.try_lock() else {
         return Err(msg("A sync is already running."));
@@ -238,17 +320,17 @@ pub async fn daily_note(app: S<'_>, date: Option<String>) -> Result<String> {
 
 #[tauri::command]
 pub async fn encryption_setup(app: S<'_>, passphrase: String) -> Result<CryptoStatus> {
-    Ok(Crypto::set_up(&app.root()?, &app.secrets, &app.target()?.id(), &passphrase)?.status())
+    Ok(Crypto::set_up(&app.root()?, &app.secrets, &app.vault()?.id, &passphrase)?.status())
 }
 
 #[tauri::command]
 pub async fn encryption_unlock(app: S<'_>, passphrase: String) -> Result<CryptoStatus> {
-    Ok(Crypto::unlock(&app.root()?, &app.secrets, &app.target()?.id(), &passphrase)?.status())
+    Ok(Crypto::unlock(&app.root()?, &app.secrets, &app.vault()?.id, &passphrase)?.status())
 }
 
 #[tauri::command]
 pub async fn encryption_lock(app: S<'_>) -> Result<CryptoStatus> {
-    Crypto::lock(&app.secrets, &app.target()?.id());
+    Crypto::lock(&app.secrets, &app.vault()?.id);
     Ok(app.crypto()?.status())
 }
 
@@ -421,7 +503,7 @@ pub async fn today(app: S<'_>, date: Option<String>) -> Result<Today> {
     collect(&mut out, "Apple Calendar", apple.0, |o, v| o.events.extend(v));
     collect(&mut out, "Reminders", apple.1, |o, v| o.remote_tasks.extend(v));
 
-    if app.target().is_ok() {
+    if app.vault().is_ok() {
         out.tasks = with_index(&app, |i, _| i.tasks())?.into_iter().filter(|t| !t.done).collect();
     }
     out.events.sort_by(|a, b| b.all_day.cmp(&a.all_day).then(a.start.cmp(&b.start)));

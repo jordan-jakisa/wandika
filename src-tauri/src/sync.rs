@@ -32,11 +32,6 @@ pub struct Target {
     pub branch: String,
 }
 
-impl Target {
-    pub fn id(&self) -> String {
-        format!("{}/{}", self.owner, self.repo)
-    }
-}
 
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
 struct Stat {
@@ -69,14 +64,7 @@ pub struct SyncReport {
 
 pub struct Paths {
     pub files: PathBuf,
-    state: PathBuf,
-}
-
-impl Paths {
-    pub fn new(data_dir: &Path, t: &Target) -> Self {
-        let base = data_dir.join("vaults").join(&t.owner).join(&t.repo);
-        Self { files: base.join("files"), state: base.join("state.json") }
-    }
+    pub state: PathBuf,
 }
 
 pub fn load_state(p: &Paths) -> SyncState {
@@ -220,7 +208,9 @@ async fn sync_once(gh: &GitHub, t: &Target, p: &Paths, state: &mut SyncState) ->
     };
     let tree_sha = gh.commit_tree(&t.owner, &t.repo, &remote_head).await?;
 
-    // First sync on this device: clone with one tarball, keeping anything already on disk.
+    // First sync on this device: clone with one tarball, keeping anything already on disk. A local
+    // vault being connected to a repository lands here too; where both sides have a different file
+    // at the same path, the GitHub version is kept beside the local one.
     if state.head.is_none() {
         let tree = gh.tree(&t.owner, &t.repo, &tree_sha).await?;
         let files = untar(&gh.tarball(&t.owner, &t.repo, &remote_head).await?, None)?;
@@ -228,7 +218,14 @@ async fn sync_once(gh: &GitHub, t: &Target, p: &Paths, state: &mut SyncState) ->
         let mut remote = BTreeMap::new();
         for e in tree.iter().filter(|e| e.kind == "blob" && e.mode != "120000" && !skip(&e.path)) {
             remote.insert(e.path.clone(), e.sha.clone());
-            if local.contains_key(&e.path) {
+            if let Some(local_sha) = local.get(&e.path) {
+                if local_sha != &e.sha
+                    && let Some(bytes) = files.get(&e.path)
+                {
+                    let copy = conflict_path(&e.path);
+                    vault::write_atomic(&vault::safe(&p.files, &copy)?, bytes)?;
+                    report.conflicts.push(copy);
+                }
                 continue;
             }
             if let Some(bytes) = files.get(&e.path) {

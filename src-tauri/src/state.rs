@@ -13,10 +13,24 @@ use std::sync::Mutex;
 
 pub const GITHUB_KEY: &str = "github";
 
+/// A notes vault: a folder of Markdown files, optionally synced with a GitHub repository.
+#[derive(Serialize, Deserialize, Clone)]
+pub struct VaultConfig {
+    /// Fixed for the vault's life, also when a remote is added later; names its data folder.
+    pub id: String,
+    pub name: String,
+    /// A folder chosen on the Mac (an Obsidian vault, a local git repo). None: the app's own storage.
+    pub folder: Option<PathBuf>,
+    pub remote: Option<Target>,
+}
+
 #[derive(Serialize, Deserialize, Default, Clone)]
 pub struct Settings {
     pub user: Option<User>,
-    pub target: Option<Target>,
+    pub vault: Option<VaultConfig>,
+    /// Every vault opened on this device, for switching back.
+    #[serde(default)]
+    pub known: Vec<VaultConfig>,
 }
 
 pub struct App {
@@ -59,6 +73,12 @@ impl App {
     pub fn update_settings(&self, f: impl FnOnce(&mut Settings)) -> Result<()> {
         let mut s = self.settings.lock().unwrap();
         f(&mut s);
+        if let Some(v) = s.vault.clone() {
+            match s.known.iter_mut().find(|k| k.id == v.id) {
+                Some(k) => *k = v,
+                None => s.known.push(v),
+            }
+        }
         crate::vault::write_atomic(&self.data.join("settings.json"), &serde_json::to_vec_pretty(&*s)?)
     }
 
@@ -67,12 +87,18 @@ impl App {
         Ok(GitHub::new(self.http.clone(), token))
     }
 
+    pub fn vault(&self) -> Result<VaultConfig> {
+        self.settings().vault.ok_or_else(|| msg("Open or create a vault first."))
+    }
+
     pub fn target(&self) -> Result<Target> {
-        self.settings().target.ok_or_else(|| msg("Choose a repository first."))
+        self.vault()?.remote.ok_or_else(|| msg("This vault is only on this device. Connect it to GitHub to sync it."))
     }
 
     pub fn paths(&self) -> Result<Paths> {
-        Ok(Paths::new(&self.data, &self.target()?))
+        let v = self.vault()?;
+        let base = self.data.join("vaults").join(&v.id);
+        Ok(Paths { files: v.folder.clone().unwrap_or_else(|| base.join("files")), state: base.join("state.json") })
     }
 
     pub fn root(&self) -> Result<PathBuf> {
@@ -82,6 +108,6 @@ impl App {
     }
 
     pub fn crypto(&self) -> Result<Crypto> {
-        Ok(Crypto::load(&self.root()?, &self.secrets, &self.target()?.id()))
+        Ok(Crypto::load(&self.root()?, &self.secrets, &self.vault()?.id))
     }
 }

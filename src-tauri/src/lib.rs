@@ -17,6 +17,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let data = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data)?;
@@ -38,6 +39,11 @@ pub fn run() {
             commands::repo_create,
             commands::vault_open,
             commands::vault_close,
+            commands::vault_create_local,
+            commands::vault_switch,
+            commands::vault_forget,
+            commands::vault_connect_remote,
+            commands::vault_disconnect_remote,
             commands::sync_now,
             commands::tree,
             commands::note_read,
