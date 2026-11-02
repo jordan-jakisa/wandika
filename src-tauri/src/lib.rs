@@ -1,23 +1,71 @@
+mod commands;
 mod config;
 mod connectors;
 mod crypto;
 mod error;
 mod github;
 mod secrets;
+mod state;
 mod sync;
 mod vault;
 
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
+use tauri::Manager;
+use tauri_plugin_deep_link::DeepLinkExt;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet])
+        .plugin(tauri_plugin_deep_link::init())
+        .setup(|app| {
+            let data = app.path().app_data_dir()?;
+            std::fs::create_dir_all(&data)?;
+            app.manage(state::App::new(data));
+            let handle = app.handle().clone();
+            app.deep_link().on_open_url(move |event| {
+                for url in event.urls() {
+                    commands::handle_redirect(&handle, &url);
+                }
+            });
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            commands::status,
+            commands::github_start_login,
+            commands::github_poll_login,
+            commands::github_sign_out,
+            commands::repos_list,
+            commands::repo_create,
+            commands::vault_open,
+            commands::vault_close,
+            commands::sync_now,
+            commands::tree,
+            commands::note_read,
+            commands::note_write,
+            commands::note_create,
+            commands::folder_create,
+            commands::entry_rename,
+            commands::entry_trash,
+            commands::note_titles,
+            commands::search,
+            commands::backlinks,
+            commands::resolve_link,
+            commands::tasks_vault,
+            commands::task_toggle,
+            commands::daily_note,
+            commands::encryption_setup,
+            commands::encryption_unlock,
+            commands::encryption_lock,
+            commands::set_encrypted,
+            commands::connector_connect,
+            commands::connector_poll,
+            commands::connector_disconnect,
+            commands::today,
+            commands::remote_task_toggle,
+            commands::mail_to_note,
+            commands::event_to_note,
+            commands::agenda_to_daily,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
