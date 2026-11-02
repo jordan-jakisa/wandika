@@ -20,19 +20,20 @@ type Args = Record<string, unknown>;
 /** True inside the Tauri app; false when the interface is opened in a plain browser for design work. */
 export const native = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
-let backend: Promise<(cmd: string, args?: Args) => Promise<unknown>> | null = null;
+type Invoke = (cmd: string, args?: Args | Uint8Array, options?: { headers: Record<string, string> }) => Promise<unknown>;
+let backend: Promise<Invoke> | null = null;
 
 function load() {
   backend ??= native
     ? import("@tauri-apps/api/core").then((m) => m.invoke)
-    : import("./mock").then((m) => m.invoke);
+    : import("./mock").then((m) => m.invoke as Invoke);
   return backend;
 }
 
-async function call<T>(cmd: string, args?: Args): Promise<T> {
+async function call<T>(cmd: string, args?: Args | Uint8Array, options?: { headers: Record<string, string> }): Promise<T> {
   const invoke = await load();
   try {
-    return (await invoke(cmd, args)) as T;
+    return (await invoke(cmd, args, options)) as T;
   } catch (e) {
     throw new Error(typeof e === "string" ? e : e instanceof Error ? e.message : String(e));
   }
@@ -88,6 +89,15 @@ export const api = {
   syncNow: () => call<SyncReport>("sync_now"),
 
   tree: () => call<Entry[]>("tree"),
+  /** Saves a file next to `note` (Obsidian's attachment folder) and returns its vault path. */
+  attachmentSave: async (note: string, name: string, file: Blob) => {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    // The bytes travel as the raw request body; the names ride in a header.
+    return native
+      ? call<string>("attachment_save", bytes, { headers: { "x-meta": new URLSearchParams({ note, name }).toString() } })
+      : call<string>("attachment_save", { note, name, bytes });
+  },
+  attachmentRead: (target: string, from: string) => call<ArrayBuffer>("attachment_read", { target, from }),
   noteRead: (path: string) => call<string>("note_read", { path }),
   noteWrite: (path: string, content: string) => call<void>("note_write", { path, content }),
   noteCreate: (folder: string, title: string, body?: string) =>

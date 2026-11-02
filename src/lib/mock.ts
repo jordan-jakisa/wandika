@@ -31,7 +31,7 @@ const notes = new Map<string, string>([
   ],
   [
     "Projects/Wandika.md",
-    "# Wandika\n\nNotes app on **Mac, iPhone and Android**, synced through GitHub.\n\n## Next\n\n- [ ] Test sync with two phones\n- [ ] Encrypt the *Private* folder\n\n> Plain files first. Nothing that Obsidian couldn't open.\n\n```rust\nfn main() { println!(\"#notatag [[notalink]]\"); }\n```\n",
+    "# Wandika\n\nNotes app on **Mac, iPhone and Android**, synced through GitHub.\n\n![[Sync sketch.svg]]\n\n## Next\n\n- [ ] Test sync with two phones\n- [ ] Encrypt the *Private* folder\n\n> Plain files first. Nothing that Obsidian couldn't open.\n\n```rust\nfn main() { println!(\"#notatag [[notalink]]\"); }\n```\n",
   ],
   [
     "Projects/Sync design.md",
@@ -89,9 +89,19 @@ let lastSync: number | null = null;
 
 const titleOf = (p: string) => p.split("/").pop()!.replace(/\.age$/, "").replace(/\.md$/, "");
 
+/** Images and other files, by vault path. */
+const files = new Map<string, Uint8Array>([
+  [
+    "attachments/Sync sketch.svg",
+    new TextEncoder().encode(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="300" viewBox="0 0 640 300"><rect width="640" height="300" fill="#e9efe9"/><g fill="none" stroke="#2f6b4f" stroke-width="4"><rect x="40" y="110" width="150" height="80" rx="12"/><rect x="245" y="110" width="150" height="80" rx="12"/><rect x="450" y="110" width="150" height="80" rx="12"/><path d="M190 150h55M395 150h55"/></g><g font-family="sans-serif" font-size="22" fill="#1d2b24" text-anchor="middle"><text x="115" y="157">Mac</text><text x="320" y="157">GitHub</text><text x="525" y="157">Phone</text></g></svg>',
+    ),
+  ],
+]);
+
 function entries(): Entry[] {
   const folders = new Set<string>();
-  for (const p of notes.keys()) {
+  for (const p of [...notes.keys(), ...files.keys()]) {
     const parts = p.split("/");
     for (let i = 1; i < parts.length; i++) folders.add(parts.slice(0, i).join("/"));
   }
@@ -104,6 +114,7 @@ function entries(): Entry[] {
   }));
   for (const p of notes.keys())
     out.push({ path: p, name: titleOf(p), kind: "note", encrypted: p.endsWith(".age"), modified: Date.now() });
+  for (const p of files.keys()) out.push({ path: p, name: p.split("/").pop()!, kind: "file", encrypted: false, modified: Date.now() });
   return out.sort((a, b) => a.path.toLowerCase().localeCompare(b.path.toLowerCase()));
 }
 
@@ -218,6 +229,18 @@ const handlers: Record<string, (a: Args) => unknown> = {
     return { pulled: [], pushed: [], removed: [], merged: [], conflicts: [], too_big: [], head: "abc", at: lastSync };
   },
   tree: () => entries(),
+  attachment_save: ({ name, bytes }) => {
+    let path = `attachments/${name}`;
+    for (let n = 1; files.has(path); n++) path = `attachments/${name.replace(/(\.[^.]+)?$/, ` ${n}$1`)}`;
+    files.set(path, bytes);
+    return path;
+  },
+  attachment_read: ({ target }) => {
+    const name = target.split("/").pop()!.toLowerCase();
+    const hit = [...files.keys()].find((p) => p === target || p.split("/").pop()!.toLowerCase() === name);
+    if (!hit) throw `${target} isn't in this vault.`;
+    return files.get(hit)!.slice().buffer;
+  },
   note_read: ({ path }) => {
     if (path.endsWith(".age") && !encryption.unlocked) throw "Encrypted notes are locked. Unlock them with your passphrase.";
     if (!notes.has(path)) throw "That note no longer exists.";

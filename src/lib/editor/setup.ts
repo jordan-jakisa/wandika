@@ -8,6 +8,7 @@ import { drawSelection, EditorView, keymap, placeholder } from "@codemirror/view
 import { tags as t } from "@lezer/highlight";
 import type { NoteMeta } from "../types";
 import { diagrams, diagramTheme } from "./diagrams";
+import { embedTheme, embeds, fileDrops } from "./embeds";
 import { formatting } from "./format";
 import { livePreview } from "./livePreview";
 import { tables, tableTheme } from "./tables";
@@ -113,6 +114,8 @@ export function extensions(opts: {
   onOpenLink: (target: string) => void;
   onTag: (tag: string) => void;
   onChange: (doc: string) => void;
+  getPath: () => string;
+  onFiles: (files: File[], view: EditorView, pos: number) => void;
 }): Extension[] {
   return [
     history(),
@@ -127,12 +130,15 @@ export function extensions(opts: {
     formatting,
     keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
     placeholder("Start writing. Type [[ to link a note."),
+    embeds(opts.getPath),
+    fileDrops(opts.onFiles),
     livePreview(opts.onOpenLink, opts.onTag),
     diagrams,
     tables(opts.onOpenLink),
     theme,
     diagramTheme,
     tableTheme,
+    embedTheme,
     EditorView.contentAttributes.of({ spellcheck: "true", autocorrect: "on", autocapitalize: "sentences" }),
     EditorView.updateListener.of((u) => {
       if (u.docChanged) opts.onChange(u.state.doc.toString());

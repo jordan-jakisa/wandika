@@ -64,7 +64,7 @@ class Rule extends WidgetType {
   }
 }
 
-function activeLines(state: EditorState, focused = true) {
+export function activeLines(state: EditorState, focused = true) {
   const lines = new Set<number>();
   // Unfocused, the whole note reads as rendered text.
   if (!focused) return lines;
@@ -202,6 +202,8 @@ function build(view: EditorView): DecorationSet {
       if (line.number <= fmEnd || inCode(state, line.from)) continue;
       const lineActive = active.has(line.number);
       for (const m of line.text.matchAll(WIKILINK)) {
+        // `![[file]]` is an embed, drawn by the embeds extension, not a link.
+        if (line.text[m.index! - 1] === "!") continue;
         const start = line.from + m.index!;
         const end = start + m[0].length;
         const [target, alias] = m[1].split("|");
@@ -224,7 +226,7 @@ function build(view: EditorView): DecorationSet {
   return Decoration.set(out, true);
 }
 
-function inCode(state: EditorState, pos: number) {
+export function inCode(state: EditorState, pos: number) {
   let node = syntaxTree(state).resolveInner(pos, 1);
   for (let n: typeof node | null = node; n; n = n.parent) {
     if (n.name === "FencedCode" || n.name === "CodeBlock") return true;

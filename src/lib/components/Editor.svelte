@@ -1,10 +1,11 @@
 <script lang="ts">
   import { EditorState } from "@codemirror/state";
   import { EditorView } from "@codemirror/view";
-  import { ChevronLeft, Code, Columns3, Lock, LockOpen, Network, Trash2, Link2 } from "@lucide/svelte";
+  import { ChevronLeft, Code, ImagePlus, Columns3, Lock, LockOpen, Network, Trash2, Link2 } from "@lucide/svelte";
   import { onDestroy } from "svelte";
   import { api, openUrl } from "../api";
   import { app, titleOf } from "../app.svelte";
+  import { pastedName } from "../attachments";
   import { extensions } from "../editor/setup";
   import { isBoard } from "../kanban";
   import type { SearchHit } from "../types";
@@ -30,6 +31,35 @@
   let boardKey = $state(0);
   let showSource = $state(false);
   const encrypted = $derived(path.endsWith(".age"));
+  let picker: HTMLInputElement;
+  let pickAt = 0;
+
+  /** Saves files as attachments and embeds them, each on its own line, at `pos`. */
+  async function addFiles(files: File[], v: EditorView, pos: number) {
+    const note = loadedPath ?? path;
+    const links: string[] = [];
+    for (const f of files) {
+      try {
+        const rel = await api.attachmentSave(note, pastedName(f), f);
+        links.push(`![[${rel.split("/").pop()}]]`);
+      } catch (e) {
+        app.say(`Couldn't add ${f.name || "the file"}: ${(e as Error).message}`);
+      }
+    }
+    if (!links.length || v !== view) return;
+    void app.refreshFiles();
+    pos = Math.min(pos, v.state.doc.length);
+    const line = v.state.doc.lineAt(pos);
+    const insert = (pos > line.from ? "\n" : "") + links.join("\n") + (pos < line.to ? "\n" : "");
+    v.dispatch({ changes: { from: pos, insert }, selection: { anchor: pos + insert.length } });
+    v.focus();
+  }
+
+  function pickImages() {
+    pickAt = view?.state.selection.main.head ?? 0;
+    picker.click();
+  }
+
   /** On phones the writing toolbar shows while the note's text has focus. */
   let writing = $state(false);
 
@@ -109,6 +139,8 @@
         onOpenLink: (target) => void app.follow(target),
         onTag: (tag) => app.showTag(tag),
         onChange,
+        getPath: () => loadedPath ?? path,
+        onFiles: addFiles,
       }),
     });
     if (view) view.setState(state);
@@ -251,6 +283,9 @@
           {#if showSource}<Columns3 size={16} /> Show as board{:else}<Code size={16} /> Edit as Markdown{/if}
         </button>
       {/if}
+      {#if boardText === null && !locked && !error}
+        <button role="menuitem" onclick={pickImages}><ImagePlus size={16} /> Add image</button>
+      {/if}
       <button role="menuitem" onclick={async () => { await save(); app.showGraph(true); }}><Network size={16} /> Show in graph</button>
       <button role="menuitem" onclick={toggleEncryption}>
         {#if encrypted}<LockOpen size={16} /> Decrypt note{:else}<Lock size={16} /> Encrypt note{/if}
@@ -321,8 +356,21 @@
     {/if}
     </div>
   </div>
+  <input
+    bind:this={picker}
+    type="file"
+    accept="image/*"
+    multiple
+    hidden
+    onchange={(e) => {
+      const input = e.currentTarget as HTMLInputElement;
+      const files = [...(input.files ?? [])];
+      input.value = "";
+      if (files.length && view) void addFiles(files, view, pickAt);
+    }}
+  />
   {#if writing}
-    <KeyboardBar view={() => view} />
+    <KeyboardBar view={() => view} onImage={pickImages} />
   {/if}
 </article>
 

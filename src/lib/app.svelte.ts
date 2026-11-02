@@ -1,4 +1,5 @@
 import { api, listen } from "./api";
+import { forgetImages } from "./attachments";
 import { TEMPLATE } from "./kanban";
 import type { Entry, NoteMeta, Snippet, Status, SyncReport, Today } from "./types";
 
@@ -29,6 +30,8 @@ class AppState {
   tab = $state<Tab>("notes");
   showToday = $state(true);
   switcherOpen = $state(false);
+  /** Vault path of the image open in the viewer. */
+  viewing = $state<string | null>(null);
   settingsOpen = $state(false);
   settingsSection = $state<SettingsSection>("vault");
   /** True when Settings was opened for one section, so phones skip the section list. */
@@ -112,7 +115,10 @@ class AppState {
     await this.refreshFiles();
     await this.refreshStatus();
     // Connecting or disconnecting GitHub keeps the open note; a different vault starts fresh.
-    if (this.status?.vault?.id !== before) this.current = null;
+    if (this.status?.vault?.id !== before) {
+      this.current = null;
+      forgetImages();
+    }
     void this.loadSnippets();
     this.stopAutoSync();
     if (this.synced) this.startAutoSync();

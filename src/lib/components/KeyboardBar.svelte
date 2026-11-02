@@ -3,6 +3,7 @@
   import {
     Hash,
     Heading,
+    ImagePlus,
     KeyboardOff,
     Link,
     List,
@@ -16,11 +17,13 @@
   import * as w from "../editor/writing";
 
   /** The writing toolbar that sits on top of the phone keyboard while a note is being edited. */
-  let { view }: { view: () => EditorView | null } = $props();
+  let { view, onImage }: { view: () => EditorView | null; onImage: () => void } = $props();
 
-  const BUTTONS: { label: string; icon: Component<any>; run: (v: EditorView) => boolean }[] = [
+  /** `picker` buttons open a system picker, so the note gives up focus for it. */
+  const BUTTONS: { label: string; icon: Component<any>; run: (v: EditorView) => boolean; picker?: boolean }[] = [
     { label: "Link to a note", icon: Link, run: w.link },
     { label: "Tag", icon: Hash, run: w.tag },
+    { label: "Add image", icon: ImagePlus, run: () => (onImage(), true), picker: true },
     { label: "Checklist", icon: ListChecks, run: (v) => w.lines(v, "task") },
     { label: "Heading", icon: Heading, run: w.heading },
     { label: "Bulleted list", icon: List, run: (v) => w.lines(v, "bullet") },
@@ -46,11 +49,11 @@
     };
   });
 
-  function press(e: Event, run: (v: EditorView) => boolean) {
+  function press(e: Event, b: (typeof BUTTONS)[number]) {
     const v = view();
     if (!v) return;
-    run(v);
-    v.focus();
+    b.run(v);
+    if (!b.picker) v.focus();
     e.preventDefault();
   }
 </script>
@@ -68,7 +71,7 @@
 >
   <div class="tools">
     {#each BUTTONS as b (b.label)}
-      <button aria-label={b.label} title={b.label} onclick={(e) => press(e, b.run)}><b.icon size={21} /></button>
+      <button aria-label={b.label} title={b.label} onclick={(e) => press(e, b)}><b.icon size={21} /></button>
     {/each}
   </div>
   <button class="hide" aria-label="Hide keyboard" title="Hide keyboard" onclick={() => view()?.contentDOM.blur()}>
