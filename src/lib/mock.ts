@@ -335,7 +335,10 @@ const handlers: Record<string, (a: Args) => unknown> = {
       ],
       tasks: tasks().filter((t) => !t.done),
       remote_tasks: [{ id: "r1", source: "google", list_id: "l", list: "My Tasks", title: "Renew domain", done: false, due: iso(today) }],
-      errors: { "Outlook Mail": "Your Outlook sign-in expired. Connect it again." },
+      errors: {
+        "Outlook Mail": { code: "provider_auth", message: "Outlook needs you to sign in again. Reconnect it in Settings, under Connections." },
+        "Outlook Calendar": { code: "provider_auth", message: "Outlook needs you to sign in again. Reconnect it in Settings, under Connections." },
+      },
     };
   },
   remote_task_toggle: () => undefined,

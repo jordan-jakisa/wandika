@@ -145,7 +145,8 @@ export interface Today {
   mail: MailItem[];
   tasks: VaultTask[];
   remote_tasks: RemoteTask[];
-  errors: Record<string, string>;
+  /** Per source ("Gmail", "Outlook Calendar"), in plain words; `provider_auth` means reconnect. */
+  errors: Record<string, { code: string; message: string }>;
 }
 
 export type ConnectStart =

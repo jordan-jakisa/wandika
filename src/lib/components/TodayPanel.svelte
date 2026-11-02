@@ -18,7 +18,12 @@
   const isDue = (t: { due: string | null }) => !!t.due && t.due <= todayIso;
   const dueTasks = $derived((data?.tasks ?? []).filter(isDue));
   const remoteDue = $derived((data?.remote_tasks ?? []).filter(isDue));
-  const errors = $derived(Object.entries(data?.errors ?? {}));
+  // One line per problem, not per service: Gmail, Calendar and Tasks share one Google sign-in.
+  const errors = $derived.by(() => {
+    const byMessage = new Map<string, { code: string; message: string }>();
+    for (const e of Object.values(data?.errors ?? {})) byMessage.set(e.message, e);
+    return [...byMessage.values()];
+  });
 
   async function load(force = false) {
     loading = true;
@@ -86,8 +91,13 @@
 
   {#if errors.length}
     <ul class="errors" role="status">
-      {#each errors as [source, message] (source)}
-        <li><strong>{source}:</strong> {message}</li>
+      {#each errors as e (e.message)}
+        <li>
+          <span>{e.message}</span>
+          {#if e.code === "provider_auth" || e.code === "provider_forbidden"}
+            <button class="link" onclick={() => app.openSettings("connections")}>Reconnect</button>
+          {/if}
+        </li>
       {/each}
     </ul>
   {/if}
@@ -378,9 +388,18 @@
     }
   }
   .errors {
+    list-style: none;
+    margin: 0 0 16px;
+    padding: 0;
     font-size: var(--small);
     color: var(--alarm);
     display: grid;
     gap: 4px;
+  }
+  .errors li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 8px;
   }
 </style>

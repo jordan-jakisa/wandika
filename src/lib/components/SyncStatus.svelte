@@ -8,16 +8,29 @@
     return () => clearInterval(t);
   });
 
-  const offline = $derived(app.syncError?.startsWith("No connection") ?? false);
+  const offline = $derived(app.syncError?.code === "offline");
+  // A failure names its cause in a few words; tapping shows the full sentence and tries again.
+  const SHORT: Record<string, string> = {
+    github_rate_limit: "GitHub is busy. Tap to retry",
+    github_down: "GitHub is down. Tap to retry",
+    github_not_found: "Repository not found",
+    no_access: "No access to the folder",
+    disk_full: "Device is out of space",
+  };
   const text = $derived(
     app.syncing
       ? "Syncing…"
       : offline
         ? "Offline. Changes are saved here."
         : app.syncError
-          ? "Sync failed"
+          ? (SHORT[app.syncError.code] ?? "Couldn't sync. Tap to retry")
           : `Synced ${ago(app.lastSync, now)}`,
   );
+
+  function tap() {
+    if (app.syncError && !offline) app.say(app.syncError.message);
+    void app.sync();
+  }
 </script>
 
 {#if !app.synced}
@@ -30,9 +43,9 @@
   class="sync"
   class:warn={offline}
   class:fail={app.syncError && !offline}
-  onclick={() => app.sync()}
+  onclick={tap}
   disabled={app.syncing}
-  title={app.syncError ?? "Sync now"}
+  title={app.syncError?.message ?? "Sync now"}
   aria-label={`${text}. Sync now`}
 >
   <span class="icon" class:spin={app.syncing}><RefreshCw size={13} /></span>

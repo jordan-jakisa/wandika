@@ -1,4 +1,4 @@
-import { api, listen } from "./api";
+import { api, codeOf, listen } from "./api";
 import { forgetImages } from "./attachments";
 import { TEMPLATE } from "./kanban";
 import type { Entry, NoteMeta, Snippet, Status, SyncReport, Today } from "./types";
@@ -39,7 +39,8 @@ class AppState {
   /** True when Settings was opened for one section, so phones skip the section list. */
   settingsDirect = $state(false);
   syncing = $state(false);
-  syncError = $state<string | null>(null);
+  /** The last sync failure, in plain words; `code` "offline" is shown as offline, not failed. */
+  syncError = $state<{ code: string; message: string } | null>(null);
   lastSync = $state<number | null>(null);
   conflicts = $state<string[]>([]);
   tooBig = $state<string[]>([]);
@@ -173,8 +174,8 @@ class AppState {
       this.apply(report);
       this.syncError = null;
     } catch (e) {
-      const message = (e as Error).message;
-      if (!message.startsWith("A sync is already running")) this.syncError = message;
+      const code = codeOf(e);
+      if (code !== "sync_busy") this.syncError = { code, message: (e as Error).message };
     } finally {
       this.syncing = false;
     }

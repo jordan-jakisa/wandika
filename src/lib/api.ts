@@ -30,12 +30,34 @@ function load() {
   return backend;
 }
 
+/**
+ * An error from the Rust core: `message` is the plain sentence for people, `code` is for the
+ * interface to act on, and `detail` (the raw service or system text) only goes to the console.
+ */
+export class AppError extends Error {
+  constructor(
+    message: string,
+    readonly code: string,
+    readonly detail?: string,
+  ) {
+    super(message);
+  }
+}
+
+export const codeOf = (e: unknown) => (e instanceof AppError ? e.code : "message");
+
 async function call<T>(cmd: string, args?: Args | Uint8Array, options?: { headers: Record<string, string> }): Promise<T> {
   const invoke = await load();
   try {
     return (await invoke(cmd, args, options)) as T;
   } catch (e) {
-    throw new Error(typeof e === "string" ? e : e instanceof Error ? e.message : String(e));
+    if (e && typeof e === "object" && "code" in e && "message" in e) {
+      const { code, message, detail } = e as { code: string; message: string; detail?: string };
+      if (detail && detail !== message) console.warn(`[wandika] ${cmd}: ${detail}`);
+      throw new AppError(message, code, detail);
+    }
+    const message = typeof e === "string" ? e : e instanceof Error ? e.message : String(e);
+    throw new AppError(message, "message");
   }
 }
 

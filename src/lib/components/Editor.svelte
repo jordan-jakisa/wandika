@@ -3,7 +3,7 @@
   import { EditorView } from "@codemirror/view";
   import { ChevronLeft, Code, ImagePlus, LayoutTemplate, Columns3, Lock, LockOpen, Network, Trash2, Link2 } from "@lucide/svelte";
   import { onDestroy } from "svelte";
-  import { api, openUrl } from "../api";
+  import { api, codeOf, openUrl } from "../api";
   import { app, titleOf } from "../app.svelte";
   import { pastedName } from "../attachments";
   import { extensions } from "../editor/setup";
@@ -141,9 +141,8 @@
     try {
       text = await api.noteRead(p);
     } catch (e) {
-      const message = (e as Error).message;
-      if (message.includes("locked")) locked = true;
-      else error = message;
+      if (codeOf(e) === "locked") locked = true;
+      else error = (e as Error).message;
       view?.destroy();
       view = null;
       return;

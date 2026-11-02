@@ -422,7 +422,7 @@
                 </div>
                 <button class="btn" onclick={() => app.sync()} disabled={app.syncing}>{app.syncing ? "Syncing…" : "Sync now"}</button>
               </div>
-              {#if app.syncError}<div class="row"><span class="error small">Last sync: {app.syncError}</span></div>{/if}
+              {#if app.syncError}<div class="row"><span class="error small">Last sync: {app.syncError.message}</span></div>{/if}
               <div class="row">
                 <div class="row-text">
                   <span class="row-label">Disconnect from GitHub</span>
