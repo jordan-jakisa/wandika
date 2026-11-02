@@ -257,6 +257,7 @@
   </header>
 
   <div class="page" class:wide={boardText !== null}>
+    <div class="column">
     <input
       id="note-title"
       class="title"
@@ -308,6 +309,7 @@
         </ul>
       </section>
     {/if}
+    </div>
   </div>
 </article>
 
@@ -355,16 +357,23 @@
       padding: 24px 56px 30vh;
     }
   }
-  .page.wide > * {
+  /* One column sized in the note font, so the title, text and backlinks share the same edges
+     whatever font, size or line width is chosen in Settings. */
+  .column {
+    max-width: var(--measure);
+    margin: 0 auto;
+    font-family: var(--font-note);
+    font-size: var(--note-size);
+  }
+  .page.wide .column {
     max-width: none;
+    font-family: var(--font-ui);
+    font-size: var(--ui-size);
   }
-  .page > * {
-    max-width: var(--measure);
-    margin-left: auto;
-    margin-right: auto;
-  }
-  .cm-host :global(.cm-editor) {
-    max-width: var(--measure);
+  .column > :global(.error),
+  .column > :global(.unlock) {
+    font-family: var(--font-ui);
+    font-size: var(--ui-size);
   }
   .title {
     display: block;
@@ -384,6 +393,8 @@
     outline: none;
   }
   .backlinks {
+    font-family: var(--font-ui);
+    font-size: var(--ui-size);
     margin-top: 32px;
     padding-top: 20px;
     border-top: 1px solid var(--rule);

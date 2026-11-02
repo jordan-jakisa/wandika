@@ -11,6 +11,8 @@
     FolderClosed,
     Columns3,
     Network,
+    PanelLeftClose,
+    PanelLeftOpen,
   } from "@lucide/svelte";
   import { app, titleOf, type Tab } from "../app.svelte";
   import Editor from "./Editor.svelte";
@@ -37,9 +39,13 @@
   function loadLayout() {
     try {
       const v = JSON.parse(localStorage.getItem(LAYOUT_KEY) ?? "{}");
-      return { sidebar: Number(v.sidebar) || SIDEBAR.initial, today: Number(v.today) || TODAY.initial };
+      return {
+        sidebar: Number(v.sidebar) || SIDEBAR.initial,
+        today: Number(v.today) || TODAY.initial,
+        sidebarOpen: v.sidebarOpen !== false,
+      };
     } catch {
-      return { sidebar: SIDEBAR.initial, today: TODAY.initial };
+      return { sidebar: SIDEBAR.initial, today: TODAY.initial, sidebarOpen: true };
     }
   }
   function setCols(patch: Partial<typeof cols>) {
@@ -51,7 +57,8 @@
     }
   }
   // On a narrow window the sidebar gives way first, so the note always keeps room.
-  const sidebarW = $derived(Math.max(SIDEBAR.min, Math.min(cols.sidebar, width - MAIN_MIN)));
+  const sidebarW = $derived(cols.sidebarOpen ? Math.max(SIDEBAR.min, Math.min(cols.sidebar, width - MAIN_MIN)) : 0);
+  const toggleSidebar = () => setCols({ sidebarOpen: !cols.sidebarOpen });
   const roomForToday = $derived(
     width - sidebarW - cols.today >= MAIN_MIN && !boardOpen && !(app.tab === "graph" && !app.current),
   );
@@ -73,6 +80,9 @@
     } else if (k === "d") {
       e.preventDefault();
       void app.openDaily();
+    } else if (k === "\\") {
+      e.preventDefault();
+      toggleSidebar();
     } else if (k === ",") {
       e.preventDefault();
       app.openSettings();
@@ -140,9 +150,10 @@
     class="shell"
     class:mac={isMac}
     class:with-today={app.showToday && roomForToday}
+    class:collapsed={!cols.sidebarOpen}
     style="--sidebar: {sidebarW}px; --today: {cols.today}px"
   >
-    <aside class="sidebar" aria-label="Vault">
+    <aside class="sidebar" aria-label="Vault" hidden={!cols.sidebarOpen}>
       <Resizer
         edge="right"
         value={sidebarW}
@@ -157,6 +168,7 @@
           <span class="vault-name" title={app.vaultName}>{app.vault?.name}</span>
         </div>
         <button class="icon-btn" onclick={() => app.openSettings()} aria-label="Settings"><SettingsIcon size={18} /></button>
+        <button class="icon-btn" onclick={toggleSidebar} aria-label="Hide the sidebar" title="Hide the sidebar (⌘\\)"><PanelLeftClose size={18} /></button>
       </div>
       <div class="side-actions">
         <button class="search-btn" onclick={() => (app.switcherOpen = true)}>
@@ -187,6 +199,11 @@
     </aside>
 
     <main class="main">
+      {#if !cols.sidebarOpen}
+        <button class="icon-btn sidebar-toggle" onclick={toggleSidebar} aria-label="Show the sidebar" title="Show the sidebar (⌘\\)">
+          <PanelLeftOpen size={18} />
+        </button>
+      {/if}
       {@render conflictsBanner()}
       {#if app.current}
         {#key app.current}
@@ -406,6 +423,29 @@
   }
   .phone-graph {
     height: 100%;
+  }
+  .sidebar-toggle {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 3;
+  }
+  /* Clear the traffic lights when the sidebar no longer covers them. */
+  .mac .sidebar-toggle {
+    top: 30px;
+    left: 12px;
+  }
+  .collapsed .main :global(.bar) {
+    padding-left: 52px;
+  }
+  .sidebar[hidden] {
+    display: none;
+  }
+  .shell.collapsed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .shell.collapsed.with-today {
+    grid-template-columns: minmax(0, 1fr) var(--today);
   }
   .today-toggle {
     position: absolute;
