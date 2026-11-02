@@ -1,0 +1,221 @@
+import { api, listen } from "./api";
+import type { Entry, NoteMeta, Status, SyncReport } from "./types";
+
+export type Tab = "notes" | "today" | "tasks" | "search";
+
+export interface Ask {
+  title: string;
+  message?: string;
+  confirm: string;
+  danger?: boolean;
+  input?: { label: string; value: string };
+  resolve: (value: string | null) => void;
+}
+
+const SYNC_AFTER_EDIT_MS = 20_000;
+const SYNC_EVERY_MS = 3 * 60_000;
+
+class AppState {
+  status = $state<Status | null>(null);
+  bootError = $state<string | null>(null);
+  tree = $state<Entry[]>([]);
+  titles = $state<NoteMeta[]>([]);
+  current = $state<string | null>(null);
+  tab = $state<Tab>("notes");
+  showToday = $state(true);
+  switcherOpen = $state(false);
+  settingsOpen = $state(false);
+  syncing = $state(false);
+  syncError = $state<string | null>(null);
+  lastSync = $state<number | null>(null);
+  conflicts = $state<string[]>([]);
+  tooBig = $state<string[]>([]);
+  /** Paths changed on disk by the last sync, so an open editor can reload them. */
+  changed = $state<{ paths: string[]; at: number }>({ paths: [], at: 0 });
+  toast = $state<string | null>(null);
+  dialog = $state<Ask | null>(null);
+
+  /** Set by the editor so pending typing is saved before a sync reads the files. */
+  flush: () => Promise<void> = async () => {};
+
+  #editTimer: ReturnType<typeof setTimeout> | undefined;
+  #interval: ReturnType<typeof setInterval> | undefined;
+  #toastTimer: ReturnType<typeof setTimeout> | undefined;
+
+  get vaultName() {
+    const t = this.status?.target;
+    return t ? `${t.owner}/${t.repo}` : "";
+  }
+
+  async init() {
+    try {
+      this.status = await api.status();
+      this.lastSync = this.status.last_sync;
+      if (this.status.target) await this.enterVault();
+    } catch (e) {
+      this.bootError = (e as Error).message;
+    }
+    listen<{ provider: string; error: string | null }>("connectors-changed", async (p) => {
+      this.status = await api.status();
+      this.say(p.error ?? `${p.provider === "google" ? "Google" : p.provider} is connected.`);
+    });
+  }
+
+  async refreshStatus() {
+    this.status = await api.status();
+  }
+
+  async enterVault() {
+    await this.refreshFiles();
+    this.startAutoSync();
+    void this.sync();
+  }
+
+  async refreshFiles() {
+    const [tree, titles] = await Promise.all([api.tree(), api.noteTitles()]);
+    this.tree = tree;
+    this.titles = titles;
+  }
+
+  startAutoSync() {
+    clearInterval(this.#interval);
+    this.#interval = setInterval(() => {
+      if (document.visibilityState === "visible") void this.sync();
+    }, SYNC_EVERY_MS);
+  }
+
+  stopAutoSync() {
+    clearInterval(this.#interval);
+    clearTimeout(this.#editTimer);
+  }
+
+  /** Called after every local save: sync once typing has paused for a while. */
+  edited() {
+    clearTimeout(this.#editTimer);
+    this.#editTimer = setTimeout(() => void this.sync(), SYNC_AFTER_EDIT_MS);
+  }
+
+  async sync() {
+    if (this.syncing || !this.status?.target) return;
+    this.syncing = true;
+    clearTimeout(this.#editTimer);
+    try {
+      await this.flush();
+      const report: SyncReport = await api.syncNow();
+      this.apply(report);
+      this.syncError = null;
+    } catch (e) {
+      const message = (e as Error).message;
+      if (!message.startsWith("A sync is already running")) this.syncError = message;
+    } finally {
+      this.syncing = false;
+    }
+  }
+
+  apply(report: SyncReport) {
+    this.lastSync = report.at;
+    if (report.conflicts.length) this.conflicts = [...new Set([...this.conflicts, ...report.conflicts])];
+    this.tooBig = report.too_big;
+    const touched = [...report.pulled, ...report.merged, ...report.removed];
+    if (touched.length || report.conflicts.length) {
+      this.changed = { paths: touched, at: Date.now() };
+      void this.refreshFiles();
+    }
+  }
+
+  open(path: string) {
+    this.current = path;
+    this.switcherOpen = false;
+    this.tab = "notes";
+  }
+
+  async openDaily() {
+    const path = await api.dailyNote();
+    await this.refreshFiles();
+    this.open(path);
+  }
+
+  async newNote(folder = this.currentFolder()) {
+    const path = await api.noteCreate(folder, "Untitled");
+    await this.refreshFiles();
+    this.open(path);
+    this.edited();
+    return path;
+  }
+
+  currentFolder() {
+    const c = this.current;
+    return c && c.includes("/") ? c.slice(0, c.lastIndexOf("/")) : "";
+  }
+
+  /** Follows a [[wikilink]], creating the note when it doesn't exist yet. */
+  async follow(target: string) {
+    const clean = target.split("|")[0].split("#")[0].trim();
+    if (!clean) return;
+    const found = await api.resolveLink(clean);
+    if (found) return this.open(found);
+    const slash = clean.lastIndexOf("/");
+    const folder = slash >= 0 ? clean.slice(0, slash) : "";
+    const path = await api.noteCreate(folder, clean.slice(slash + 1), `# ${clean.slice(slash + 1)}\n\n`);
+    await this.refreshFiles();
+    this.open(path);
+    this.edited();
+  }
+
+  /** In-app replacement for confirm()/prompt(), which mobile web views don't reliably show. */
+  ask(opts: Omit<Ask, "resolve">): Promise<string | null> {
+    this.dialog?.resolve(null);
+    return new Promise((resolve) => {
+      this.dialog = {
+        ...opts,
+        resolve: (v) => {
+          this.dialog = null;
+          resolve(v);
+        },
+      };
+    });
+  }
+
+  say(message: string) {
+    this.toast = message;
+    clearTimeout(this.#toastTimer);
+    this.#toastTimer = setTimeout(() => (this.toast = null), 4000);
+  }
+
+  async switchRepo() {
+    await this.flush();
+    this.stopAutoSync();
+    await api.vaultClose();
+    this.current = null;
+    this.tree = [];
+    this.titles = [];
+    this.settingsOpen = false;
+    await this.refreshStatus();
+  }
+
+  async signOut() {
+    await this.flush();
+    this.stopAutoSync();
+    await api.githubSignOut();
+    this.current = null;
+    this.settingsOpen = false;
+    await this.refreshStatus();
+  }
+}
+
+export const app = new AppState();
+
+export function titleOf(path: string) {
+  return path.split("/").pop()!.replace(/\.age$/, "").replace(/\.md$/, "");
+}
+
+export function ago(ms: number | null, now = Date.now()) {
+  if (!ms) return "never";
+  const s = Math.round((now - ms) / 1000);
+  if (s < 45) return "just now";
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h} h ago`;
+  return new Date(ms).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
