@@ -8,6 +8,7 @@ import { drawSelection, EditorView, keymap, placeholder } from "@codemirror/view
 import { tags as t } from "@lezer/highlight";
 import type { NoteMeta } from "../types";
 import { diagrams, diagramTheme } from "./diagrams";
+import { formatting } from "./format";
 import { livePreview } from "./livePreview";
 import { tables, tableTheme } from "./tables";
 
@@ -123,6 +124,7 @@ export function extensions(opts: {
     search({ top: true }),
     highlightSelectionMatches(),
     autocompletion({ override: [wikilinks(opts.getTitles)], icons: false }),
+    formatting,
     keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
     placeholder("Start writing. Type [[ to link a note."),
     livePreview(opts.onOpenLink, opts.onTag),
