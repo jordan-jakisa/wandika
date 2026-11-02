@@ -1,7 +1,7 @@
 {
   "name": "wandika",
   "version": "0.1.0",
-  "description": "",
+  "description": "Markdown notes synced through a GitHub repo, for Mac, iPhone and Android",
   "type": "module",
   "scripts": {
     "dev": "vite dev",
@@ -12,7 +12,7 @@
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "tauri": "tauri"
   },
-  "license": "MIT",
+  "license": "UNLICENSED",
   "dependencies": {
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2"
@@ -26,5 +26,6 @@
     "typescript": "~6.0.3",
     "vite": "^8.0.16",
     "@tauri-apps/cli": "^2"
-  }
+  },
+  "private": true
 }
