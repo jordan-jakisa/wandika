@@ -31,7 +31,7 @@ const notes = new Map<string, string>([
   ],
   [
     "Projects/Wandika.md",
-    "# Wandika\n\nNotes app on **Mac, iPhone and Android**, synced through GitHub.\n\n![[Sync sketch.svg]]\n\n## Next\n\n- [ ] Test sync with two phones\n- [ ] Encrypt the *Private* folder\n\n> Plain files first. Nothing that Obsidian couldn't open.\n\n```rust\nfn main() { println!(\"#notatag [[notalink]]\"); }\n```\n",
+    "# Wandika\n\nNotes app on **Mac, iPhone and Android**, synced through GitHub.\n\n![[Sync sketch.svg]]\n\n## Next\n\n- [ ] Test sync with two phones\n- [ ] Encrypt the *Private* folder\n\n> Plain files first. Nothing that Obsidian couldn't open.\n\n> [!warning] Before the first sync\n> Back up the vault folder once.\n\n> [!tip]\n> Long-press a note in the list for more actions.\n\n```rust\nfn main() { println!(\"#notatag [[notalink]]\"); }\n```\n",
   ],
   [
     "Projects/Sync design.md",

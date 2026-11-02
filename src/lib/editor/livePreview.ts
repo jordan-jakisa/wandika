@@ -44,6 +44,34 @@ class Checkbox extends WidgetType {
   }
 }
 
+// Obsidian callouts: `> [!type]` with an optional fold mark and title.
+const CALLOUT = /^(\s*>\s*)\[!([\w-]+)\]([+-]?)\s*(.*)$/;
+const TONES: Record<string, string> = {
+  tip: "accent", hint: "accent", important: "accent", success: "accent", check: "accent", done: "accent",
+  question: "amber", help: "amber", faq: "amber", warning: "amber", caution: "amber", attention: "amber",
+  failure: "alarm", fail: "alarm", missing: "alarm", danger: "alarm", error: "alarm", bug: "alarm",
+  example: "quiet", quote: "quiet", cite: "quiet",
+};
+const tone = (type: string) => TONES[type.toLowerCase()] ?? "info";
+
+class CalloutTitle extends WidgetType {
+  constructor(readonly title: string) {
+    super();
+  }
+  eq(other: CalloutTitle) {
+    return other.title === this.title;
+  }
+  toDOM() {
+    const t = document.createElement("span");
+    t.className = "cm-callout-title";
+    t.textContent = this.title;
+    return t;
+  }
+  ignoreEvent() {
+    return false;
+  }
+}
+
 class Bullet extends WidgetType {
   eq() {
     return true;
@@ -158,10 +186,25 @@ function build(view: EditorView): DecorationSet {
           return;
         }
         if (name === "Blockquote") {
+          const first = state.doc.lineAt(node.from);
+          const last = state.doc.lineAt(node.to);
+          const callout = CALLOUT.exec(first.text);
           for (let p = node.from; p <= node.to; ) {
             const line = state.doc.lineAt(p);
-            out.push(Decoration.line({ class: "cm-quote" }).range(line.from));
+            let cls = "cm-quote";
+            if (callout) {
+              cls = `cm-callout cm-callout-${tone(callout[2])}`;
+              if (line.number === first.number) cls += " cm-callout-first";
+              if (line.number === last.number) cls += " cm-callout-last";
+            }
+            out.push(Decoration.line({ class: cls }).range(line.from));
             p = line.to + 1;
+          }
+          if (callout && !isActive(first.from)) {
+            // "> [!warning] Mind the gap": the marker and title become one styled title.
+            const start = first.from + callout[1].length;
+            const title = callout[4].trim() || callout[2][0].toUpperCase() + callout[2].slice(1).toLowerCase();
+            out.push(Decoration.replace({ widget: new CalloutTitle(title) }).range(start, first.to));
           }
         }
         if (name === "QuoteMark" && !isActive(node.from)) {

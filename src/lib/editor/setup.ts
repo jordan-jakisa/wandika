@@ -58,6 +58,18 @@ const theme = EditorView.theme({
     paddingLeft: "1em !important",
     color: "var(--graphite)",
   },
+  // Callouts: a tinted block, its title in the callout's colour. No side stripe.
+  ".cm-callout": {
+    background: "color-mix(in srgb, var(--tone) 9%, transparent)",
+    padding: "0 1em !important",
+  },
+  ".cm-callout-first": { borderRadius: "8px 8px 0 0", paddingTop: "0.45em !important" },
+  ".cm-callout-last": { borderBottomLeftRadius: "8px", borderBottomRightRadius: "8px", paddingBottom: "0.45em !important" },
+  ".cm-callout-info, .cm-callout-accent": { "--tone": "var(--papyrus)" },
+  ".cm-callout-amber": { "--tone": "var(--amber)" },
+  ".cm-callout-alarm": { "--tone": "var(--alarm)" },
+  ".cm-callout-quiet": { "--tone": "var(--graphite)" },
+  ".cm-callout-title": { color: "var(--tone)", fontWeight: "600" },
   ".cm-frontmatter": { fontFamily: "var(--font-code)", fontSize: "0.8em", color: "var(--graphite)" },
   ".cm-wikilink, .cm-md-link": {
     color: "var(--papyrus)",
