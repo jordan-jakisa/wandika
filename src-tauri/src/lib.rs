@@ -1,4 +1,5 @@
 mod config;
+mod connectors;
 mod crypto;
 mod error;
 mod github;
