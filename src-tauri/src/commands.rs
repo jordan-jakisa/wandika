@@ -316,6 +316,70 @@ pub async fn daily_note(app: S<'_>, date: Option<String>) -> Result<String> {
     Ok(path)
 }
 
+// Appearance: CSS snippets, stored the Obsidian way so they sync with the vault.
+
+#[derive(Serialize)]
+pub struct Snippet {
+    name: String,
+    css: String,
+    enabled: bool,
+}
+
+fn appearance_file(root: &std::path::Path) -> std::path::PathBuf {
+    root.join(".obsidian/appearance.json")
+}
+
+#[tauri::command]
+pub async fn snippets_list(app: S<'_>) -> Result<Vec<Snippet>> {
+    let root = app.root()?;
+    let enabled: Vec<String> = std::fs::read(appearance_file(&root))
+        .ok()
+        .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
+        .and_then(|v| serde_json::from_value(v["enabledCssSnippets"].clone()).ok())
+        .unwrap_or_default();
+    let mut out = Vec::new();
+    if let Ok(dir) = std::fs::read_dir(root.join(".obsidian/snippets")) {
+        for entry in dir.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("css") {
+                continue;
+            }
+            let Some(name) = path.file_stem().and_then(|n| n.to_str()).map(str::to_string) else { continue };
+            // Snippets over 256 KB are skipped: they're almost certainly not hand-written styles.
+            if entry.metadata().is_ok_and(|m| m.len() > 256 * 1024) {
+                continue;
+            }
+            let css = std::fs::read_to_string(&path).unwrap_or_default();
+            out.push(Snippet { enabled: enabled.contains(&name), name, css });
+        }
+    }
+    out.sort_by_key(|s| s.name.to_lowercase());
+    Ok(out)
+}
+
+/// Turns a snippet on or off in `.obsidian/appearance.json`, keeping Obsidian's other settings.
+#[tauri::command]
+pub async fn snippet_toggle(app: S<'_>, name: String, enabled: bool) -> Result<()> {
+    let root = app.root()?;
+    let file = appearance_file(&root);
+    let mut v: Value = std::fs::read(&file)
+        .ok()
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .unwrap_or_else(|| json!({}));
+    if !v.is_object() {
+        v = json!({});
+    }
+    let mut list: Vec<String> = serde_json::from_value(v["enabledCssSnippets"].clone()).unwrap_or_default();
+    list.retain(|n| n != &name);
+    if enabled {
+        list.push(name);
+    }
+    v["enabledCssSnippets"] = json!(list);
+    vault::write_atomic(&file, &serde_json::to_vec_pretty(&v)?)?;
+    app.edited_on_disk();
+    Ok(())
+}
+
 // Encryption
 
 #[tauri::command]

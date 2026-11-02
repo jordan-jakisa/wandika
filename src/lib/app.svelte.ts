@@ -1,6 +1,6 @@
 import { api, listen } from "./api";
 import { TEMPLATE } from "./kanban";
-import type { Entry, NoteMeta, Status, SyncReport, Today } from "./types";
+import type { Entry, NoteMeta, Snippet, Status, SyncReport, Today } from "./types";
 
 export type Tab = "notes" | "today" | "tasks" | "projects" | "graph" | "search";
 
@@ -42,6 +42,7 @@ class AppState {
   /** The note "Around this note" centres on: the last note opened. */
   graphFocus = $state<string | null>(null);
   today = $state<Today | null>(null);
+  snippets = $state<Snippet[]>([]);
   #todayAt = 0;
   #todayLoading: Promise<void> | null = null;
 
@@ -79,6 +80,7 @@ class AppState {
       // Load the files before showing the workspace so it never flashes an empty vault.
       if (status.vault) await this.refreshFiles();
       this.status = status;
+      if (status.vault) void this.loadSnippets();
       if (status.vault?.remote) {
         this.startAutoSync();
         void this.sync();
@@ -104,8 +106,21 @@ class AppState {
     await this.refreshStatus();
     // Connecting or disconnecting GitHub keeps the open note; a different vault starts fresh.
     if (this.status?.vault?.id !== before) this.current = null;
+    void this.loadSnippets();
     this.stopAutoSync();
     if (this.synced) this.startAutoSync();
+  }
+
+  /** CSS snippets from the vault's .obsidian/snippets folder; the enabled ones are applied. */
+  async loadSnippets() {
+    this.snippets = this.status?.vault || this.vault ? await api.snippetsList().catch(() => []) : [];
+    let el = document.getElementById("wandika-snippets");
+    if (!el) {
+      el = document.createElement("style");
+      el.id = "wandika-snippets";
+      document.head.appendChild(el);
+    }
+    el.textContent = this.snippets.filter((s) => s.enabled).map((s) => `/* ${s.name} */\n${s.css}`).join("\n");
   }
 
   async refreshFiles() {
@@ -158,6 +173,7 @@ class AppState {
     if (touched.length || report.conflicts.length) {
       this.changed = { paths: touched, at: Date.now() };
       void this.refreshFiles();
+      if (touched.some((p) => p.startsWith(".obsidian/"))) void this.loadSnippets();
     }
   }
 

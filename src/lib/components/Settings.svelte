@@ -6,6 +6,7 @@
   import GitHubSignIn from "./GitHubSignIn.svelte";
   import RepoPicker from "./RepoPicker.svelte";
   import Unlock from "./Unlock.svelte";
+  import { ACCENTS, FONTS, WIDTHS, prefs, type NoteFont, type Theme, type Width } from "../prefs.svelte";
 
   let dialogEl: HTMLDialogElement;
   let device = $state<{ user_code: string; verification_uri: string } | null>(null);
@@ -18,6 +19,17 @@
   });
 
   let connecting = $state(false);
+  const defaultSize = typeof window !== "undefined" && window.innerWidth < 900 ? 17 : 18;
+
+  async function toggleSnippet(name: string, enabled: boolean) {
+    try {
+      await api.snippetToggle(name, enabled);
+      await app.loadSnippets();
+      app.edited();
+    } catch (e) {
+      app.say((e as Error).message);
+    }
+  }
 
   async function disconnectRemote() {
     const r = app.vault?.remote;
@@ -169,6 +181,91 @@
       {#if app.syncError && app.vault?.remote}<p class="error small">Last sync: {app.syncError}</p>{/if}
     </section>
 
+    <section aria-labelledby="look-h">
+      <h3 id="look-h">Appearance</h3>
+      <p class="muted small">These choices are kept on this device.</p>
+
+      <div class="pref">
+        <span class="pref-label" id="theme-l">Theme</span>
+        <div class="segmented" role="radiogroup" aria-labelledby="theme-l">
+          {#each [["system", "System"], ["light", "Light"], ["dark", "Dark"]] as [id, label] (id)}
+            <button role="radio" aria-checked={prefs.value.theme === id} class:on={prefs.value.theme === id} onclick={() => prefs.set({ theme: id as Theme })}>{label}</button>
+          {/each}
+        </div>
+      </div>
+
+      <div class="pref">
+        <span class="pref-label" id="accent-l">Accent</span>
+        <div class="swatches" role="radiogroup" aria-labelledby="accent-l">
+          {#each ACCENTS as a (a.id)}
+            <button
+              role="radio"
+              aria-checked={prefs.value.accent === a.id}
+              aria-label={a.label}
+              title={a.label}
+              class="swatch"
+              class:on={prefs.value.accent === a.id}
+              style="--swatch: {prefs.mode === 'dark' ? a.dark : a.light}"
+              onclick={() => prefs.set({ accent: a.id })}
+            ></button>
+          {/each}
+        </div>
+      </div>
+
+      <div class="pref">
+        <span class="pref-label" id="font-l">Note font</span>
+        <div class="segmented" role="radiogroup" aria-labelledby="font-l">
+          {#each Object.entries(FONTS) as [id, f] (id)}
+            <button role="radio" aria-checked={prefs.value.font === id} class:on={prefs.value.font === id} style="font-family: {f.css}" onclick={() => prefs.set({ font: id as NoteFont })}>{f.label}</button>
+          {/each}
+        </div>
+      </div>
+
+      <div class="pref">
+        <label class="pref-label" for="size-r">Text size</label>
+        <div class="size">
+          <input
+            id="size-r"
+            type="range"
+            min="14"
+            max="24"
+            step="1"
+            value={prefs.value.size ?? defaultSize}
+            oninput={(e) => prefs.set({ size: Number((e.currentTarget as HTMLInputElement).value) })}
+          />
+          <span class="size-value">{prefs.value.size ?? defaultSize} px</span>
+          {#if prefs.value.size}<button class="link-btn" onclick={() => prefs.set({ size: null })}>Default</button>{/if}
+        </div>
+      </div>
+
+      <div class="pref">
+        <span class="pref-label" id="width-l">Line width</span>
+        <div class="segmented" role="radiogroup" aria-labelledby="width-l">
+          {#each Object.entries(WIDTHS) as [id, w] (id)}
+            <button role="radio" aria-checked={prefs.value.width === id} class:on={prefs.value.width === id} onclick={() => prefs.set({ width: id as Width })}>{w.label}</button>
+          {/each}
+        </div>
+      </div>
+
+      <div class="pref snippets">
+        <span class="pref-label">CSS snippets</span>
+        {#if app.snippets.length}
+          <ul>
+            {#each app.snippets as sn (sn.name)}
+              <li>
+                <label><input type="checkbox" checked={sn.enabled} onchange={(e) => toggleSnippet(sn.name, (e.currentTarget as HTMLInputElement).checked)} /> {sn.name}</label>
+              </li>
+            {/each}
+          </ul>
+        {:else}
+          <p class="muted small">Put .css files in the vault's .obsidian/snippets folder, then reload. They sync with the vault.</p>
+        {/if}
+        <button class="link-btn" onclick={() => app.loadSnippets()}>Reload snippets</button>
+      </div>
+
+      <button class="btn" onclick={() => prefs.reset()}>Reset appearance</button>
+    </section>
+
     <section aria-labelledby="enc-h">
       <h3 id="enc-h">Encryption</h3>
       {#if s?.encryption?.set_up && s.encryption.unlocked}
@@ -317,6 +414,109 @@
     flex-wrap: wrap;
     gap: 8px;
     margin-top: 14px;
+  }
+  .pref {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    align-items: center;
+    gap: 8px 14px;
+    margin-bottom: 14px;
+  }
+  @media (max-width: 480px) {
+    .pref {
+      grid-template-columns: 1fr;
+    }
+  }
+  .pref-label {
+    font-size: var(--small);
+    color: var(--graphite);
+  }
+  .segmented {
+    display: inline-flex;
+    justify-self: start;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+  }
+  .segmented button {
+    min-height: 34px;
+    padding: 0 12px;
+    border: 0;
+    background: var(--sheet);
+    color: var(--ink);
+    font-size: var(--small);
+  }
+  .segmented button + button {
+    border-left: 1px solid var(--rule);
+  }
+  .segmented button.on {
+    background: var(--papyrus);
+    color: var(--on-papyrus);
+  }
+  .swatches {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .swatch {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2px solid var(--sheet);
+    background: var(--swatch);
+    box-shadow: 0 0 0 1px var(--rule);
+  }
+  .swatch.on {
+    box-shadow: 0 0 0 2px var(--ink);
+  }
+  .size {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .size input {
+    flex: 1;
+    max-width: 220px;
+    accent-color: var(--papyrus);
+  }
+  .size-value {
+    font-size: var(--small);
+    font-variant-numeric: tabular-nums;
+    min-width: 3.5em;
+  }
+  .link-btn {
+    border: 0;
+    background: none;
+    padding: 0;
+    color: var(--papyrus);
+    font-size: var(--small);
+    justify-self: start;
+  }
+  .snippets {
+    align-items: start;
+  }
+  .snippets ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 6px;
+  }
+  .snippets label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .snippets input {
+    accent-color: var(--papyrus);
+  }
+  .snippets .link-btn {
+    grid-column: 2;
+  }
+  @media (max-width: 480px) {
+    .snippets .link-btn {
+      grid-column: 1;
+    }
   }
   .connect {
     display: grid;

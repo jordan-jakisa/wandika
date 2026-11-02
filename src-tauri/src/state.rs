@@ -107,6 +107,11 @@ impl App {
         Ok(root)
     }
 
+    /// A file changed outside the note commands; the next lookup rescans.
+    pub fn edited_on_disk(&self) {
+        self.index.lock().unwrap().mark_stale();
+    }
+
     pub fn crypto(&self) -> Result<Crypto> {
         Ok(Crypto::load(&self.root()?, &self.secrets, &self.vault()?.id))
     }

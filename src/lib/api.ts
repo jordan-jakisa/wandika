@@ -9,6 +9,7 @@ import type {
   SearchHit,
   Status,
   SyncReport,
+  Snippet,
   Today,
   User,
   VaultTask,
@@ -103,6 +104,8 @@ export const api = {
     call<boolean>("task_toggle", { path, line, text }),
   dailyNote: (date?: string) => call<string>("daily_note", { date }),
 
+  snippetsList: () => call<Snippet[]>("snippets_list"),
+  snippetToggle: (name: string, enabled: boolean) => call<void>("snippet_toggle", { name, enabled }),
   encryptionSetup: (passphrase: string) => call<CryptoStatus>("encryption_setup", { passphrase }),
   encryptionUnlock: (passphrase: string) => call<CryptoStatus>("encryption_unlock", { passphrase }),
   encryptionLock: () => call<CryptoStatus>("encryption_lock"),

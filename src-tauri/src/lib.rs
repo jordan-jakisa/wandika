@@ -59,6 +59,8 @@ pub fn run() {
             commands::tasks_vault,
             commands::task_toggle,
             commands::daily_note,
+            commands::snippets_list,
+            commands::snippet_toggle,
             commands::encryption_setup,
             commands::encryption_unlock,
             commands::encryption_lock,

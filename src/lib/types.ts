@@ -152,3 +152,9 @@ export type ConnectStart =
   | { kind: "browser" }
   | { kind: "device"; device_code: string; user_code: string; verification_uri: string; interval: number }
   | { kind: "done"; access: AppleAccess };
+
+export interface Snippet {
+  name: string;
+  css: string;
+  enabled: boolean;
+}

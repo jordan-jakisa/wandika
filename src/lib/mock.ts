@@ -124,6 +124,11 @@ const events: CalEvent[] = [
   { id: "4", source: "google", calendar: "Work", title: "Design review: Today panel", start: at(16), end: at(17), all_day: false, location: null, url: "https://meet.google.com", attendees: ["Sarah N."] },
 ];
 
+const snippets = [
+  { name: "wide-tables", css: ".cm-table { width: 100%; }", enabled: false },
+  { name: "rounded-cards", css: ".card { border-radius: 14px; }", enabled: true },
+];
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const handlers: Record<string, (a: Args) => unknown> = {
@@ -161,6 +166,11 @@ const handlers: Record<string, (a: Args) => unknown> = {
     remember(vault);
     lastSync = Date.now();
     return { pulled: [...notes.keys()], pushed: [], removed: [], merged: [], conflicts: [], too_big: [], head: "abc", at: lastSync };
+  },
+  snippets_list: () => snippets,
+  snippet_toggle: ({ name, enabled }) => {
+    const sn = snippets.find((x) => x.name === name);
+    if (sn) sn.enabled = enabled;
   },
   vault_close: () => {
     vault = null;
