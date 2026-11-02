@@ -33,7 +33,7 @@ impl Secrets {
     pub fn set(&self, key: &str, value: &str) -> Result<()> {
         keyring::Entry::new(SERVICE, key)
             .and_then(|e| e.set_password(value))
-            .map_err(|e| crate::error::msg(format!("Couldn't save to the keychain: {e}")))
+            .map_err(|_| crate::error::msg("Couldn't save your sign-in to the keychain. Try again."))
     }
 
     #[cfg(any(target_os = "macos", target_os = "ios"))]

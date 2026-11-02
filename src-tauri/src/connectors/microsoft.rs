@@ -32,8 +32,8 @@ pub enum Poll {
 pub async fn start(http: &reqwest::Client) -> Result<DeviceStart> {
     let client_id = config::microsoft_client_id()?;
     let v = oauth::post_form(http, &format!("{AUTHORITY}/devicecode"), &[("client_id", client_id), ("scope", SCOPES)]).await?;
-    if let Some(e) = v["error_description"].as_str() {
-        return Err(msg(format!("Outlook refused the sign-in request: {e}")));
+    if v["error_description"].is_string() {
+        return Err(msg("Outlook didn't start sign-in. Try again in a minute."));
     }
     Ok(serde_json::from_value(v)?)
 }

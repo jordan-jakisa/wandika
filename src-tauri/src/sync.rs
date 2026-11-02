@@ -127,7 +127,7 @@ fn scan(
         .into_iter()
         .filter_entry(|e| e.depth() == 0 || !(e.file_type().is_dir() && ignored.dir(&rel_of(e.path()))));
     for e in walk {
-        let e = e.map_err(|e| msg(format!("Couldn't read the vault folder: {e}")))?;
+        let e = e.map_err(|_| msg("Wandika can't read the vault folder. Allow access in System Settings, or choose the folder again."))?;
         if !e.file_type().is_file() {
             continue;
         }
@@ -135,7 +135,7 @@ fn scan(
         if ignored.file(&rel) {
             continue;
         }
-        let meta = e.metadata().map_err(|e| msg(e.to_string()))?;
+        let meta = e.metadata().map_err(|e| crate::error::Error::Io(e.into()))?;
         let mtime = meta
             .modified()
             .ok()

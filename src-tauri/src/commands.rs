@@ -203,7 +203,7 @@ pub async fn sync_now(app: S<'_>) -> Result<SyncReport> {
     let gh = app.github()?;
     let paths = app.paths()?;
     let Ok(_guard) = app.sync_lock.try_lock() else {
-        return Err(msg("A sync is already running."));
+        return Err(crate::error::Error::SyncBusy);
     };
     let report = sync::sync(&gh, &target, &paths).await;
     changed(&app);
@@ -497,13 +497,13 @@ pub async fn connector_connect(handle: AppHandle, app: S<'_>, provider: String) 
             {
                 let (listener, redirect) = google::loopback().await?;
                 let url = google::auth_url(&redirect, &pkce, &state)?;
-                handle.opener().open_url(url, None::<&str>).map_err(|e| msg(e.to_string()))?;
+                handle.opener().open_url(url, None::<&str>).map_err(|_| msg("Couldn't open the browser. Try again."))?;
                 let h = handle.clone();
                 tauri::async_runtime::spawn(async move {
                     match google::await_code(listener, &state).await {
                         Ok(code) => finish_google(&h, &code, &pkce.verifier, &redirect).await,
                         Err(e) => {
-                            let _ = h.emit("connectors-changed", json!({ "provider": "google", "error": e.to_string() }));
+                            let _ = h.emit("connectors-changed", json!({ "provider": "google", "error": e.friendly().1 }));
                         }
                     }
                 });
@@ -518,7 +518,7 @@ pub async fn connector_connect(handle: AppHandle, app: S<'_>, provider: String) 
                     state,
                     redirect_uri: redirect,
                 });
-                handle.opener().open_url(url, None::<&str>).map_err(|e| msg(e.to_string()))?;
+                handle.opener().open_url(url, None::<&str>).map_err(|_| msg("Couldn't open the browser. Try again."))?;
             }
             Ok(json!({ "kind": "browser" }))
         }
@@ -531,7 +531,7 @@ pub async fn connector_connect(handle: AppHandle, app: S<'_>, provider: String) 
             let kind = if provider == "apple_calendar" { apple::Kind::Calendar } else { apple::Kind::Reminders };
             let access = tauri::async_runtime::spawn_blocking(move || apple::request(kind))
                 .await
-                .map_err(|e| msg(e.to_string()))??;
+                .map_err(|_| msg("Wandika couldn't finish that. Try again."))??;
             Ok(json!({ "kind": "done", "access": access }))
         }
         _ => Err(msg("Unknown connection.")),
@@ -568,7 +568,8 @@ pub struct Today {
     tasks: Vec<VaultTask>,
     remote_tasks: Vec<RemoteTask>,
     /// Source name → what went wrong, shown beside that source only.
-    errors: BTreeMap<String, String>,
+    /// Per source: what failed, in plain words, and a code (`provider_auth` means reconnect).
+    errors: BTreeMap<String, ErrorInfo>,
 }
 
 #[tauri::command]
@@ -603,7 +604,7 @@ pub async fn today(app: S<'_>, date: Option<String>) -> Result<Today> {
     }
     let apple = tauri::async_runtime::spawn_blocking(move || (apple::events(from, to), apple::reminders()))
         .await
-        .map_err(|e| msg(e.to_string()))?;
+        .map_err(|_| msg("Wandika couldn't finish that. Try again."))?;
     collect(&mut out, "Apple Calendar", apple.0, |o, v| o.events.extend(v));
     collect(&mut out, "Reminders", apple.1, |o, v| o.remote_tasks.extend(v));
 
@@ -615,11 +616,18 @@ pub async fn today(app: S<'_>, date: Option<String>) -> Result<Today> {
     Ok(out)
 }
 
+#[derive(Serialize)]
+pub struct ErrorInfo {
+    code: &'static str,
+    message: String,
+}
+
 fn collect<T>(out: &mut Today, source: &str, r: Result<Vec<T>>, add: impl FnOnce(&mut Today, Vec<T>)) {
     match r {
         Ok(v) => add(out, v),
         Err(e) => {
-            out.errors.insert(source.to_string(), e.to_string());
+            let (code, message) = e.friendly();
+            out.errors.insert(source.to_string(), ErrorInfo { code, message });
         }
     }
 }
@@ -630,7 +638,7 @@ pub async fn remote_task_toggle(app: S<'_>, source: String, list_id: String, id:
         "google" => google::set_task_done(&app.http, &app.secrets, &list_id, &id, done).await,
         "apple" => tauri::async_runtime::spawn_blocking(move || apple::set_reminder_done(&id, done))
             .await
-            .map_err(|e| msg(e.to_string()))?,
+            .map_err(|_| msg("Wandika couldn't finish that. Try again."))?,
         _ => Err(msg("Unknown task list.")),
     }
 }

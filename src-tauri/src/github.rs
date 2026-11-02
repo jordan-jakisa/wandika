@@ -102,7 +102,7 @@ pub async fn poll_device_flow(http: &reqwest::Client, device_code: &str) -> Resu
         Some("slow_down") => Ok(Poll::SlowDown),
         Some("expired_token") => Err(msg("The code expired. Start sign-in again.")),
         Some("access_denied") => Err(msg("Sign-in was cancelled on GitHub.")),
-        Some(other) => Err(msg(format!("GitHub sign-in failed: {other}"))),
+        Some(_) => Err(msg("GitHub sign-in didn't finish. Start again.")),
         None => v["access_token"]
             .as_str()
             .map(|t| Poll::Done(t.to_string()))

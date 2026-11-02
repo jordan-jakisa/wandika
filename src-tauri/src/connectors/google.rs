@@ -118,7 +118,7 @@ pub async fn await_code(listener: tokio::net::TcpListener, state: &str) -> Resul
             let n = sock.read(&mut buf).await?;
             let req = String::from_utf8_lossy(&buf[..n]).to_string();
             let Some(target) = req.split_whitespace().nth(1) else { continue };
-            let url = url::Url::parse(&format!("http://127.0.0.1{target}")).map_err(|e| msg(e.to_string()))?;
+            let url = url::Url::parse(&format!("http://127.0.0.1{target}")).map_err(|_| msg("Google sent back an address Wandika couldn't read. Try connecting again."))?;
             let q: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
             if !q.contains_key("code") && !q.contains_key("error") {
                 // Favicon and other stray requests.

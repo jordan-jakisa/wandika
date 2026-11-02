@@ -69,16 +69,21 @@ where
     F: FnOnce(String) -> Fut,
     Fut: std::future::Future<Output = Result<TokenSet>>,
 {
-    let tokens: TokenSet = secrets.get_json(key).ok_or_else(|| msg(format!("Connect {key} first.")))?;
+    let name = match key {
+        "google" => "Google",
+        "microsoft" => "Outlook",
+        other => other,
+    };
+    let tokens: TokenSet = secrets.get_json(key).ok_or_else(|| msg(format!("Connect {name} in Settings first.")))?;
     if tokens.expires_at - 60 > now() {
         return Ok(tokens.access_token);
     }
     let refresh_token = tokens
         .refresh_token
         .clone()
-        .ok_or_else(|| msg(format!("Your {key} sign-in expired. Connect it again.")))?;
+        .ok_or_else(|| Error::Provider { provider: name, status: 401, message: "refresh token missing or rejected".into() })?;
     let mut fresh = refresh(refresh_token).await.map_err(|e| match e {
-        Error::Provider { .. } => msg(format!("Your {key} sign-in expired. Connect it again.")),
+        Error::Provider { .. } => Error::Provider { provider: name, status: 401, message: "refresh token missing or rejected".into() },
         other => other,
     })?;
     fresh.account = tokens.account;

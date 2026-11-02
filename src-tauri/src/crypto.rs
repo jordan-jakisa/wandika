@@ -53,7 +53,7 @@ pub fn is_encrypted(rel: &str) -> bool {
 
 fn encrypt_to(recipient: &dyn age::Recipient, data: &[u8]) -> Result<Vec<u8>> {
     let enc = age::Encryptor::with_recipients(std::iter::once(recipient))
-        .map_err(|e| msg(format!("Couldn't encrypt: {e}")))?;
+        .map_err(|_| msg("Couldn't encrypt this note. Try again."))?;
     let mut out = Vec::new();
     let armor = ArmoredWriter::wrap_output(&mut out, Format::AsciiArmor)?;
     let mut w = enc.wrap_output(armor)?;
@@ -64,10 +64,10 @@ fn encrypt_to(recipient: &dyn age::Recipient, data: &[u8]) -> Result<Vec<u8>> {
 
 fn decrypt_with(identity: &dyn age::Identity, data: &[u8]) -> Result<Vec<u8>> {
     let dec = age::Decryptor::new_buffered(ArmoredReader::new(data))
-        .map_err(|e| msg(format!("This file isn't a readable age file: {e}")))?;
+        .map_err(|_| msg("This file is damaged, or isn't an encrypted note."))?;
     let mut r = dec
         .decrypt(std::iter::once(identity))
-        .map_err(|_| msg("Wrong passphrase, or this file was encrypted with another key."))?;
+        .map_err(|_| msg("This note was encrypted with a different key, so this vault's passphrase can't open it."))?;
     let mut out = Vec::new();
     r.read_to_end(&mut out)?;
     Ok(out)
@@ -123,7 +123,8 @@ impl Crypto {
         let mut me = Self::load(root, secrets, vault_id);
         let config = me.config.clone().ok_or_else(|| msg("Encryption isn't set up for this vault."))?;
         let scrypt = age::scrypt::Identity::new(SecretString::from(passphrase.to_string()));
-        let secret = decrypt_with(&scrypt, config.identity.as_bytes())?;
+        let secret = decrypt_with(&scrypt, config.identity.as_bytes())
+            .map_err(|_| msg("That passphrase didn't unlock this vault. Check it and try again."))?;
         let secret = String::from_utf8(secret).map_err(|_| msg("The stored key is damaged."))?;
         let identity: age::x25519::Identity =
             secret.trim().parse().map_err(|_| msg("The stored key is damaged."))?;
@@ -147,7 +148,7 @@ impl Crypto {
         let identity = self
             .identity
             .as_ref()
-            .ok_or_else(|| msg("Encrypted notes are locked. Unlock them with your passphrase."))?;
+            .ok_or(crate::error::Error::Locked)?;
         decrypt_with(identity, data)
     }
 
