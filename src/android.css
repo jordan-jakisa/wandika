@@ -1,0 +1,245 @@
+/* Material 3 on Android phones. Values from the Material 3 tokens in androidx compose:
+   buttons 40dp fully rounded, dialogs 28dp corners with text buttons, menus 4dp corners and
+   48dp items, snackbars above the navigation bar, search bar 56dp, segmented buttons 40dp,
+   switches 52x32dp, state layers on press. Scoped by data-platform so iOS and the Mac are untouched. */
+
+@media (max-width: 899px) {
+  :root[data-platform="android"] {
+    --m3-state: color-mix(in srgb, var(--ink) 10%, transparent);
+    --m3-tonal: color-mix(in srgb, var(--papyrus) 22%, var(--sheet));
+    --m3-surface-high: color-mix(in srgb, var(--papyrus) 7%, var(--sheet));
+  }
+
+  /* Buttons: filled (primary), outlined (default), 40dp tall, pill shape, label large 14sp. */
+  :root[data-platform="android"] .btn {
+    min-height: 40px;
+    padding: 0 24px;
+    border-radius: 999px;
+    border-color: color-mix(in srgb, var(--graphite) 60%, transparent);
+    background: transparent;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+  }
+  :root[data-platform="android"] .btn.primary {
+    background: var(--papyrus);
+    border-color: var(--papyrus);
+    color: var(--on-papyrus);
+  }
+  :root[data-platform="android"] .btn:active,
+  :root[data-platform="android"] .icon-btn:active {
+    background: var(--m3-state);
+  }
+  :root[data-platform="android"] .btn.primary:active {
+    filter: brightness(0.92);
+  }
+  :root[data-platform="android"] .icon-btn {
+    border-radius: 999px;
+  }
+  :root[data-platform="android"] .field {
+    border-radius: 4px;
+    min-height: 56px;
+  }
+
+  /* Dialogs: 28dp corners, headline 24sp, right-aligned text buttons. */
+  :root[data-platform="android"] dialog[aria-labelledby="dialog-title"] {
+    border: 0;
+    border-radius: 28px;
+    padding: 24px;
+    background: var(--m3-surface-high);
+  }
+  :root[data-platform="android"] dialog[aria-labelledby="dialog-title"] h2 {
+    font-size: 24px;
+    font-weight: 400;
+    line-height: 32px;
+  }
+  :root[data-platform="android"] dialog[aria-labelledby="dialog-title"] .buttons .btn {
+    border: 0;
+    background: none;
+    padding: 0 12px;
+    color: var(--papyrus);
+  }
+  :root[data-platform="android"] dialog[aria-labelledby="dialog-title"] .buttons .danger-fill {
+    color: var(--alarm);
+  }
+
+  /* Menus: 4dp corners, 48dp items, no inner rounding. */
+  :root[data-platform="android"] .menu .list {
+    padding: 8px 0;
+    border: 0;
+    border-radius: 4px;
+    background: var(--m3-surface-high);
+    box-shadow: 0 2px 6px rgb(0 0 0 / 0.25);
+    min-width: 200px;
+  }
+  :root[data-platform="android"] .menu .list [role="menuitem"] {
+    min-height: 48px;
+    padding: 0 12px;
+    border-radius: 0;
+    gap: 12px;
+    font-size: 14px;
+  }
+  :root[data-platform="android"] .menu .list [role="menuitem"]:active {
+    background: var(--m3-state);
+  }
+
+  /* Snackbar instead of a floating pill: full width less 16dp, 4dp corners, above the nav bar. */
+  :root[data-platform="android"] .toast {
+    left: 16px;
+    right: 16px;
+    transform: none;
+    max-width: none;
+    bottom: calc(80px + var(--safe-bottom) + 12px);
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    padding: 14px 16px;
+    border-radius: 4px;
+    font-size: 14px;
+  }
+
+  /* Search: a 56dp search bar on its own surface. */
+  :root[data-platform="android"] .search.page .input-row {
+    margin: 12px 16px 8px;
+    height: 56px;
+    padding: 0 16px;
+    border: 0;
+    border-radius: 28px;
+    background: var(--m3-surface-high);
+  }
+  :root[data-platform="android"] .search.page li[role="option"] {
+    min-height: 56px;
+    align-items: center;
+    padding: 8px 16px;
+    border-radius: 0;
+  }
+  :root[data-platform="android"] .search.page li[role="option"]:active {
+    background: var(--m3-state);
+  }
+
+  /* Settings: a flat list, section headers in the accent colour, no card borders. */
+  :root[data-platform="android"] .settings .sections li button {
+    min-height: 72px;
+    padding: 0 16px;
+    gap: 16px;
+    border-radius: 0;
+  }
+  :root[data-platform="android"] .settings .sections li button:active {
+    background: var(--m3-state);
+  }
+  :root[data-platform="android"] .settings .sections ul {
+    padding: 0;
+  }
+  :root[data-platform="android"] .settings .nav-head,
+  :root[data-platform="android"] .settings .pane-head {
+    min-height: 64px;
+    gap: 4px;
+    padding-left: 4px;
+  }
+  :root[data-platform="android"] .settings .nav-head {
+    justify-content: flex-start;
+  }
+  :root[data-platform="android"] .search.page .heading {
+    padding: 8px 16px 4px;
+  }
+  :root[data-platform="android"] .settings .nav-head h2,
+  :root[data-platform="android"] .settings .pane-head h3 {
+    font-size: 22px;
+    font-weight: 400;
+  }
+  :root[data-platform="android"] .settings .pane-body {
+    padding-left: 0;
+    padding-right: 0;
+  }
+  :root[data-platform="android"] .settings h4 {
+    margin: 20px 16px 4px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--papyrus);
+  }
+  :root[data-platform="android"] .settings .group {
+    border: 0;
+    border-radius: 0;
+    background: none;
+  }
+  :root[data-platform="android"] .settings .row {
+    min-height: 56px;
+    padding: 8px 16px;
+  }
+  :root[data-platform="android"] .settings .row + .row {
+    border-top: 0;
+  }
+  :root[data-platform="android"] .settings .note {
+    margin: 4px 16px 0;
+  }
+  :root[data-platform="android"] .settings .footer-actions {
+    margin: 24px 16px 0;
+  }
+
+  /* Segmented buttons: 40dp, fully rounded, tonal selected segment. */
+  :root[data-platform="android"] .segmented {
+    border-radius: 999px;
+    border-color: color-mix(in srgb, var(--graphite) 60%, transparent);
+  }
+  :root[data-platform="android"] .segmented button {
+    min-height: 40px;
+    padding: 0 14px;
+    background: transparent;
+    font-size: 14px;
+    font-weight: 500;
+  }
+  :root[data-platform="android"] .segmented button + button {
+    border-left-color: color-mix(in srgb, var(--graphite) 60%, transparent);
+  }
+  :root[data-platform="android"] .segmented button.on {
+    background: var(--m3-tonal);
+    color: var(--ink);
+  }
+
+  /* Switches: 52x32dp track, thumb grows when on. */
+  :root[data-platform="android"] input.toggle {
+    appearance: none;
+    -webkit-appearance: none;
+    position: relative;
+    flex: none;
+    width: 52px;
+    height: 32px;
+    margin: 0;
+    border: 2px solid var(--graphite);
+    border-radius: 999px;
+    background: var(--rule);
+    transition: background 150ms ease-out;
+  }
+  :root[data-platform="android"] input.toggle::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 6px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--graphite);
+    transform: translateY(-50%);
+    transition:
+      left 150ms ease-out,
+      width 150ms ease-out,
+      height 150ms ease-out;
+  }
+  :root[data-platform="android"] input.toggle:checked {
+    border-color: var(--papyrus);
+    background: var(--papyrus);
+  }
+  :root[data-platform="android"] input.toggle:checked::after {
+    left: 22px;
+    width: 24px;
+    height: 24px;
+    background: var(--on-papyrus);
+  }
+
+  /* Pressed state on list rows. */
+  :root[data-platform="android"] .tree .row:active,
+  :root[data-platform="android"] .list button:active,
+  :root[data-platform="android"] .daily:active {
+    background: var(--m3-state);
+  }
+}

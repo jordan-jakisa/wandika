@@ -1,5 +1,6 @@
 <script lang="ts">
   import {
+    ArrowLeft,
     ChevronLeft,
     ChevronRight,
     Cloud,
@@ -21,6 +22,7 @@
   import GitHubSignIn from "./GitHubSignIn.svelte";
   import RepoPicker from "./RepoPicker.svelte";
   import Unlock from "./Unlock.svelte";
+  import { isAndroid } from "../platform";
 
   const SECTIONS: { id: SettingsSection; label: string; icon: typeof Cloud }[] = [
     { id: "vault", label: "Vault", icon: HardDrive },
@@ -45,10 +47,20 @@
   let connecting = $state(false);
   const defaultSize = typeof window !== "undefined" && window.innerWidth < 900 ? 17 : 18;
 
+  // Phones: each screen inside Settings is a history entry, so system back (Android) steps from a
+  // page to the list and then closes, like a native settings screen.
+  let depth = 0;
+  function pushScreen() {
+    if (!phone) return;
+    history.pushState({ wandika: "settings" }, "");
+    depth++;
+  }
+
   $effect(() => {
     if (app.settingsOpen && !dialogEl.open) {
       phoneSection = app.settingsDirect ? app.settingsSection : null;
       dialogEl.showModal();
+      pushScreen();
     }
     if (!app.settingsOpen && dialogEl.open) dialogEl.close();
   });
@@ -57,15 +69,62 @@
     app.settingsSection = id;
     phoneSection = id;
     connecting = false;
+    pushScreen();
   }
 
-  function close() {
+  /** The page's back button: same as system back. */
+  function back() {
+    if (phone && depth > 1) history.back();
+    else phoneSection = null;
+  }
+
+  function closeNow() {
     clearTimeout(pollTimer);
     connecting = false;
     device = null;
     waiting = null;
     app.settingsOpen = false;
   }
+
+  function close() {
+    if (depth > 0) {
+      const d = depth;
+      depth = 0;
+      history.go(-d);
+    }
+    closeNow();
+  }
+
+  function onPopState() {
+    if (!app.settingsOpen || depth === 0) return;
+    depth--;
+    if (depth === 0) closeNow();
+    else phoneSection = null;
+  }
+
+  /** One line under each section in the phone list, so you know what's inside before tapping. */
+  const detail = (id: SettingsSection): string => {
+    const st = app.status;
+    switch (id) {
+      case "vault":
+        return app.vault?.remote ? `${app.vault.name}, syncs with GitHub` : `${app.vault?.name ?? "No vault"}, on this device`;
+      case "appearance":
+        return "Theme, accent colour, CSS snippets";
+      case "editor":
+        return "Font, text size, line width";
+      case "encryption":
+        return !st?.encryption?.set_up ? "Not set up" : st.encryption.unlocked ? "Unlocked on this device" : "Locked";
+      case "connections": {
+        const n = [st?.connectors.google, st?.connectors.microsoft].filter(Boolean).length +
+          [st?.connectors.apple_calendar, st?.connectors.apple_reminders].filter((a) => a === "granted").length;
+        return n ? `${n} connected` : "Mail, calendars and reminders";
+      }
+      case "account":
+        return st?.user ? `GitHub: ${st.user.login}` : "Not signed in";
+      case "about":
+        return "Version 0.1.0, keyboard shortcuts";
+    }
+  };
 
   const s = $derived(app.status);
   const c = $derived(s?.connectors);
@@ -183,7 +242,7 @@
   const label = (id: SettingsSection | null) => SECTIONS.find((x) => x.id === id)?.label ?? "Settings";
 </script>
 
-<svelte:window bind:innerWidth={width} />
+<svelte:window bind:innerWidth={width} onpopstate={onPopState} />
 
 {#snippet google()}
   {@render connRow("Google", "Gmail, Calendar and Tasks", c?.google ?? null, "google", !!s?.configured.google, true)}
@@ -232,16 +291,22 @@
   {#if !phone || section === null}
     <nav class="sections" aria-label="Settings sections">
       <header class="nav-head">
+        {#if phone && isAndroid}
+          <button class="icon-btn" onclick={close} aria-label="Close settings"><ArrowLeft size={24} /></button>
+        {/if}
         <h2 id="settings-title">Settings</h2>
-        {#if phone}<button class="icon-btn" onclick={close} aria-label="Close settings"><X size={20} /></button>{/if}
+        {#if phone && !isAndroid}<button class="icon-btn" onclick={close} aria-label="Close settings"><X size={20} /></button>{/if}
       </header>
       <ul>
         {#each SECTIONS as sec (sec.id)}
           <li>
             <button class:on={!phone && section === sec.id} aria-current={!phone && section === sec.id ? "page" : undefined} onclick={() => go(sec.id)}>
-              <sec.icon size={17} />
-              <span>{sec.label}</span>
-              {#if phone}<ChevronRight size={16} class="chev" />{/if}
+              <sec.icon size={phone ? 22 : 17} />
+              <span class="sec-text">
+                <span>{sec.label}</span>
+                {#if phone}<span class="sec-detail">{detail(sec.id)}</span>{/if}
+              </span>
+              {#if phone && !isAndroid}<ChevronRight size={16} class="chev" />{/if}
             </button>
           </li>
         {/each}
@@ -252,11 +317,15 @@
   {#if section}
     <div class="pane">
       <header class="pane-head">
-        {#if phone}
-          <button class="icon-btn" onclick={() => (phoneSection = null)} aria-label="All settings"><ChevronLeft size={22} /></button>
+        {#if phone && isAndroid}
+          <button class="icon-btn" onclick={back} aria-label="All settings"><ArrowLeft size={24} /></button>
+        {:else if phone}
+          <button class="icon-btn" onclick={back} aria-label="All settings"><ChevronLeft size={22} /></button>
         {/if}
         <h3>{label(section)}</h3>
-        <button class="icon-btn" onclick={close} aria-label="Close settings"><X size={20} /></button>
+        {#if !(phone && isAndroid)}
+          <button class="icon-btn" onclick={close} aria-label="Close settings"><X size={20} /></button>
+        {/if}
       </header>
 
       <div class="pane-body">
@@ -545,7 +614,7 @@
     margin: 0;
     padding: 0 8px 12px;
   }
-  .sections button {
+  .sections li button {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -558,17 +627,28 @@
     color: var(--ink);
     text-align: left;
   }
-  .sections button span {
+  .sec-text {
     flex: 1;
+    display: grid;
+    min-width: 0;
   }
-  .sections button:hover {
-    background: var(--papyrus-wash);
+  .sec-detail {
+    font-size: var(--small);
+    color: var(--graphite);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
-  .sections button.on {
+  @media (hover: hover) {
+    .sections li button:hover {
+      background: var(--papyrus-wash);
+    }
+  }
+  .sections li button.on {
     background: color-mix(in srgb, var(--papyrus) 16%, transparent);
     font-weight: 600;
   }
-  .phone .sections button {
+  .phone .sections li button {
     min-height: var(--target);
     padding: 0 12px;
   }

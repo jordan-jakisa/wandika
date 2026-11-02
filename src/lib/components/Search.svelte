@@ -10,6 +10,9 @@
   let query = $state("");
   let hits = $state<SearchHit[]>([]);
   let selected = $state(0);
+  /** On phones nothing is highlighted until you type; the highlight is for keyboard selection. */
+  const coarse = typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches;
+  const showSelection = $derived(!coarse || query.trim().length > 0);
   let input: HTMLInputElement;
   let seq = 0;
 
@@ -95,7 +98,7 @@
         id={`hit-${i}`}
         role="option"
         aria-selected={i === selected}
-        class:selected={i === selected}
+        class:selected={showSelection && i === selected}
         onclick={() => choose(i)}
         onkeydown={() => {}}
         onpointerenter={() => (selected = i)}

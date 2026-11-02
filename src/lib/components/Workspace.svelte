@@ -106,7 +106,8 @@
     }
   });
   function onPopState() {
-    if (app.settingsOpen) return void (app.settingsOpen = false);
+    // Settings keeps its own screens in history and handles back itself.
+    if (app.settingsOpen) return;
     if (notePushed) {
       notePushed = false;
       app.current = null;
@@ -515,8 +516,10 @@
     color: var(--ink);
     text-align: left;
   }
-  .side-nav button:hover {
-    background: var(--papyrus-wash);
+  @media (hover: hover) {
+    .side-nav button:hover {
+      background: var(--papyrus-wash);
+    }
   }
   .side-nav button.active {
     background: color-mix(in srgb, var(--papyrus) 16%, transparent);

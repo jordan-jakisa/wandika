@@ -1,5 +1,6 @@
 <script lang="ts">
   import { untrack } from "svelte";
+  import { Check } from "@lucide/svelte";
   import { api } from "../api";
   import { app } from "../app.svelte";
   import type { RemoteTask, VaultTask } from "../types";
@@ -51,10 +52,16 @@
 <section class="tasks" aria-labelledby="tasks-title">
   <header>
     <h2 id="tasks-title">Tasks</h2>
-    <label class="toggle"><input type="checkbox" bind:checked={showDone} /> Show done</label>
+    <button class="chip" aria-pressed={showDone} class:on={showDone} onclick={() => (showDone = !showDone)}>
+      {#if showDone}<Check size={16} />{/if} Show done
+    </button>
   </header>
   <p class="muted summary">
-    {loading && !tasks.length ? "Gathering tasks from your notes…" : `${open} open in your notes. Write - [ ] in any note to add one.`}
+    {loading && !tasks.length
+      ? "Gathering tasks from your notes…"
+      : open
+        ? `${open} open ${open === 1 ? "task" : "tasks"} in your notes.`
+        : "No open tasks. Write - [ ] in any note to add one."}
   </p>
 
   {#each byNote as [path, items] (path)}
@@ -119,15 +126,23 @@
   .summary {
     margin: 6px 0 20px;
   }
-  .toggle {
+  /* Filter chip: 32dp, 8dp corners, check mark when on. */
+  .chip {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    font-size: var(--small);
-    color: var(--graphite);
+    min-height: 32px;
+    padding: 0 12px;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    background: none;
+    color: var(--ink);
+    font-size: 14px;
+    font-weight: 500;
   }
-  .toggle input {
-    accent-color: var(--papyrus);
+  .chip.on {
+    border-color: transparent;
+    background: color-mix(in srgb, var(--papyrus) 22%, var(--sheet));
   }
   .group {
     margin-bottom: 22px;
@@ -144,8 +159,10 @@
     font-weight: 600;
     color: var(--ink);
   }
-  h3 button:hover {
-    color: var(--papyrus);
+  @media (hover: hover) {
+    h3 button:hover {
+      color: var(--papyrus);
+    }
   }
   ul {
     list-style: none;
