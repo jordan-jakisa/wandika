@@ -51,6 +51,9 @@ class AppState {
   syncProgress = $state<SyncProgress | null>(null);
   conflicts = $state<string[]>([]);
   tooBig = $state<string[]>([]);
+  /** Files missing here that sync kept on GitHub, waiting for a decision. */
+  heldDeletions = $state<string[]>([]);
+  vaultBytes = $state(0);
   /** Paths changed on disk by the last sync, so an open editor can reload them. */
   changed = $state<{ paths: string[]; at: number }>({ paths: [], at: 0 });
   toast = $state<string | null>(null);
@@ -90,6 +93,8 @@ class AppState {
   }
 
   #started = false;
+  #failures = 0;
+  #retryAt = 0;
 
   // Where you were, per vault: the open note, the tab, the Today column and the Settings section.
   constructor() {
@@ -161,6 +166,8 @@ class AppState {
     if (report) {
       const first = this.lastSync === null;
       this.apply(report);
+      this.#failures = 0;
+      this.#retryAt = 0;
       if (first) this.say("Your notes are on GitHub. Every device you sign in on gets them.");
     }
     const before = this.status?.vault?.id;
@@ -218,6 +225,9 @@ class AppState {
   /** `manual`: you asked for it (button, pull, ⌘S), so it says what happened. */
   async sync(manual = false) {
     if (this.syncing || !this.status?.vault?.remote) return;
+    // After failures, automatic syncs wait longer each time (3, 6, 12 … up to 48 minutes), so a
+    // problem on GitHub's side isn't met with a steady stream of retries. Asking always tries.
+    if (!manual && Date.now() < this.#retryAt) return;
     this.syncing = true;
     clearTimeout(this.#editTimer);
     try {
@@ -230,7 +240,11 @@ class AppState {
       else if (manual) this.say(syncSummary(report));
     } catch (e) {
       const code = codeOf(e);
-      if (code !== "sync_busy") this.syncError = { code, message: (e as Error).message };
+      if (code !== "sync_busy" && code !== "cancelled") {
+        this.syncError = { code, message: (e as Error).message };
+        this.#failures++;
+        this.#retryAt = Date.now() + Math.min(16, 2 ** (this.#failures - 1)) * SYNC_EVERY_MS;
+      }
     } finally {
       this.syncing = false;
       this.syncProgress = null;
@@ -241,6 +255,8 @@ class AppState {
     this.lastSync = report.at;
     if (report.conflicts.length) this.conflicts = [...new Set([...this.conflicts, ...report.conflicts])];
     this.tooBig = report.too_big;
+    this.heldDeletions = report.held_deletions ?? [];
+    this.vaultBytes = report.vault_bytes ?? 0;
     const touched = [...report.pulled, ...report.merged, ...report.removed];
     if (touched.length) forgetNoteEmbeds();
     if (touched.length || report.conflicts.length) {
@@ -281,6 +297,31 @@ class AppState {
     } catch (e) {
       this.say((e as Error).message);
       return null;
+    }
+  }
+
+  /** Held deletions: `true` deletes them on GitHub and every device; `false` brings them back. */
+  async resolveHeld(del: boolean) {
+    const paths = this.heldDeletions;
+    if (del) {
+      const ok = await this.ask({
+        title: `Delete ${paths.length} files everywhere?`,
+        message: "They go from GitHub and from every device on its next sync. GitHub's history still has them.",
+        confirm: "Delete everywhere",
+        danger: true,
+      });
+      if (ok === null) return;
+    }
+    try {
+      await api.syncHeldDeletions(del, paths);
+      this.heldDeletions = [];
+      if (del) await this.sync(true);
+      else {
+        await this.refreshFiles();
+        this.say(`${paths.length} files are back.`);
+      }
+    } catch (e) {
+      this.say((e as Error).message);
     }
   }
 

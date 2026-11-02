@@ -252,6 +252,16 @@
       <button class="btn" onclick={() => (app.conflicts = [])}>Dismiss</button>
     </div>
   {/if}
+  {#if app.heldDeletions.length}
+    <div class="banner conflict" role="status">
+      <p>
+        {app.heldDeletions.length} files are missing on this device, so sync kept them on GitHub instead of deleting
+        them everywhere. A moved or emptied folder can cause this.
+      </p>
+      <button class="btn" onclick={() => app.resolveHeld(false)}>Bring them back</button>
+      <button class="btn danger" onclick={() => app.resolveHeld(true)}>Delete everywhere</button>
+    </div>
+  {/if}
   {#if app.tooBig.length}
     <div class="banner" role="status">
       <p>{app.tooBig.length === 1 ? "One file is" : `${app.tooBig.length} files are`} over 50 MB and stay on this device only: {app.tooBig.map(titleOf).join(", ")}.</p>

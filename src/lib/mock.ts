@@ -197,7 +197,7 @@ const handlers: Record<string, (a: Args) => unknown> = {
     vault = { id: `github/${owner}/${repo}`, name: repo, folder: null, remote: { owner, repo, branch: "main" } };
     remember(vault);
     lastSync = Date.now();
-    return { pulled: [...notes.keys()], pushed: [], removed: [], merged: [], conflicts: [], too_big: [], head: "abc", at: lastSync };
+    return { pulled: [...notes.keys()], pushed: [], removed: [], merged: [], conflicts: [], too_big: [], held_deletions: [], vault_bytes: 312_000_000, head: "abc", at: lastSync };
   },
   snippets_list: () => snippets,
   snippet_toggle: ({ name, enabled }) => {
@@ -223,7 +223,7 @@ const handlers: Record<string, (a: Args) => unknown> = {
     vault = { ...vault!, remote: { owner, repo, branch: "main" } };
     remember(vault);
     lastSync = Date.now();
-    return { pulled: [], pushed: [...notes.keys()], removed: [], merged: [], conflicts: [], too_big: [], head: "abc", at: lastSync };
+    return { pulled: [], pushed: [...notes.keys()], removed: [], merged: [], conflicts: [], too_big: [], held_deletions: [], vault_bytes: 312_000_000, head: "abc", at: lastSync };
   },
   vault_disconnect_remote: () => {
     vault = { ...vault!, remote: null };
@@ -232,10 +232,11 @@ const handlers: Record<string, (a: Args) => unknown> = {
   sync_now: async () => {
     await sleep(700);
     lastSync = Date.now();
-    return { pulled: [], pushed: [], removed: [], merged: [], conflicts: [], too_big: [], head: "abc", at: lastSync };
+    return { pulled: [], pushed: [], removed: [], merged: [], conflicts: [], too_big: [], held_deletions: [], vault_bytes: 312_000_000, head: "abc", at: lastSync };
   },
   tree: () => entries(),
   sync_cancel: () => undefined,
+  sync_held_deletions: () => undefined,
   entry_restore: () => undefined,
   note_discard_if_empty: ({ path }) => {
     if (!/^Untitled( \d+)?$/.test(titleOf(path)) || (notes.get(path) ?? "x").trim()) return false;

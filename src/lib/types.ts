@@ -67,6 +67,10 @@ export interface SyncReport {
   merged: string[];
   conflicts: string[];
   too_big: string[];
+  /** Missing on this device but kept on GitHub until confirmed. */
+  held_deletions: string[];
+  /** Everything that syncs, in bytes (GitHub recommends under 1 GB). */
+  vault_bytes: number;
   head: string | null;
   at: number;
 }

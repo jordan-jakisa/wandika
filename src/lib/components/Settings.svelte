@@ -445,6 +445,16 @@
                 <button class="btn" onclick={() => app.sync(true)} disabled={app.syncing}>{app.syncing ? "Syncing…" : "Sync now"}</button>
               </div>
               {#if app.syncError}<div class="row"><span class="error small">Last sync: {app.syncError.message}</span></div>{/if}
+              {#if app.vaultBytes}
+                <div class="row">
+                  <span class="row-desc" class:error={app.vaultBytes > 1e9}>
+                    {(app.vaultBytes / 1e6).toLocaleString(undefined, { maximumFractionDigits: 0 })} MB synced.
+                    {app.vaultBytes > 1e9
+                      ? "GitHub recommends keeping a repository under 1 GB: list big folders, such as videos, in the vault's .gitignore."
+                      : "Files over 50 MB stay on the device they were added on."}
+                  </span>
+                </div>
+              {/if}
               <div class="row">
                 <div class="row-text">
                   <span class="row-label">Disconnect from GitHub</span>
