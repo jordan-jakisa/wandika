@@ -700,7 +700,7 @@
   }
   .recent {
     display: grid;
-    width: min(28rem, 100%);
+    width: min(36rem, 100%);
     margin: 0;
     padding: 0;
     list-style: none;
@@ -724,15 +724,21 @@
     }
   }
   .recent-title {
+    flex: 1;
+    min-width: 0;
     font-family: var(--font-note);
     font-size: var(--text-lg);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  /* The folder gives way before the title does. */
   .recent-folder {
-    margin-left: auto;
-    flex: none;
+    flex: 0 1 auto;
+    max-width: 40%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     color: var(--graphite);
     font-size: var(--small);
   }
