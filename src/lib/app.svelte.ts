@@ -4,6 +4,8 @@ import type { Entry, NoteMeta, Snippet, Status, SyncReport, Today } from "./type
 
 export type Tab = "notes" | "today" | "tasks" | "projects" | "graph" | "search";
 
+export type SettingsSection = "vault" | "appearance" | "editor" | "encryption" | "connections" | "account" | "about";
+
 export interface Ask {
   title: string;
   message?: string;
@@ -28,6 +30,9 @@ class AppState {
   showToday = $state(true);
   switcherOpen = $state(false);
   settingsOpen = $state(false);
+  settingsSection = $state<SettingsSection>("vault");
+  /** True when Settings was opened for one section, so phones skip the section list. */
+  settingsDirect = $state(false);
   syncing = $state(false);
   syncError = $state<string | null>(null);
   lastSync = $state<number | null>(null);
@@ -43,6 +48,8 @@ class AppState {
   graphFocus = $state<string | null>(null);
   today = $state<Today | null>(null);
   snippets = $state<Snippet[]>([]);
+  /** Counts for the open note, shown in the status bar. `cards` is set for boards. */
+  noteStats = $state({ words: 0, chars: 0, cards: null as number | null, backlinks: 0, encrypted: false });
   #todayAt = 0;
   #todayLoading: Promise<void> | null = null;
 
@@ -265,6 +272,13 @@ class AppState {
       }
     })();
     return this.#todayLoading;
+  }
+
+  /** Opens Settings, optionally at one section (e.g. Connections from Today). */
+  openSettings(section?: SettingsSection) {
+    if (section) this.settingsSection = section;
+    this.settingsDirect = !!section;
+    this.settingsOpen = true;
   }
 
   /** In-app replacement for confirm()/prompt(), which mobile web views don't reliably show. */

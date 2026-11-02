@@ -18,6 +18,7 @@
   import GraphView from "./GraphView.svelte";
   import ProjectsView from "./ProjectsView.svelte";
   import Search from "./Search.svelte";
+  import StatusBar from "./StatusBar.svelte";
   import SyncStatus from "./SyncStatus.svelte";
   import TasksView from "./TasksView.svelte";
   import TodayPanel from "./TodayPanel.svelte";
@@ -47,7 +48,7 @@
       void app.openDaily();
     } else if (k === ",") {
       e.preventDefault();
-      app.settingsOpen = true;
+      app.openSettings();
     }
   }
 
@@ -113,9 +114,8 @@
       <div class="side-head" data-tauri-drag-region>
         <div class="vault" data-tauri-drag-region>
           <span class="vault-name" title={app.vaultName}>{app.vault?.name}</span>
-          <SyncStatus />
         </div>
-        <button class="icon-btn" onclick={() => (app.settingsOpen = true)} aria-label="Settings"><SettingsIcon size={18} /></button>
+        <button class="icon-btn" onclick={() => app.openSettings()} aria-label="Settings"><SettingsIcon size={18} /></button>
       </div>
       <div class="side-actions">
         <button class="search-btn" onclick={() => (app.switcherOpen = true)}>
@@ -179,6 +179,7 @@
         <TodayPanel />
       </aside>
     {/if}
+    <StatusBar />
   </div>
 
   <dialog bind:this={switcherEl} class="switcher" oncancel={() => (app.switcherOpen = false)} onclick={(e) => { if (e.target === switcherEl) app.switcherOpen = false; }}>
@@ -200,7 +201,7 @@
               <SyncStatus />
             </div>
             <button class="icon-btn" onclick={() => app.showGraph()} aria-label="Graph"><Network size={20} /></button>
-            <button class="icon-btn" onclick={() => (app.settingsOpen = true)} aria-label="Settings"><SettingsIcon size={20} /></button>
+            <button class="icon-btn" onclick={() => app.openSettings()} aria-label="Settings"><SettingsIcon size={20} /></button>
             <button class="icon-btn" onclick={() => app.newNote()} aria-label="New note"><Plus size={22} /></button>
           </header>
           <button class="daily" onclick={() => app.openDaily()}><NotebookPen size={18} /> Open today's note</button>
@@ -233,6 +234,7 @@
   .shell {
     display: grid;
     grid-template-columns: var(--sidebar) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
     height: 100dvh;
   }
   .shell.with-today {

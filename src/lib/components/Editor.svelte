@@ -44,7 +44,23 @@
     }
   }
 
+  let statsTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /** Word and character counts for the status bar, ignoring frontmatter. */
+  function count(text: string, board: boolean) {
+    const body = text.replace(/^---\n[\s\S]*?\n---\n?/, "");
+    app.noteStats = {
+      words: body.match(/[\p{L}\p{N}][\p{L}\p{N}'’_-]*/gu)?.length ?? 0,
+      chars: body.length,
+      cards: board ? (body.match(/^[-*+] \[[ xX]\]/gm)?.length ?? 0) : null,
+      backlinks: backlinks.length,
+      encrypted: path.endsWith(".age"),
+    };
+  }
+
   function onChange(text: string) {
+    clearTimeout(statsTimer);
+    statsTimer = setTimeout(() => count(text, boardText !== null), 250);
     pending = text;
     clearTimeout(saveTimer);
     saveTimer = setTimeout(save, 400);
@@ -74,6 +90,7 @@
     }
     if (loadedPath !== p) return;
     backlinks = await api.backlinks(p).catch(() => []);
+    count(text, isBoard(text) && !showSource);
     if (isBoard(text) && !showSource) {
       view?.destroy();
       view = null;
@@ -159,7 +176,7 @@
   async function toggleEncryption() {
     const enc = app.status?.encryption;
     if (!enc?.set_up || !enc.unlocked) {
-      app.settingsOpen = true;
+      app.openSettings("encryption");
       app.say(enc?.set_up ? "Unlock encrypted notes first." : "Set up encryption in Settings first.");
       return;
     }
