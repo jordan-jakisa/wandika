@@ -2,12 +2,10 @@
 
 use crate::config;
 use crate::error::{msg, Error, Result};
-use base64::Engine;
 use reqwest::{Method, RequestBuilder, Response};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sha1::{Digest, Sha1};
 use std::collections::VecDeque;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -63,17 +61,6 @@ async fn pace() -> Result<()> {
     }
 }
 
-/// Content-creating requests still allowed in the current hour.
-pub fn writes_left_this_hour() -> usize {
-    if guard().is_err() {
-        return 0;
-    }
-    let q = WRITES.lock().unwrap();
-    let now = Instant::now();
-    let used = q.iter().filter(|t| now.duration_since(**t) <= Duration::from_secs(3600)).count();
-    WRITES_PER_HOUR.saturating_sub(used)
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct User {
     pub login: String,
@@ -97,14 +84,6 @@ pub struct Repo {
     pub pushed_at: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
-pub struct TreeEntry {
-    pub path: String,
-    pub mode: String,
-    #[serde(rename = "type")]
-    pub kind: String,
-    pub sha: String,
-}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DeviceCode {
@@ -119,14 +98,6 @@ pub enum Poll {
     Pending,
     SlowDown,
     Done(String),
-}
-
-/// Git's object ID for a blob, so local files can be compared with the remote tree without downloading.
-pub fn blob_sha(bytes: &[u8]) -> String {
-    let mut h = Sha1::new();
-    h.update(format!("blob {}\0", bytes.len()).as_bytes());
-    h.update(bytes);
-    hex::encode(h.finalize())
 }
 
 pub async fn start_device_flow(http: &reqwest::Client) -> Result<DeviceCode> {
@@ -182,6 +153,11 @@ pub struct GitHub {
 impl GitHub {
     pub fn new(http: reqwest::Client, token: String) -> Self {
         Self { http, token }
+    }
+
+    /// For git over HTTPS, which signs in with the same token.
+    pub fn token(&self) -> &str {
+        &self.token
     }
 
     fn req(&self, method: Method, path: &str) -> RequestBuilder {
@@ -259,147 +235,5 @@ impl GitHub {
 
     pub async fn repo(&self, owner: &str, repo: &str) -> Result<Repo> {
         Self::json(self.req(Method::GET, &format!("/repos/{owner}/{repo}"))).await
-    }
-
-    /// Head commit of a branch. `None` when the repository has no commits yet.
-    pub async fn head(&self, owner: &str, repo: &str, branch: &str) -> Result<Option<String>> {
-        guard()?;
-        let res = self
-            .req(Method::GET, &format!("/repos/{owner}/{repo}/git/ref/heads/{branch}"))
-            .send()
-            .await?;
-        if res.status().as_u16() == 409 {
-            return Ok(None);
-        }
-        let v: Value = Self::check(res).await?.json().await?;
-        Ok(v["object"]["sha"].as_str().map(str::to_string))
-    }
-
-    pub async fn commit_tree(&self, owner: &str, repo: &str, commit: &str) -> Result<String> {
-        let v: Value =
-            Self::json(self.req(Method::GET, &format!("/repos/{owner}/{repo}/git/commits/{commit}")))
-                .await?;
-        v["tree"]["sha"]
-            .as_str()
-            .map(str::to_string)
-            .ok_or_else(|| msg("GitHub returned a commit without a tree."))
-    }
-
-    pub async fn tree(&self, owner: &str, repo: &str, tree: &str) -> Result<Vec<TreeEntry>> {
-        #[derive(Deserialize)]
-        struct T {
-            tree: Vec<TreeEntry>,
-            truncated: bool,
-        }
-        let t: T = Self::json(self.req(
-            Method::GET,
-            &format!("/repos/{owner}/{repo}/git/trees/{tree}?recursive=1"),
-        ))
-        .await?;
-        if t.truncated {
-            return Err(msg(
-                "This repository has too many files for Wandika to sync (over 100,000).",
-            ));
-        }
-        Ok(t.tree)
-    }
-
-    pub async fn blob(&self, owner: &str, repo: &str, sha: &str) -> Result<Vec<u8>> {
-        let res = self
-            .req(Method::GET, &format!("/repos/{owner}/{repo}/git/blobs/{sha}"))
-            .header("Accept", "application/vnd.github.raw+json")
-            .send()
-            .await?;
-        Ok(Self::check(res).await?.bytes().await?.to_vec())
-    }
-
-    pub async fn create_blob(&self, owner: &str, repo: &str, bytes: &[u8]) -> Result<String> {
-        pace().await?;
-        let content = base64::engine::general_purpose::STANDARD.encode(bytes);
-        let v: Value = Self::json(
-            self.req(Method::POST, &format!("/repos/{owner}/{repo}/git/blobs"))
-                .json(&json!({ "content": content, "encoding": "base64" })),
-        )
-        .await?;
-        v["sha"].as_str().map(str::to_string).ok_or_else(|| msg("GitHub didn't accept a file."))
-    }
-
-    pub async fn create_tree(
-        &self,
-        owner: &str,
-        repo: &str,
-        base_tree: &str,
-        entries: Vec<Value>,
-    ) -> Result<String> {
-        pace().await?;
-        let v: Value = Self::json(
-            self.req(Method::POST, &format!("/repos/{owner}/{repo}/git/trees"))
-                .json(&json!({ "base_tree": base_tree, "tree": entries })),
-        )
-        .await?;
-        v["sha"].as_str().map(str::to_string).ok_or_else(|| msg("GitHub didn't accept the changes."))
-    }
-
-    pub async fn create_commit(
-        &self,
-        owner: &str,
-        repo: &str,
-        message: &str,
-        tree: &str,
-        parent: &str,
-    ) -> Result<String> {
-        pace().await?;
-        let v: Value = Self::json(
-            self.req(Method::POST, &format!("/repos/{owner}/{repo}/git/commits"))
-                .json(&json!({ "message": message, "tree": tree, "parents": [parent] })),
-        )
-        .await?;
-        v["sha"].as_str().map(str::to_string).ok_or_else(|| msg("GitHub didn't accept the commit."))
-    }
-
-    /// Fast-forward only. Returns false when the branch moved since we read it, so the caller retries.
-    pub async fn update_ref(&self, owner: &str, repo: &str, branch: &str, sha: &str) -> Result<bool> {
-        pace().await?;
-        let res = self
-            .req(Method::PATCH, &format!("/repos/{owner}/{repo}/git/refs/heads/{branch}"))
-            .json(&json!({ "sha": sha, "force": false }))
-            .send()
-            .await?;
-        if res.status().as_u16() == 422 {
-            return Ok(false);
-        }
-        Self::check(res).await?;
-        Ok(true)
-    }
-
-    pub async fn tarball(&self, owner: &str, repo: &str, sha: &str) -> Result<Vec<u8>> {
-        guard()?;
-        let res = self.req(Method::GET, &format!("/repos/{owner}/{repo}/tarball/{sha}")).send().await?;
-        Ok(Self::check(res).await?.bytes().await?.to_vec())
-    }
-
-    /// First commit for an empty repository (the Git Data API refuses to work on one).
-    pub async fn put_file(
-        &self,
-        owner: &str,
-        repo: &str,
-        branch: &str,
-        path: &str,
-        content: &[u8],
-        message: &str,
-    ) -> Result<()> {
-        pace().await?;
-        let body = json!({
-            "message": message,
-            "content": base64::engine::general_purpose::STANDARD.encode(content),
-            "branch": branch,
-        });
-        let res = self
-            .req(Method::PUT, &format!("/repos/{owner}/{repo}/contents/{path}"))
-            .json(&body)
-            .send()
-            .await?;
-        Self::check(res).await?;
-        Ok(())
     }
 }

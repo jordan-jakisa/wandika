@@ -21,6 +21,8 @@ pub enum Error {
     SyncBusy,
     #[error("Sync stopped.")]
     Cancelled,
+    #[error("Git: {0}")]
+    Git(String),
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
@@ -93,6 +95,7 @@ impl Error {
                 ),
                 _ => ("io", "Wandika couldn't read or write a file. Try again.".into()),
             },
+            Error::Git(_) => ("git", "Sync couldn't finish. Your notes are safe here; it will try again shortly.".into()),
             Error::Json(_) => ("bad_response", "A service sent a reply Wandika didn't expect. Try again in a minute.".into()),
             Error::Http(_) => ("network", "Couldn't reach the service. Check your connection and try again.".into()),
         }

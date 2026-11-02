@@ -1,28 +1,52 @@
-//! Two-way sync between the local working copy and one branch on GitHub.
+//! Sync is git. Every vault has a real repository on the device (libgit2, built into the app), kept
+//! in Wandika's own storage so the vault folder gets no `.git` of ours. One sync:
 //!
-//! The last synced commit and its file hashes are the merge base. Each sync:
-//! 1. pulls files that changed only on GitHub,
-//! 2. merges notes changed on both sides (three-way, line based); when lines clash, the remote
-//!    version is kept beside the local one as "Name (conflict 2026-11-02 0930).md",
-//! 3. pushes everything else as one commit, fast-forward only, retrying if GitHub moved meanwhile.
+//! 1. **Commit** what changed here since the last sync. `.gitignore` and per-device files are left
+//!    out, files over 50 MB stay on this device, iCloud placeholders count as unchanged, and a sync
+//!    that would delete many files at once holds the deletions until you confirm them.
+//! 2. **Fetch** GitHub's branch: one small exchange when nothing changed, new objects otherwise.
+//! 3. **Merge** both sides. Line edits on both sides merge; where the same lines changed, or a file
+//!    can't merge, this device's version stays and the other is kept beside it as
+//!    "Name (conflict 2026-11-03 0930).md". An edit beats a deletion. Nothing is lost.
+//! 4. **Push** fast-forward only, in parts of at most 100 MB, at most one push every 10 seconds.
+//!    If GitHub moved meanwhile, fetch, merge and push again.
+//!
+//! Git's own transfer is used for files, not one API request per file, so a sync of any size stays
+//! inside GitHub's API limits; pushes stay under its recommended 6 a minute and 2 GB each.
 
-use crate::error::{msg, Result};
-use crate::github::{blob_sha, GitHub};
-use crate::vault::{self, TMP_SUFFIX};
+use crate::error::{msg, Error, Result};
 use chrono::Local;
-use futures::{stream, StreamExt, TryStreamExt};
+use git2::build::{CheckoutBuilder, TreeUpdateBuilder};
+use git2::{
+    Cred, Delta, FetchOptions, FileMode, IndexAddOption, Oid, PushOptions, RemoteCallbacks, Repository,
+    RepositoryInitOptions, Signature, Tree,
+};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::io::Read;
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
-use ignore::gitignore::{Gitignore, GitignoreBuilder};
-use walkdir::WalkDir;
+use std::time::Duration;
 
-/// Larger files stay on the device they were added on; GitHub's blob API stops at 100 MB.
+/// Larger files stay on the device they were added on; GitHub warns at 50 MB and refuses 100 MB.
 const MAX_FILE: u64 = 50 * 1024 * 1024;
-/// Above this many remote changes, one tarball download beats one request per file.
-const TARBALL_THRESHOLD: usize = 40;
+/// Largest push. A bigger change goes up as a chain of commits, each sent on its own.
+const PUSH_BYTES: u64 = if cfg!(test) { 1000 } else { 100 * 1024 * 1024 };
+/// Between the parts of a big upload: GitHub recommends at most 6 pushes a minute per repository.
+const PUSH_GAP: Duration = Duration::from_secs(if cfg!(test) { 0 } else { 10 });
+/// A sync that would delete more than this many files, and more than a fifth of the vault, waits
+/// for you to confirm: an emptied or moved folder must not empty the vault on every device.
+const HOLD_DELETES_OVER: usize = 25;
+
+/// Files only one device cares about. Added to git's own exclude list, beside the vault's
+/// `.gitignore`.
+const DEVICE_FILES: &[&str] = &[
+    ".git",
+    ".DS_Store",
+    ".obsidian/workspace.json",
+    ".obsidian/workspace-mobile.json",
+    "*.wandika-tmp",
+    // iCloud's stand-in for a file it moved off this Mac to save space.
+    ".*.icloud",
+];
 
 const WELCOME: &str = "# Welcome to Wandika\n\nThis repository is your notes vault. Every note is a Markdown file, so it also opens in Obsidian.\n\n- [ ] Write your first note\n";
 
@@ -33,21 +57,12 @@ pub struct Target {
     pub branch: String,
 }
 
-
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
-struct Stat {
-    mtime: u64,
-    size: u64,
-    sha: String,
-}
-
 #[derive(Serialize, Deserialize, Clone, Default)]
 pub struct SyncState {
-    pub head: Option<String>,
-    pub files: BTreeMap<String, String>,
-    #[serde(default)]
-    stat: BTreeMap<String, Stat>,
     pub last_sync: Option<i64>,
+    /// Set by "Delete them on GitHub too": the next sync may delete many files at once.
+    #[serde(default)]
+    pub confirm_deletions: bool,
 }
 
 #[derive(Serialize, Clone, Default)]
@@ -59,8 +74,8 @@ pub struct SyncReport {
     pub conflicts: Vec<String>,
     /// Over 50 MB: kept on this device, not uploaded.
     pub too_big: Vec<String>,
-    /// Files left for a later sync: this sync's size, or GitHub's hourly limit, was reached.
-    pub waiting: usize,
+    /// Missing here but kept on GitHub until you confirm (see HOLD_DELETES_OVER).
+    pub held_deletions: Vec<String>,
     /// Everything that syncs, in bytes, to compare with GitHub's 1 GB recommendation.
     pub vault_bytes: u64,
     pub head: Option<String>,
@@ -75,137 +90,469 @@ pub struct Ctl {
 }
 
 impl Ctl {
+    fn stopped(&self) -> bool {
+        self.cancel.load(std::sync::atomic::Ordering::Relaxed)
+    }
     fn check(&self) -> Result<()> {
-        if self.cancel.load(std::sync::atomic::Ordering::Relaxed) {
-            return Err(crate::error::Error::Cancelled);
+        if self.stopped() {
+            return Err(Error::Cancelled);
         }
         Ok(())
     }
 }
 
-/// At most this much file data goes up in one sync, so a big first sync arrives in steps (and a
-/// phone on mobile data isn't asked for hundreds of megabytes at once).
-const BYTES_PER_SYNC: u64 = 100 * 1024 * 1024;
-
-/// Text files up to this size go into the tree request itself, saving one request each.
-const INLINE_MAX: usize = 256 * 1024;
-/// Inline text per tree request; larger change sets are sent as a chain of trees.
-const TREE_BATCH_BYTES: usize = 2 * 1024 * 1024;
-
 pub struct Paths {
+    /// The vault's files: a folder chosen on the Mac, or Wandika's storage.
     pub files: PathBuf,
     pub state: PathBuf,
+    /// The repository, kept apart from the vault folder.
+    pub git: PathBuf,
+}
+
+/// Who commits, and how to reach GitHub.
+pub struct Remote {
+    pub url: String,
+    pub token: String,
+    pub branch: String,
+    pub author: String,
+    pub email: String,
+    /// "macos", "ios", "android": shown in commit messages.
+    pub device: String,
+}
+
+impl From<git2::Error> for Error {
+    fn from(e: git2::Error) -> Self {
+        let m = e.message().to_lowercase();
+        if e.code() == git2::ErrorCode::User {
+            return Error::Cancelled;
+        }
+        if e.code() == git2::ErrorCode::Auth || m.contains("401") || m.contains("authentication") {
+            return msg("Your GitHub sign-in expired or was revoked. Sign out in Settings and sign in again.");
+        }
+        if m.contains("403") || m.contains("permission") {
+            return msg("GitHub didn't let this account write to the repository. Check you can push to it.");
+        }
+        if ["resolve", "timed out", "network", "could not connect", "unreachable", "offline"].iter().any(|w| m.contains(w)) {
+            return Error::Offline;
+        }
+        Error::Git(e.message().to_string())
+    }
 }
 
 pub fn load_state(p: &Paths) -> SyncState {
     std::fs::read(&p.state).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
 }
 
-fn save_state(p: &Paths, s: &SyncState) -> Result<()> {
-    vault::write_atomic(&p.state, &serde_json::to_vec(s)?)
+pub fn save_state(p: &Paths, s: &SyncState) -> Result<()> {
+    crate::vault::write_atomic(&p.state, &serde_json::to_vec(s)?)
 }
 
-/// Paths sync leaves alone on both sides: the vault's `.gitignore`, plus files that only describe
-/// one device (Obsidian's open tabs, Finder's .DS_Store). Ignored files are never uploaded,
-/// downloaded or deleted, so a file GitHub already has stays as it is there.
-struct Ignored(Gitignore);
-
-impl Ignored {
-    fn load(root: &Path) -> Self {
-        let mut b = GitignoreBuilder::new(root);
-        for line in [".git", ".DS_Store", ".obsidian/workspace.json", ".obsidian/workspace-mobile.json"] {
-            let _ = b.add_line(None, line);
-        }
-        let _ = b.add_line(None, &format!("*{TMP_SUFFIX}"));
-        if root.join(".gitignore").is_file() {
-            let _ = b.add(root.join(".gitignore"));
-        }
-        Ignored(b.build().unwrap_or_else(|_| Gitignore::empty()))
-    }
-
-    fn file(&self, rel: &str) -> bool {
-        self.0.matched_path_or_any_parents(rel, false).is_ignore()
-    }
-
-    fn dir(&self, rel: &str) -> bool {
-        self.0.matched_path_or_any_parents(rel, true).is_ignore()
-    }
-}
-
-/// Hashes every local file, reusing the cached hash when size and mtime are unchanged.
-fn scan(
-    root: &Path,
-    cache: &BTreeMap<String, Stat>,
-    ignored: &Ignored,
-) -> Result<(BTreeMap<String, String>, BTreeMap<String, Stat>)> {
-    let mut files = BTreeMap::new();
-    let mut stat = BTreeMap::new();
-    if !root.exists() {
-        return Ok((files, stat));
-    }
-    let rel_of = |p: &Path| {
-        p.strip_prefix(root)
-            .unwrap()
-            .components()
-            .filter_map(|c| c.as_os_str().to_str())
-            .collect::<Vec<_>>()
-            .join("/")
+/// Opens the vault's repository, or makes one, pointing at the vault folder and at GitHub.
+fn open(p: &Paths, remote: &Remote) -> Result<Repository> {
+    std::fs::create_dir_all(&p.files)?;
+    let repo = if p.git.join("HEAD").exists() {
+        Repository::open(&p.git)?
+    } else {
+        let mut opts = RepositoryInitOptions::new();
+        opts.workdir_path(&p.files).no_dotgit_dir(true).initial_head(&remote.branch).mkpath(true);
+        Repository::init_opts(&p.git, &opts)?
     };
-    let walk = WalkDir::new(root)
-        .follow_links(false)
-        .into_iter()
-        .filter_entry(|e| e.depth() == 0 || !(e.file_type().is_dir() && ignored.dir(&rel_of(e.path()))));
-    for e in walk {
-        let e = e.map_err(|_| msg("Wandika can't read the vault folder. Allow access in System Settings, or choose the folder again."))?;
-        if !e.file_type().is_file() {
-            continue;
+    // A folder vault can move; follow it.
+    repo.set_workdir(&p.files, false)?;
+    std::fs::create_dir_all(p.git.join("info"))?;
+    std::fs::write(p.git.join("info/exclude"), DEVICE_FILES.join("\n") + "\n")?;
+    match repo.find_remote("origin") {
+        Ok(r) if r.url() == Some(remote.url.as_str()) => {}
+        Ok(_) => repo.remote_set_url("origin", &remote.url)?,
+        Err(_) => {
+            repo.remote("origin", &remote.url)?;
         }
-        let rel = rel_of(e.path());
-        if ignored.file(&rel) {
-            continue;
-        }
-        let meta = e.metadata().map_err(|e| crate::error::Error::Io(e.into()))?;
-        let mtime = meta
-            .modified()
-            .ok()
-            .and_then(|t| t.duration_since(std::time::SystemTime::UNIX_EPOCH).ok())
-            .map(|d| d.as_nanos() as u64)
-            .unwrap_or(0);
-        let sha = match cache.get(&rel) {
-            Some(s) if s.mtime == mtime && s.size == meta.len() => s.sha.clone(),
-            _ => blob_sha(&std::fs::read(e.path())?),
-        };
-        files.insert(rel.clone(), sha.clone());
-        stat.insert(rel, Stat { mtime, size: meta.len(), sha });
     }
-    Ok((files, stat))
+    let mut cfg = repo.config()?;
+    // Notes keep their line endings exactly as written, on every platform.
+    cfg.set_bool("core.autocrlf", false)?;
+    cfg.set_bool("core.precomposeunicode", true)?;
+    Ok(repo)
 }
 
-fn changed(a: &BTreeMap<String, String>, b: &BTreeMap<String, String>) -> BTreeSet<String> {
-    a.keys().chain(b.keys()).filter(|k| a.get(*k) != b.get(*k)).cloned().collect()
+fn callbacks<'a>(remote: &'a Remote, ctl: &'a Ctl, phase: &'static str) -> RemoteCallbacks<'a> {
+    let mut cb = RemoteCallbacks::new();
+    cb.credentials(move |_, _, _| Cred::userpass_plaintext(&remote.token, "x-oauth-basic"));
+    cb.transfer_progress(move |p| {
+        (ctl.progress)(phase, p.received_objects(), p.total_objects());
+        !ctl.stopped()
+    });
+    cb.push_transfer_progress(move |done, total, _| (ctl.progress)("uploading", done, total));
+    cb
 }
 
-fn remove_local(root: &Path, rel: &str) -> Result<()> {
-    let path = vault::safe(root, rel)?;
-    if path.exists() {
-        std::fs::remove_file(&path)?;
-    }
-    let mut dir = path.parent();
-    while let Some(d) = dir {
-        if d == root || std::fs::remove_dir(d).is_err() {
-            break;
+/// Fetches the branch and returns GitHub's commit, None for an empty repository. When nothing
+/// changed this is one small exchange; only new objects are downloaded.
+fn fetch(repo: &Repository, remote: &Remote, ctl: &Ctl) -> Result<Option<Oid>> {
+    let mut origin = repo.find_remote("origin")?;
+    let refspec = format!("+refs/heads/{0}:refs/remotes/origin/{0}", remote.branch);
+    let mut opts = FetchOptions::new();
+    opts.remote_callbacks(callbacks(remote, ctl, "downloading")).prune(git2::FetchPrune::On);
+    origin.fetch(&[refspec.as_str()], Some(&mut opts), None)?;
+    Ok(repo.refname_to_id(&format!("refs/remotes/origin/{}", remote.branch)).ok())
+}
+
+/// Pushes `commit` to the branch. False when GitHub moved meanwhile (not a fast-forward).
+fn push(repo: &Repository, remote: &Remote, ctl: &Ctl, commit: Oid) -> Result<bool> {
+    let tmp = "refs/wandika/push";
+    repo.reference(tmp, commit, true, "push")?;
+    let mut origin = repo.find_remote("origin")?;
+    let rejected = std::cell::Cell::new(false);
+    let mut cb = callbacks(remote, ctl, "uploading");
+    cb.push_update_reference(|_, status| {
+        if status.is_some() {
+            rejected.set(true);
         }
-        dir = d.parent();
+        Ok(())
+    });
+    let mut opts = PushOptions::new();
+    opts.remote_callbacks(cb);
+    let spec = format!("{tmp}:refs/heads/{}", remote.branch);
+    let result = origin.push(&[spec.as_str()], Some(&mut opts));
+    let _ = repo.find_reference(tmp).and_then(|mut r| r.delete());
+    match result {
+        Ok(()) => Ok(!rejected.get()),
+        Err(e) if e.code() == git2::ErrorCode::NotFastForward => Ok(false),
+        Err(e) => Err(e.into()),
     }
+}
+
+fn head_commit(repo: &Repository) -> Option<Oid> {
+    repo.head().ok().and_then(|h| h.target())
+}
+
+fn empty_tree(repo: &Repository) -> Result<Tree<'_>> {
+    Ok(repo.find_tree(repo.treebuilder(None)?.write()?)?)
+}
+
+fn sig(remote: &Remote) -> Result<Signature<'static>> {
+    Ok(Signature::now(&remote.author, &remote.email)?)
+}
+
+/// Step 1: what changed here becomes a commit on the local branch. Returns the paths it changed.
+fn commit_local(repo: &Repository, p: &Paths, remote: &Remote, state: &SyncState, report: &mut SyncReport) -> Result<Vec<String>> {
+    let mut index = repo.index()?;
+    let root = &p.files;
+    let mut too_big = Vec::new();
+
+    // Files that are tracked but gone from the folder.
+    let tracked: Vec<String> = index.iter().map(|e| String::from_utf8_lossy(&e.path).into_owned()).collect();
+    // iCloud moved it off this Mac: it still exists, unchanged.
+    let placeholder = |rel: &str| {
+        let path = Path::new(rel);
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        root.join(path.with_file_name(format!(".{name}.icloud"))).exists()
+    };
+    let deletions: BTreeSet<String> =
+        tracked.iter().filter(|r| !root.join(r).exists() && !placeholder(r)).cloned().collect();
+    let hold = !state.confirm_deletions
+        && deletions.len() > HOLD_DELETES_OVER
+        && deletions.len() * 5 > tracked.len().max(1);
+    if hold {
+        report.held_deletions = deletions.iter().cloned().collect();
+    }
+
+    let device_file = |rel: &str| rel.starts_with(".obsidian/workspace") || rel.ends_with(".DS_Store");
+    index.add_all(
+        ["*"],
+        IndexAddOption::DEFAULT,
+        Some(&mut |path: &Path, _: &[u8]| {
+            let rel = path.to_string_lossy();
+            // add_all also removes tracked files that are gone, so the same holds apply here.
+            if device_file(&rel) || (!root.join(path).exists() && (hold || placeholder(&rel))) {
+                return 1;
+            }
+            let size = std::fs::metadata(root.join(path)).map(|m| m.len()).unwrap_or(0);
+            if size > MAX_FILE {
+                too_big.push(rel.into_owned());
+                return 1;
+            }
+            0
+        }),
+    )?;
+    index.update_all(
+        ["*"],
+        Some(&mut |path: &Path, _: &[u8]| {
+            let rel = path.to_string_lossy();
+            if device_file(&rel) || (!root.join(path).exists() && (hold || placeholder(&rel))) {
+                return 1;
+            }
+            0
+        }),
+    )?;
+    index.write()?;
+    report.too_big = too_big;
+    report.vault_bytes = index.iter().map(|e| e.file_size as u64).sum();
+
+    let tree = repo.find_tree(index.write_tree()?)?;
+    let parent = head_commit(repo).map(|h| repo.find_commit(h)).transpose()?;
+    if parent.as_ref().is_some_and(|c| c.tree_id() == tree.id()) {
+        return Ok(Vec::new());
+    }
+    let parent_tree = parent.as_ref().map(|c| c.tree()).transpose()?;
+    let changed = changed_paths(repo, parent_tree.as_ref(), &tree)?;
+    if changed.is_empty() {
+        return Ok(Vec::new());
+    }
+    let n = changed.len();
+    let message = format!("Update {n} {} from Wandika on {}", if n == 1 { "file" } else { "files" }, remote.device);
+    let s = sig(remote)?;
+    let parents: Vec<&git2::Commit> = parent.iter().collect();
+    repo.commit(Some("HEAD"), &s, &s, &message, &tree, &parents)?;
+    Ok(changed)
+}
+
+fn changed_paths(repo: &Repository, from: Option<&Tree>, to: &Tree) -> Result<Vec<String>> {
+    let empty;
+    let from = match from {
+        Some(t) => t,
+        None => {
+            empty = empty_tree(repo)?;
+            &empty
+        }
+    };
+    let diff = repo.diff_tree_to_tree(Some(from), Some(to), None)?;
+    Ok(diff
+        .deltas()
+        .filter_map(|d| d.new_file().path().or(d.old_file().path()).map(|p| p.to_string_lossy().into_owned()))
+        .collect())
+}
+
+/// Step 3: brings GitHub's commit into the local branch and the folder. Returns the new head.
+fn integrate(repo: &Repository, remote: &Remote, theirs: Oid, report: &mut SyncReport) -> Result<Oid> {
+    let theirs_commit = repo.find_commit(theirs)?;
+    let Some(ours) = head_commit(repo) else {
+        // A new device: take GitHub's files as they are.
+        checkout(repo, &theirs_commit.tree()?)?;
+        set_branch(repo, remote, theirs)?;
+        report.pulled = changed_paths(repo, None, &theirs_commit.tree()?)?;
+        return Ok(theirs);
+    };
+    if ours == theirs || repo.graph_descendant_of(ours, theirs)? {
+        return Ok(ours);
+    }
+    let ours_commit = repo.find_commit(ours)?;
+    if repo.graph_descendant_of(theirs, ours)? {
+        // Only GitHub moved: fast-forward.
+        report.pulled = changed_paths(repo, Some(&ours_commit.tree()?), &theirs_commit.tree()?)?;
+        checkout(repo, &theirs_commit.tree()?)?;
+        set_branch(repo, remote, theirs)?;
+        return Ok(theirs);
+    }
+
+    // Both moved (or, connecting a vault, two separate histories): a three-way merge.
+    let base = match repo.merge_base(ours, theirs) {
+        Ok(b) => repo.find_commit(b)?.tree()?,
+        Err(_) => empty_tree(repo)?,
+    };
+    let mut merged = repo.merge_trees(&base, &ours_commit.tree()?, &theirs_commit.tree()?, None)?;
+    let conflicts: Vec<git2::IndexConflict> = merged.conflicts()?.collect::<std::result::Result<_, _>>()?;
+    let stamp = Local::now().format("%Y-%m-%d %H%M").to_string();
+    for c in conflicts {
+        let path_of = |e: &Option<git2::IndexEntry>| e.as_ref().map(|e| String::from_utf8_lossy(&e.path).into_owned());
+        let path = path_of(&c.our).or(path_of(&c.their)).or(path_of(&c.ancestor)).unwrap_or_default();
+        merged.conflict_remove(Path::new(&path))?;
+        match (c.our, c.their) {
+            // Changed on both sides: this device's version stays; the other is kept beside it.
+            (Some(our), Some(their)) => {
+                merged.add(&stage0(our, &path))?;
+                let copy = conflict_path(&path, &stamp);
+                merged.add(&stage0(their, &copy))?;
+                report.conflicts.push(copy);
+            }
+            // An edit beats a deletion, from either side.
+            (Some(our), None) => merged.add(&stage0(our, &path))?,
+            (None, Some(their)) => merged.add(&stage0(their, &path))?,
+            (None, None) => {}
+        }
+    }
+    let tree = repo.find_tree(merged.write_tree_to(repo)?)?;
+    report.pulled = changed_paths(repo, Some(&ours_commit.tree()?), &tree)?;
+    report.merged = report.pulled.clone();
+    let s = sig(remote)?;
+    let message = format!("Merge changes from other devices on {}", remote.device);
+    let commit = repo.commit(None, &s, &s, &message, &tree, &[&ours_commit, &theirs_commit])?;
+    checkout(repo, &tree)?;
+    set_branch(repo, remote, commit)?;
+    Ok(commit)
+}
+
+fn stage0(mut e: git2::IndexEntry, path: &str) -> git2::IndexEntry {
+    e.path = path.as_bytes().to_vec();
+    // Stage 0 (resolved), and the path length git keeps in the low bits.
+    e.flags = path.len().min(0xFFF) as u16;
+    e
+}
+
+/// Updates the folder from the current commit (HEAD) to `tree`. Files changed here since that
+/// commit (you typing during a sync) are left alone; the next sync takes them in.
+fn checkout(repo: &Repository, tree: &Tree) -> Result<()> {
+    let mut b = CheckoutBuilder::new();
+    b.safe().allow_conflicts(true).recreate_missing(true);
+    repo.checkout_tree(tree.as_object(), Some(&mut b))?;
     Ok(())
 }
 
-fn is_text(rel: &str, bytes: &[u8]) -> bool {
-    !rel.ends_with(".age") && !bytes.contains(&0) && std::str::from_utf8(bytes).is_ok()
+fn set_branch(repo: &Repository, remote: &Remote, commit: Oid) -> Result<()> {
+    let name = format!("refs/heads/{}", remote.branch);
+    repo.reference(&name, commit, true, "sync")?;
+    repo.set_head(&name)?;
+    // The index follows the new commit; the folder already does.
+    let mut index = repo.index()?;
+    index.read_tree(&repo.find_commit(commit)?.tree()?)?;
+    index.write()?;
+    Ok(())
 }
 
-fn conflict_path(rel: &str) -> String {
-    let stamp = Local::now().format("%Y-%m-%d %H%M");
+type Change = (String, Option<(Oid, FileMode)>, u64);
+
+/// Step 4: pushes the local branch. A change bigger than PUSH_BYTES goes up as a chain of commits
+/// on top of GitHub's, each under PUSH_BYTES, pushed in turn; the last has the same files as the
+/// local branch, which then points at it. False when GitHub moved meanwhile.
+fn push_sized(repo: &Repository, remote: &Remote, ctl: &Ctl, theirs: Option<Oid>, ours: Oid, report: &mut SyncReport) -> Result<bool> {
+    let ours_tree = repo.find_commit(ours)?.tree()?;
+    let theirs_tree = match theirs {
+        Some(t) => repo.find_commit(t)?.tree()?,
+        None => empty_tree(repo)?,
+    };
+    let diff = repo.diff_tree_to_tree(Some(&theirs_tree), Some(&ours_tree), None)?;
+    let odb = repo.odb()?;
+    let mut changes: Vec<Change> = Vec::new();
+    for d in diff.deltas() {
+        let path = d.new_file().path().or(d.old_file().path()).map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
+        if d.status() == Delta::Deleted {
+            changes.push((path, None, 0));
+        } else {
+            let id = d.new_file().id();
+            let size = odb.read_header(id).map(|(s, _)| s as u64).unwrap_or(0);
+            let mode = if d.new_file().mode() == FileMode::BlobExecutable { FileMode::BlobExecutable } else { FileMode::Blob };
+            changes.push((path, Some((id, mode)), size));
+        }
+    }
+    report.pushed = changes.iter().map(|c| c.0.clone()).collect();
+    let total: u64 = changes.iter().map(|c| c.2).sum();
+    if total <= PUSH_BYTES {
+        ctl.check()?;
+        return push(repo, remote, ctl, ours);
+    }
+
+    // Deletions first, then the smallest files, so most of the vault arrives early.
+    changes.sort_by_key(|c| (c.1.is_some(), c.2));
+    let mut parts: Vec<Vec<&Change>> = vec![Vec::new()];
+    let mut size = 0;
+    for c in &changes {
+        if size + c.2 > PUSH_BYTES && !parts.last().is_some_and(|p| p.is_empty()) {
+            parts.push(Vec::new());
+            size = 0;
+        }
+        size += c.2;
+        parts.last_mut().expect("one part").push(c);
+    }
+    let s = sig(remote)?;
+    let mut parent = theirs.map(|t| repo.find_commit(t)).transpose()?;
+    let mut tree = theirs_tree;
+    let mut sent = 0;
+    let n = parts.len();
+    for (i, part) in parts.into_iter().enumerate() {
+        ctl.check()?;
+        let mut b = TreeUpdateBuilder::new();
+        for (path, blob, _) in &part {
+            match blob {
+                Some((id, mode)) => b.upsert(path.as_str(), *id, *mode),
+                None => b.remove(path.as_str()),
+            };
+        }
+        tree = repo.find_tree(b.create_updated(repo, &tree)?)?;
+        let message = format!("Add files from Wandika on {} (part {} of {n})", remote.device, i + 1);
+        let parents: Vec<&git2::Commit> = parent.iter().collect();
+        let commit = repo.commit(None, &s, &s, &message, &tree, &parents)?;
+        if !push(repo, remote, ctl, commit)? {
+            return Ok(false);
+        }
+        sent += part.len();
+        (ctl.progress)("uploading", sent, changes.len());
+        repo.reference(&format!("refs/remotes/origin/{}", remote.branch), commit, true, "pushed part")?;
+        parent = Some(repo.find_commit(commit)?);
+        if i + 1 < n {
+            std::thread::sleep(PUSH_GAP);
+        }
+    }
+    // The chain ends with exactly the local files; the local branch takes it over.
+    if let Some(last) = parent.filter(|_| tree.id() == ours_tree.id()) {
+        set_branch(repo, remote, last.id())?;
+    }
+    Ok(true)
+}
+
+/// One full sync. Blocking: run it off the async runtime.
+pub fn sync(p: &Paths, remote: &Remote, ctl: &Ctl) -> Result<SyncReport> {
+    let mut state = load_state(p);
+    let repo = open(p, remote)?;
+    let mut report = SyncReport::default();
+    (ctl.progress)("checking", 0, 0);
+
+    for _ in 0..4 {
+        ctl.check()?;
+        commit_local(&repo, p, remote, &state, &mut report)?;
+        let theirs = fetch(&repo, remote, ctl)?;
+
+        let mut ours = head_commit(&repo);
+        if let Some(t) = theirs {
+            ours = Some(integrate(&repo, remote, t, &mut report)?);
+        } else if ours.is_none() {
+            // An empty repository and an empty vault: start both with the Welcome note.
+            std::fs::write(p.files.join("Welcome.md"), WELCOME)?;
+            commit_local(&repo, p, remote, &state, &mut report)?;
+            ours = head_commit(&repo);
+        }
+
+        let Some(ours) = ours else { break };
+        if theirs == Some(ours) || theirs.is_some_and(|t| repo.graph_descendant_of(t, ours).unwrap_or(false)) {
+            break;
+        }
+        if push_sized(&repo, remote, ctl, theirs, ours, &mut report)? {
+            let head = head_commit(&repo).unwrap_or(ours);
+            repo.reference(&format!("refs/remotes/origin/{}", remote.branch), head, true, "pushed")?;
+            break;
+        }
+        // GitHub moved while we were pushing: go round again.
+    }
+    (ctl.progress)("saving", 0, 0);
+    state.confirm_deletions = false;
+    report.removed = report.pulled.iter().filter(|r| !p.files.join(r).exists()).cloned().collect();
+    report.head = head_commit(&repo).map(|h| h.to_string());
+    report.at = Local::now().timestamp_millis();
+    state.last_sync = Some(report.at);
+    save_state(p, &state)?;
+    Ok(report)
+}
+
+/// "Delete them on GitHub too": the next sync may remove the held files everywhere.
+pub fn confirm_deletions(p: &Paths) -> Result<()> {
+    let mut s = load_state(p);
+    s.confirm_deletions = true;
+    save_state(p, &s)
+}
+
+/// "Bring them back": restores held files from the last commit into the folder.
+pub fn restore_held(p: &Paths, paths: &[String]) -> Result<()> {
+    let repo = Repository::open(&p.git)?;
+    repo.set_workdir(&p.files, false)?;
+    let mut b = CheckoutBuilder::new();
+    b.force();
+    for path in paths {
+        b.path(path);
+    }
+    repo.checkout_head(Some(&mut b))?;
+    Ok(())
+}
+
+pub fn conflict_path(rel: &str, stamp: &str) -> String {
     let (dir, name) = rel.rsplit_once('/').map(|(d, n)| (format!("{d}/"), n)).unwrap_or((String::new(), rel));
     // Keep compound extensions like `.md.age` intact.
     let (stem, ext) = match name.find('.') {
@@ -215,376 +562,164 @@ fn conflict_path(rel: &str) -> String {
     format!("{dir}{stem} (conflict {stamp}){ext}")
 }
 
-fn untar(bytes: &[u8], wanted: Option<&HashSet<String>>) -> Result<HashMap<String, Vec<u8>>> {
-    let mut out = HashMap::new();
-    let mut archive = tar::Archive::new(flate2::read::GzDecoder::new(bytes));
-    for entry in archive.entries()? {
-        let mut entry = entry?;
-        if !entry.header().entry_type().is_file() {
-            continue;
-        }
-        let path = entry.path()?.to_string_lossy().to_string();
-        // GitHub wraps everything in an `owner-repo-sha/` folder.
-        let Some((_, rel)) = path.split_once('/') else { continue };
-        if wanted.is_some_and(|w| !w.contains(rel)) {
-            continue;
-        }
-        let mut buf = Vec::new();
-        entry.read_to_end(&mut buf)?;
-        out.insert(rel.to_string(), buf);
-    }
-    Ok(out)
-}
-
-async fn fetch_many(gh: &GitHub, t: &Target, head: &str, items: &[(String, String)]) -> Result<HashMap<String, Vec<u8>>> {
-    if items.len() > TARBALL_THRESHOLD {
-        let wanted: HashSet<String> = items.iter().map(|(p, _)| p.clone()).collect();
-        return untar(&gh.tarball(&t.owner, &t.repo, head).await?, Some(&wanted));
-    }
-    stream::iter(items.iter().cloned())
-        .map(|(path, sha)| async move { gh.blob(&t.owner, &t.repo, &sha).await.map(|b| (path, b)) })
-        .buffer_unordered(8)
-        .try_collect()
-        .await
-}
-
-pub async fn sync(gh: &GitHub, t: &Target, p: &Paths, ctl: &Ctl) -> Result<SyncReport> {
-    let mut state = load_state(p);
-    for _ in 0..4 {
-        let outcome = sync_once(gh, t, p, &mut state, ctl).await;
-        save_state(p, &state)?;
-        if let Some(report) = outcome? {
-            return Ok(report);
-        }
-    }
-    Err(msg("GitHub kept changing while syncing. Try again in a minute."))
-}
-
-/// `Ok(None)` means the branch moved under us; the caller runs it again.
-async fn sync_once(gh: &GitHub, t: &Target, p: &Paths, state: &mut SyncState, ctl: &Ctl) -> Result<Option<SyncReport>> {
-    let mut report = SyncReport::default();
-    (ctl.progress)("checking", 0, 0);
-    let Some(remote_head) = gh.head(&t.owner, &t.repo, &t.branch).await? else {
-        gh.put_file(&t.owner, &t.repo, &t.branch, "Welcome.md", WELCOME.as_bytes(), "Start Wandika vault")
-            .await?;
-        return Ok(None);
-    };
-    let tree_sha = gh.commit_tree(&t.owner, &t.repo, &remote_head).await?;
-    let ignored = Ignored::load(&p.files);
-
-    // First sync on this device: clone with one tarball, keeping anything already on disk. A local
-    // vault being connected to a repository lands here too; where both sides have a different file
-    // at the same path, the GitHub version is kept beside the local one.
-    if state.head.is_none() {
-        let tree = gh.tree(&t.owner, &t.repo, &tree_sha).await?;
-        (ctl.progress)("downloading", 0, 0);
-        let files = untar(&gh.tarball(&t.owner, &t.repo, &remote_head).await?, None)?;
-        ctl.check()?;
-        let (local, _) = scan(&p.files, &BTreeMap::new(), &ignored)?;
-        let mut remote = BTreeMap::new();
-        for e in tree.iter().filter(|e| e.kind == "blob" && e.mode != "120000" && !ignored.file(&e.path)) {
-            remote.insert(e.path.clone(), e.sha.clone());
-            if let Some(local_sha) = local.get(&e.path) {
-                if local_sha != &e.sha
-                    && let Some(bytes) = files.get(&e.path)
-                {
-                    let copy = conflict_path(&e.path);
-                    vault::write_atomic(&vault::safe(&p.files, &copy)?, bytes)?;
-                    report.conflicts.push(copy);
-                }
-                continue;
-            }
-            if let Some(bytes) = files.get(&e.path) {
-                vault::write_atomic(&vault::safe(&p.files, &e.path)?, bytes)?;
-                report.pulled.push(e.path.clone());
-            }
-        }
-        state.files = remote;
-        state.head = Some(remote_head.clone());
-        let (_, stat) = scan(&p.files, &state.stat, &ignored)?;
-        state.stat = stat;
-        // Files that were already on disk get compared and pushed on the next pass.
-        if local.is_empty() {
-            report.head = Some(remote_head);
-            report.at = Local::now().timestamp_millis();
-            state.last_sync = Some(report.at);
-            return Ok(Some(report));
-        }
-    }
-
-    let base = state.files.clone();
-    let (local, stat) = scan(&p.files, &state.stat, &ignored)?;
-    state.stat = stat;
-    let remote_moved = state.head.as_deref() != Some(remote_head.as_str());
-    if !remote_moved && local == base {
-        report.head = Some(remote_head);
-        report.at = Local::now().timestamp_millis();
-        state.last_sync = Some(report.at);
-        return Ok(Some(report));
-    }
-
-    let tree = gh.tree(&t.owner, &t.repo, &tree_sha).await?;
-    let mut remote = BTreeMap::new();
-    let mut modes = HashMap::new();
-    for e in tree.iter().filter(|e| e.kind == "blob" && e.mode != "120000" && !ignored.file(&e.path)) {
-        remote.insert(e.path.clone(), e.sha.clone());
-        modes.insert(e.path.clone(), e.mode.clone());
-    }
-
-    let local_changes = changed(&local, &base);
-    let remote_changes = changed(&remote, &base);
-    let mut downloads = Vec::new();
-    let mut both = Vec::new();
-    for path in &remote_changes {
-        let (l, r) = (local.get(path), remote.get(path));
-        if !local_changes.contains(path) {
-            match r {
-                Some(sha) => downloads.push((path.clone(), sha.clone())),
-                None => {
-                    remove_local(&p.files, path)?;
-                    report.removed.push(path.clone());
-                }
-            }
-        } else if l != r {
-            match (l, r) {
-                // Deleted here, edited there: keep the edit.
-                (None, Some(sha)) => downloads.push((path.clone(), sha.clone())),
-                // Edited here, deleted there: keep the edit; it is pushed back below.
-                (Some(_), None) => {}
-                (Some(_), Some(sha)) => both.push((path.clone(), sha.clone())),
-                (None, None) => {}
-            }
-        }
-    }
-
-    if !downloads.is_empty() {
-        (ctl.progress)("downloading", 0, downloads.len());
-    }
-    for (path, bytes) in fetch_many(gh, t, &remote_head, &downloads).await? {
-        vault::write_atomic(&vault::safe(&p.files, &path)?, &bytes)?;
-        report.pulled.push(path);
-    }
-
-    for (path, remote_sha) in both {
-        let remote_bytes = gh.blob(&t.owner, &t.repo, &remote_sha).await?;
-        let local_path = vault::safe(&p.files, &path)?;
-        let local_bytes = std::fs::read(&local_path)?;
-        let merged = if is_text(&path, &local_bytes) && is_text(&path, &remote_bytes) {
-            let base_text = match base.get(&path) {
-                Some(sha) => String::from_utf8(gh.blob(&t.owner, &t.repo, sha).await?).unwrap_or_default(),
-                None => String::new(),
-            };
-            diffy::merge(
-                &base_text,
-                std::str::from_utf8(&local_bytes).unwrap(),
-                std::str::from_utf8(&remote_bytes).unwrap(),
-            )
-            .ok()
-        } else {
-            None
-        };
-        match merged {
-            Some(text) => {
-                vault::write_atomic(&local_path, text.as_bytes())?;
-                report.merged.push(path);
-            }
-            None => {
-                let copy = conflict_path(&path);
-                vault::write_atomic(&vault::safe(&p.files, &copy)?, &remote_bytes)?;
-                report.conflicts.push(copy);
-            }
-        }
-    }
-
-    let (final_local, stat) = scan(&p.files, &state.stat, &ignored)?;
-    report.vault_bytes = stat.values().map(|s| s.size).sum();
-    state.stat = stat;
-    // Everything pulled so far is now part of the base, even if the push below has to retry.
-    for path in &report.pulled {
-        if let Some(sha) = remote.get(path) {
-            state.files.insert(path.clone(), sha.clone());
-        }
-    }
-    for path in &report.removed {
-        state.files.remove(path);
-    }
-
-    let mut entries = Vec::new();
-    let mut uploads = Vec::new();
-    let mut pushed_files = final_local.clone();
-    for (path, sha) in &final_local {
-        if remote.get(path) == Some(sha) {
-            continue;
-        }
-        let too_big = std::fs::metadata(vault::safe(&p.files, path)?).is_ok_and(|m| m.len() > MAX_FILE);
-        if too_big {
-            // Stays on this device only; leaving it out of the base keeps it from being deleted later.
-            pushed_files.remove(path);
-            report.too_big.push(path.clone());
-        } else {
-            uploads.push(path.clone());
-        }
-    }
-    // Small text files (notes) travel inside the tree requests; images and other files are
-    // uploaded one by one first. Nothing on GitHub changes until the commit at the end, so a
-    // stopped sync leaves the branch as it was.
-    ctl.check()?;
-    let done = std::sync::atomic::AtomicUsize::new(0);
-    let mut inline: Vec<(String, String)> = Vec::new();
-    let mut binary: Vec<String> = Vec::new();
-    for path in uploads {
-        let bytes = std::fs::read(vault::safe(&p.files, &path)?)?;
-        match String::from_utf8(bytes) {
-            Ok(text) if text.len() <= INLINE_MAX => inline.push((path, text)),
-            _ => binary.push(path),
-        }
-    }
-    // GitHub allows about 450 new files an hour from us (see github.rs). A first sync with
-    // thousands of images sends what fits now, saves it, and the rest goes up on later syncs.
-    let inline_bytes: usize = inline.iter().map(|(_, t)| t.len()).sum();
-    let reserved = inline_bytes / TREE_BATCH_BYTES + 4;
-    let room = crate::github::writes_left_this_hour().saturating_sub(reserved);
-    // Smallest first, so the most files arrive in each step.
-    let size_of = |path: &String| std::fs::metadata(vault::safe(&p.files, path).unwrap_or_default()).map(|m| m.len()).unwrap_or(0);
-    binary.sort_by_key(size_of);
-    let mut bytes = inline_bytes as u64;
-    let mut fits = 0;
-    for path in &binary {
-        let size = size_of(path);
-        if fits >= room || (bytes + size > BYTES_PER_SYNC && fits > 0) {
-            break;
-        }
-        bytes += size;
-        fits += 1;
-    }
-    for path in binary.split_off(fits) {
-        pushed_files.remove(&path);
-        report.waiting += 1;
-    }
-    let total = inline.len() + binary.len();
-    let tick = |n: usize| (ctl.progress)("uploading", n, total);
-    let created: Vec<(String, String)> = stream::iter(binary)
-        .map(|path| {
-            let (done, tick) = (&done, &tick);
-            async move {
-                ctl.check()?;
-                let bytes = std::fs::read(vault::safe(&p.files, &path)?)?;
-                let sha = gh.create_blob(&t.owner, &t.repo, &bytes).await?;
-                tick(done.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1);
-                Ok::<_, crate::error::Error>((path, sha))
-            }
-        })
-        .buffer_unordered(8)
-        .try_collect()
-        .await?;
-    for (path, sha) in &created {
-        let mode = modes.get(path).cloned().unwrap_or_else(|| "100644".into());
-        entries.push(json!({ "path": path, "mode": mode, "type": "blob", "sha": sha }));
-        pushed_files.insert(path.clone(), sha.clone());
-        report.pushed.push(path.clone());
-    }
-    let mut inline_entries: Vec<(usize, Value)> = Vec::new();
-    for (path, text) in inline {
-        let mode = modes.get(&path).cloned().unwrap_or_else(|| "100644".into());
-        pushed_files.insert(path.clone(), blob_sha(text.as_bytes()));
-        inline_entries.push((text.len(), json!({ "path": path, "mode": mode, "type": "blob", "content": text })));
-        report.pushed.push(path);
-    }
-    for (path, mode) in &modes {
-        if remote.contains_key(path) && !final_local.contains_key(path) {
-            entries.push(json!({ "path": path, "mode": mode, "type": "blob", "sha": null }));
-            report.pushed.push(path.clone());
-        }
-    }
-
-    if entries.is_empty() && inline_entries.is_empty() {
-        state.head = Some(remote_head.clone());
-        state.files = pushed_files;
-    } else {
-        // Trees are chained in batches, each built on the last, so a big first sync stays within
-        // GitHub's request size.
-        let mut new_tree = tree_sha.clone();
-        let mut batch = entries;
-        let mut size = 0;
-        let mut sent = done.load(std::sync::atomic::Ordering::Relaxed);
-        for (len, entry) in inline_entries {
-            if size + len > TREE_BATCH_BYTES && !batch.is_empty() {
-                ctl.check()?;
-                new_tree = gh.create_tree(&t.owner, &t.repo, &new_tree, std::mem::take(&mut batch)).await?;
-                tick(sent);
-                size = 0;
-            }
-            size += len;
-            sent += 1;
-            batch.push(entry);
-        }
-        if !batch.is_empty() {
-            ctl.check()?;
-            new_tree = gh.create_tree(&t.owner, &t.repo, &new_tree, batch).await?;
-        }
-        tick(total);
-        (ctl.progress)("saving", 0, 0);
-        let n = report.pushed.len();
-        let message = format!(
-            "Update {n} {} from Wandika on {}",
-            if n == 1 { "file" } else { "files" },
-            std::env::consts::OS
-        );
-        let commit = gh.create_commit(&t.owner, &t.repo, &message, &new_tree, &remote_head).await?;
-        if !gh.update_ref(&t.owner, &t.repo, &t.branch, &commit).await? {
-            return Ok(None);
-        }
-        state.head = Some(commit.clone());
-        state.files = pushed_files;
-    }
-    report.head = state.head.clone();
-    report.at = Local::now().timestamp_millis();
-    state.last_sync = Some(report.at);
-    Ok(Some(report))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::AtomicBool;
+    use std::sync::Arc;
+
+    fn ctl() -> Ctl {
+        Ctl { cancel: Arc::new(AtomicBool::new(false)), progress: Box::new(|_, _, _| {}) }
+    }
+
+    struct Device {
+        p: Paths,
+        r: Remote,
+    }
+
+    fn device(base: &Path, name: &str, url: &str) -> Device {
+        let dir = base.join(name);
+        Device {
+            p: Paths { files: dir.join("files"), state: dir.join("state.json"), git: dir.join("git") },
+            r: Remote {
+                url: url.into(),
+                token: String::new(),
+                branch: "main".into(),
+                author: "Test".into(),
+                email: "test@example.com".into(),
+                device: name.into(),
+            },
+        }
+    }
+
+    fn setup(tag: &str) -> (PathBuf, String) {
+        let base = std::env::temp_dir().join(format!("wandika-git-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let hub = base.join("hub.git");
+        Repository::init_bare(&hub).unwrap();
+        (base, format!("file://{}", hub.display()))
+    }
+
+    fn write(d: &Device, rel: &str, text: &str) {
+        let path = d.p.files.join(rel);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    }
+
+    fn read(d: &Device, rel: &str) -> Option<String> {
+        std::fs::read_to_string(d.p.files.join(rel)).ok()
+    }
 
     #[test]
-    fn follows_the_vault_gitignore_and_skips_device_state() {
-        let root = std::env::temp_dir().join(format!("wandika-ignore-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
-        std::fs::create_dir_all(root.join(".smart-env/multi")).unwrap();
-        std::fs::create_dir_all(root.join(".obsidian")).unwrap();
-        std::fs::create_dir_all(root.join("05_Visuals/Images")).unwrap();
-        std::fs::write(root.join(".gitignore"), ".smart-env/\n05_Visuals/Images/*.gif\n").unwrap();
-        for f in [".smart-env/multi/a.ajson", ".obsidian/workspace.json", ".obsidian/app.json", "05_Visuals/Images/big.gif", "05_Visuals/Images/ok.png", "Note.md", ".DS_Store"] {
-            std::fs::write(root.join(f), f).unwrap();
+    fn two_devices_stay_in_sync_and_keep_both_sides_of_a_clash() {
+        let (base, url) = setup("devices");
+        let mac = device(&base, "mac", &url);
+        let phone = device(&base, "phone", &url);
+
+        write(&mac, "Plan.md", "one\ntwo\nthree\n");
+        write(&mac, ".obsidian/workspace.json", "{}");
+        sync(&mac.p, &mac.r, &ctl()).unwrap();
+        sync(&phone.p, &phone.r, &ctl()).unwrap();
+        assert_eq!(read(&phone, "Plan.md").as_deref(), Some("one\ntwo\nthree\n"));
+        assert_eq!(read(&phone, ".obsidian/workspace.json"), None, "per-device files stay put");
+
+        // Different lines on each side merge.
+        write(&mac, "Plan.md", "ONE\ntwo\nthree\n");
+        write(&phone, "Plan.md", "one\ntwo\nTHREE\n");
+        sync(&mac.p, &mac.r, &ctl()).unwrap();
+        let r = sync(&phone.p, &phone.r, &ctl()).unwrap();
+        assert!(r.conflicts.is_empty());
+        assert_eq!(read(&phone, "Plan.md").as_deref(), Some("ONE\ntwo\nTHREE\n"));
+        sync(&mac.p, &mac.r, &ctl()).unwrap();
+        assert_eq!(read(&mac, "Plan.md").as_deref(), Some("ONE\ntwo\nTHREE\n"));
+
+        // The same line on both sides: both versions are kept.
+        write(&mac, "Plan.md", "mac\ntwo\nTHREE\n");
+        write(&phone, "Plan.md", "phone\ntwo\nTHREE\n");
+        sync(&mac.p, &mac.r, &ctl()).unwrap();
+        let r = sync(&phone.p, &phone.r, &ctl()).unwrap();
+        assert_eq!(r.conflicts.len(), 1);
+        assert_eq!(read(&phone, "Plan.md").as_deref(), Some("phone\ntwo\nTHREE\n"));
+        assert_eq!(read(&phone, &r.conflicts[0]).as_deref(), Some("mac\ntwo\nTHREE\n"));
+
+        // Deletions travel.
+        std::fs::remove_file(phone.p.files.join("Plan.md")).unwrap();
+        sync(&phone.p, &phone.r, &ctl()).unwrap();
+        sync(&mac.p, &mac.r, &ctl()).unwrap();
+        assert_eq!(read(&mac, "Plan.md"), None);
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn connecting_an_existing_vault_merges_both_and_holds_mass_deletes() {
+        let (base, url) = setup("connect");
+        let other = device(&base, "other", &url);
+        write(&other, "Shared.md", "from GitHub\n");
+        write(&other, "Only there.md", "x\n");
+        sync(&other.p, &other.r, &ctl()).unwrap();
+
+        let mac = device(&base, "mac", &url);
+        write(&mac, "Shared.md", "from the Mac\n");
+        for i in 0..40 {
+            write(&mac, &format!("notes/n{i}.md"), "note\n");
         }
-        let ignored = Ignored::load(&root);
-        let (files, _) = scan(&root, &BTreeMap::new(), &ignored).unwrap();
-        let names: Vec<&str> = files.keys().map(String::as_str).collect();
-        assert_eq!(names, [".gitignore", ".obsidian/app.json", "05_Visuals/Images/ok.png", "Note.md"]);
-        assert!(ignored.file(".smart-env/multi/a.ajson"), "remote files under an ignored folder are left alone too");
-        let _ = std::fs::remove_dir_all(&root);
+        let r = sync(&mac.p, &mac.r, &ctl()).unwrap();
+        assert_eq!(read(&mac, "Only there.md").as_deref(), Some("x\n"));
+        assert_eq!(read(&mac, "Shared.md").as_deref(), Some("from the Mac\n"));
+        assert_eq!(r.conflicts.len(), 1, "GitHub's version kept beside it");
+
+        // The folder empties (moved, or not yet downloaded): nothing is deleted on GitHub.
+        std::fs::remove_dir_all(mac.p.files.join("notes")).unwrap();
+        let r = sync(&mac.p, &mac.r, &ctl()).unwrap();
+        assert_eq!(r.held_deletions.len(), 40);
+        sync(&other.p, &other.r, &ctl()).unwrap();
+        assert_eq!(read(&other, "notes/n1.md").as_deref(), Some("note\n"));
+
+        // Bring them back.
+        restore_held(&mac.p, &r.held_deletions).unwrap();
+        assert_eq!(read(&mac, "notes/n1.md").as_deref(), Some("note\n"));
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn icloud_placeholders_count_as_unchanged() {
+        let (base, url) = setup("icloud");
+        let mac = device(&base, "mac", &url);
+        write(&mac, "Photo.png", "png");
+        sync(&mac.p, &mac.r, &ctl()).unwrap();
+        std::fs::remove_file(mac.p.files.join("Photo.png")).unwrap();
+        write(&mac, ".Photo.png.icloud", "placeholder");
+        let r = sync(&mac.p, &mac.r, &ctl()).unwrap();
+        assert!(r.pushed.is_empty(), "nothing deleted, placeholder not uploaded");
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_big_first_upload_goes_up_in_parts() {
+        let (base, url) = setup("parts");
+        let mac = device(&base, "mac", &url);
+        for i in 0..6 {
+            write(&mac, &format!("img/{i}.png"), &"x".repeat(400));
+        }
+        sync(&mac.p, &mac.r, &ctl()).unwrap();
+        let hub = Repository::open_bare(base.join("hub.git")).unwrap();
+        let mut walk = hub.revwalk().unwrap();
+        walk.push_ref("refs/heads/main").unwrap();
+        let parts = walk.count();
+        assert!(parts >= 3, "6 × 400 bytes in parts of at most 1000: got {parts} commits");
+        let phone = device(&base, "phone", &url);
+        sync(&phone.p, &phone.r, &ctl()).unwrap();
+        assert_eq!(read(&phone, "img/5.png").map(|s| s.len()), Some(400));
+        // The Mac's branch took over the pushed chain: nothing left to send.
+        let r = sync(&mac.p, &mac.r, &ctl()).unwrap();
+        assert!(r.pushed.is_empty());
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]
     fn conflict_names_keep_extensions() {
-        let c = conflict_path("Private/Diary.md.age");
-        assert!(c.starts_with("Private/Diary (conflict "));
-        assert!(c.ends_with(").md.age"));
-        assert!(conflict_path("Plan.md").ends_with(").md"));
-    }
-
-    #[test]
-    fn blob_sha_matches_git() {
-        // `printf 'hello\n' | git hash-object --stdin`
-        assert_eq!(blob_sha(b"hello\n"), "ce013625030ba8dba906f756967f9e9ca394464a");
-    }
-
-    #[test]
-    fn merges_edits_to_different_lines() {
-        let base = "a\nb\nc\n";
-        let ours = "A\nb\nc\n";
-        let theirs = "a\nb\nC\n";
-        assert_eq!(diffy::merge(base, ours, theirs).unwrap(), "A\nb\nC\n");
+        let c = conflict_path("Private/Diary.md.age", "2026-11-03 0930");
+        assert_eq!(c, "Private/Diary (conflict 2026-11-03 0930).md.age");
     }
 }

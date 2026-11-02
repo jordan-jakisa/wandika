@@ -101,7 +101,11 @@ impl App {
     pub fn paths(&self) -> Result<Paths> {
         let v = self.vault()?;
         let base = self.data.join("vaults").join(&v.id);
-        Ok(Paths { files: v.folder.clone().unwrap_or_else(|| base.join("files")), state: base.join("state.json") })
+        Ok(Paths {
+            files: v.folder.clone().unwrap_or_else(|| base.join("files")),
+            state: base.join("state.json"),
+            git: base.join("git"),
+        })
     }
 
     pub fn root(&self) -> Result<PathBuf> {

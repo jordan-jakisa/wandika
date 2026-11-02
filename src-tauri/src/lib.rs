@@ -47,6 +47,7 @@ pub fn run() {
             commands::vault_disconnect_remote,
             commands::sync_now,
             commands::sync_cancel,
+            commands::sync_held_deletions,
             commands::tree,
             commands::note_read,
             commands::note_write,

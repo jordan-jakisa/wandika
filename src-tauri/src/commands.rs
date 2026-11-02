@@ -226,9 +226,31 @@ pub async fn sync_now(app: S<'_>, handle: AppHandle) -> Result<SyncReport> {
             let _ = handle.emit("sync-progress", json!({ "phase": phase, "done": done, "total": total }));
         }),
     };
-    let report = sync::sync(&gh, &target, &paths, &ctl).await;
+    let user = app.settings().user;
+    let login = user.as_ref().map(|u| u.login.clone()).unwrap_or_else(|| target.owner.clone());
+    let remote = sync::Remote {
+        url: format!("https://github.com/{}/{}.git", target.owner, target.repo),
+        token: gh.token().to_string(),
+        branch: target.branch.clone(),
+        author: user.and_then(|u| u.name).unwrap_or_else(|| login.clone()),
+        email: format!("{login}@users.noreply.github.com"),
+        device: std::env::consts::OS.to_string(),
+    };
+    // libgit2 blocks; it runs on a worker thread so the interface stays responsive.
+    let report = tauri::async_runtime::spawn_blocking(move || sync::sync(&paths, &remote, &ctl))
+        .await
+        .map_err(|_| msg("Sync couldn't finish. Try again."))?;
     changed(&app);
     report
+}
+
+/// The held deletions: delete them on GitHub too (the next sync does), or bring them back here.
+#[tauri::command]
+pub async fn sync_held_deletions(app: S<'_>, delete: bool, paths: Vec<String>) -> Result<()> {
+    let p = app.paths()?;
+    if delete { sync::confirm_deletions(&p) } else { sync::restore_held(&p, &paths) }?;
+    changed(&app);
+    Ok(())
 }
 
 /// Stops the running sync at its next file. Nothing on GitHub changes until a sync commits.
