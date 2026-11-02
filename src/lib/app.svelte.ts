@@ -2,7 +2,7 @@ import { api, listen } from "./api";
 import { TEMPLATE } from "./kanban";
 import type { Entry, NoteMeta, Status, SyncReport, Today } from "./types";
 
-export type Tab = "notes" | "today" | "tasks" | "projects" | "search";
+export type Tab = "notes" | "today" | "tasks" | "projects" | "graph" | "search";
 
 export interface Ask {
   title: string;
@@ -39,6 +39,8 @@ class AppState {
   dialog = $state<Ask | null>(null);
   /** Tag picked in the tag browser, on a card or in a note. */
   tagFilter = $state<string | null>(null);
+  /** The note "Around this note" centres on: the last note opened. */
+  graphFocus = $state<string | null>(null);
   today = $state<Today | null>(null);
   #todayAt = 0;
   #todayLoading: Promise<void> | null = null;
@@ -161,6 +163,7 @@ class AppState {
 
   open(path: string) {
     this.current = path;
+    this.graphFocus = path;
     this.switcherOpen = false;
     this.tab = "notes";
   }
@@ -187,6 +190,15 @@ class AppState {
     this.open(path);
     this.edited();
   }
+
+  /** The graph; `local` centres it on the open note. */
+  showGraph(local = false) {
+    if (this.current) this.graphFocus = this.current;
+    this.graphLocal = local;
+    this.current = null;
+    this.tab = "graph";
+  }
+  graphLocal = $state(false);
 
   /** Shows every note with this tag. */
   showTag(tag: string) {

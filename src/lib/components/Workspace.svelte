@@ -10,10 +10,12 @@
     Settings as SettingsIcon,
     FolderClosed,
     Columns3,
+    Network,
   } from "@lucide/svelte";
   import { app, titleOf, type Tab } from "../app.svelte";
   import Editor from "./Editor.svelte";
   import FileTree from "./FileTree.svelte";
+  import GraphView from "./GraphView.svelte";
   import ProjectsView from "./ProjectsView.svelte";
   import Search from "./Search.svelte";
   import SyncStatus from "./SyncStatus.svelte";
@@ -24,7 +26,7 @@
   const wide = $derived(width >= 900);
   // A board needs the width; the Today column steps aside while one is open.
   const boardOpen = $derived(!!app.current && !!app.titles.find((t) => t.path === app.current)?.board);
-  const roomForToday = $derived(width >= 1180 && !boardOpen);
+  const roomForToday = $derived(width >= 1180 && !boardOpen && !(app.tab === "graph" && !app.current));
   const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform) && !("ontouchend" in document);
 
   function onKey(e: KeyboardEvent) {
@@ -129,6 +131,9 @@
         <button class:active={!app.current && app.tab === "projects"} onclick={() => { app.current = null; app.tab = "projects"; }}>
           <Columns3 size={16} /> Projects
         </button>
+        <button class:active={!app.current && app.tab === "graph"} onclick={() => app.showGraph()}>
+          <Network size={16} /> Graph
+        </button>
         {#if !roomForToday}
           <button class:active={!app.current && app.tab === "today"} onclick={() => { app.current = null; app.tab = "today"; }}>
             <CalendarDays size={16} /> Today
@@ -150,6 +155,8 @@
         <div class="scroll"><TasksView /></div>
       {:else if app.tab === "projects"}
         <div class="scroll"><ProjectsView /></div>
+      {:else if app.tab === "graph"}
+        <div class="graph-host"><GraphView /></div>
       {:else if app.tab === "today" && !roomForToday}
         <div class="scroll"><TodayPanel /></div>
       {:else}
@@ -192,6 +199,7 @@
               <span class="vault-name">{app.vault?.name}</span>
               <SyncStatus />
             </div>
+            <button class="icon-btn" onclick={() => app.showGraph()} aria-label="Graph"><Network size={20} /></button>
             <button class="icon-btn" onclick={() => (app.settingsOpen = true)} aria-label="Settings"><SettingsIcon size={20} /></button>
             <button class="icon-btn" onclick={() => app.newNote()} aria-label="New note"><Plus size={22} /></button>
           </header>
@@ -203,13 +211,15 @@
           <TasksView />
         {:else if app.tab === "projects"}
           <ProjectsView />
+        {:else if app.tab === "graph"}
+          <div class="graph-host phone-graph"><GraphView /></div>
         {:else}
           <Search mode="page" />
         {/if}
       </div>
       <nav class="tabbar" aria-label="Sections">
         {#each tabs as t (t.id)}
-          <button class:active={app.tab === t.id} aria-current={app.tab === t.id ? "page" : undefined} onclick={() => (app.tab = t.id)}>
+          <button class:active={app.tab === t.id || (t.id === "notes" && app.tab === "graph")} aria-current={app.tab === t.id ? "page" : undefined} onclick={() => (app.tab = t.id)}>
             <t.icon size={22} />
             <span>{t.label}</span>
           </button>
@@ -333,6 +343,16 @@
   }
   .mac .scroll {
     padding-top: 40px;
+  }
+  .graph-host {
+    flex: 1;
+    min-height: 0;
+  }
+  .mac .graph-host {
+    padding-top: 22px;
+  }
+  .phone-graph {
+    height: 100%;
   }
   .today-toggle {
     position: absolute;

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { EditorState } from "@codemirror/state";
   import { EditorView } from "@codemirror/view";
-  import { ChevronLeft, Code, Columns3, Lock, LockOpen, Trash2, Link2 } from "@lucide/svelte";
+  import { ChevronLeft, Code, Columns3, Lock, LockOpen, Network, Trash2, Link2 } from "@lucide/svelte";
   import { onDestroy } from "svelte";
   import { api, openUrl } from "../api";
   import { app, titleOf } from "../app.svelte";
@@ -231,6 +231,7 @@
           {#if showSource}<Columns3 size={16} /> Show as board{:else}<Code size={16} /> Edit as Markdown{/if}
         </button>
       {/if}
+      <button role="menuitem" onclick={async () => { await save(); app.showGraph(true); }}><Network size={16} /> Show in graph</button>
       <button role="menuitem" onclick={toggleEncryption}>
         {#if encrypted}<LockOpen size={16} /> Decrypt note{:else}<Lock size={16} /> Encrypt note{/if}
       </button>
