@@ -3,6 +3,7 @@ mod crypto;
 mod error;
 mod github;
 mod secrets;
+mod sync;
 mod vault;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
