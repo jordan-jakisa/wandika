@@ -686,11 +686,14 @@ pub fn daily_note(root: &Path, date: NaiveDate, crypto: &Crypto) -> Result<Strin
         #[serde(default)]
         template: String,
     }
-    let cfg: Daily = std::fs::read(root.join(".obsidian/daily-notes.json"))
-        .ok()
-        .and_then(|b| serde_json::from_slice(&b).ok())
-        .unwrap_or_default();
-    let folder = if cfg.folder.trim().is_empty() { "Daily".to_string() } else { cfg.folder.trim_matches('/').to_string() };
+    let settings: Option<Daily> =
+        std::fs::read(root.join(".obsidian/daily-notes.json")).ok().and_then(|b| serde_json::from_slice(&b).ok());
+    // Obsidian's own default is the vault root; a vault without its settings gets a Daily folder.
+    let folder = match &settings {
+        Some(s) => s.folder.trim().trim_matches('/').to_string(),
+        None => "Daily".to_string(),
+    };
+    let cfg = settings.unwrap_or_default();
     let format = if cfg.format.trim().is_empty() { "YYYY-MM-DD".to_string() } else { cfg.format.clone() };
     let at = date.and_time(Local::now().time());
     let name = moment_format(&format, at);
@@ -959,6 +962,24 @@ mod tests {
         assert_eq!(moment_format("YYYY-MM-DD [Daily]", d), "2026-11-02 Daily");
         assert_eq!(moment_format("[Week of] MMM D", d), "Week of Nov 2");
         assert_eq!(moment_format("YYYY [", d), "2026 [");
+    }
+
+    #[test]
+    fn daily_notes_follow_obsidian_settings_and_default_to_a_daily_folder() {
+        let root = std::env::temp_dir().join(format!("wandika-daily-root-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let crypto = Crypto::load(&root, &crate::secrets::Secrets::new(root.clone()), "test/daily-root");
+        let day = NaiveDate::from_ymd_opt(2026, 11, 2).unwrap();
+        assert_eq!(daily_note(&root, day, &crypto).unwrap(), "Daily/2026-11-02.md", "no Obsidian settings");
+
+        // Settings with a format but no folder: Obsidian puts the note in the vault root.
+        std::fs::create_dir_all(root.join(".obsidian")).unwrap();
+        std::fs::write(root.join(".obsidian/daily-notes.json"), r#"{"format":"DD-MM-YYYY"}"#).unwrap();
+        assert_eq!(daily_note(&root, day, &crypto).unwrap(), "02-11-2026.md");
+        std::fs::write(root.join(".obsidian/daily-notes.json"), r#"{"folder":"/","format":""}"#).unwrap();
+        assert_eq!(daily_note(&root, day, &crypto).unwrap(), "2026-11-02.md");
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
