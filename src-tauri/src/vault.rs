@@ -3,7 +3,7 @@
 
 use crate::crypto::{self, Crypto};
 use crate::error::{msg, Result};
-use chrono::{Local, NaiveDate, NaiveDateTime};
+use chrono::{Datelike, Local, NaiveDate, NaiveDateTime};
 use regex::Regex;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -713,7 +713,7 @@ pub fn daily_note(root: &Path, date: NaiveDate, crypto: &Crypto) -> Result<Strin
 fn moment_format(fmt: &str, at: NaiveDateTime) -> String {
     let tokens = [
         ("YYYY", "%Y"), ("YY", "%y"), ("MMMM", "%B"), ("MMM", "%b"), ("MM", "%m"),
-        ("dddd", "%A"), ("ddd", "%a"), ("DD", "%d"), ("Do", "%-d"), ("D", "%-d"), ("M", "%-m"),
+        ("dddd", "%A"), ("ddd", "%a"), ("DD", "%d"), ("Do", ""), ("D", "%-d"), ("M", "%-m"),
         ("HH", "%H"), ("H", "%-H"), ("hh", "%I"), ("h", "%-I"), ("mm", "%M"), ("ss", "%S"),
         ("A", "%p"), ("a", "%P"),
     ];
@@ -722,7 +722,11 @@ fn moment_format(fmt: &str, at: NaiveDateTime) -> String {
     'outer: while !rest.is_empty() {
         for (tok, chrono_fmt) in tokens {
             if let Some(r) = rest.strip_prefix(tok) {
-                out.push_str(&at.format(chrono_fmt).to_string());
+                if tok == "Do" {
+                    out.push_str(&ordinal(at.day()));
+                } else {
+                    out.push_str(&at.format(chrono_fmt).to_string());
+                }
                 rest = r;
                 continue 'outer;
             }
@@ -732,6 +736,18 @@ fn moment_format(fmt: &str, at: NaiveDateTime) -> String {
         rest = &rest[c.len_utf8()..];
     }
     out
+}
+
+/// moment.js `Do`: 1st, 2nd, 3rd, 4th, 11th, 21st.
+fn ordinal(day: u32) -> String {
+    let suffix = match (day % 10, day % 100) {
+        (_, 11..=13) => "th",
+        (1, _) => "st",
+        (2, _) => "nd",
+        (3, _) => "rd",
+        _ => "th",
+    };
+    format!("{day}{suffix}")
 }
 
 static TEMPLATE_VAR: LazyLock<Regex> =
@@ -923,6 +939,11 @@ mod tests {
         assert_eq!(moment_format("YYYY-MM-DD", d), "2026-11-02");
         assert_eq!(moment_format("dddd, D MMMM YYYY", d), "Monday, 2 November 2026");
         assert_eq!(moment_format("HH:mm", d), "09:05");
+        // `Do` is the ordinal day, so "November 2nd" names the same note Obsidian made.
+        assert_eq!(moment_format("MMMM Do, YYYY", d), "November 2nd, 2026");
+        let day = |n| NaiveDate::from_ymd_opt(2026, 1, n).unwrap().and_hms_opt(0, 0, 0).unwrap();
+        let ords: Vec<String> = [1, 2, 3, 4, 11, 12, 13, 21, 22, 23, 31].map(|n| moment_format("Do", day(n))).into();
+        assert_eq!(ords, ["1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st", "22nd", "23rd", "31st"]);
     }
 
     #[test]
@@ -931,4 +952,5 @@ mod tests {
         let text = "# {{title}}\n{{date}} {{time}} {{date:dddd D MMMM}} {{ time:h:mm a }}";
         assert_eq!(fill_template(text, "Standup", at), "# Standup\n2026-11-03 14:30 Tuesday 3 November 2:30 pm");
     }
+
 }
