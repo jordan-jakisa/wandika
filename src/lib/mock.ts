@@ -1,7 +1,7 @@
 // In-browser stand-in for the Rust core, used only when the interface runs outside Tauri
 // (`npm run dev` in a browser) so screens can be designed and checked without a device.
 
-import { isBoard } from "./kanban";
+import { isBoard, tagsOf } from "./kanban";
 import type { CalEvent, Entry, NoteMeta, Status, VaultTask } from "./types";
 
 type Args = Record<string, any>;
@@ -156,7 +156,7 @@ function meta(): NoteMeta[] {
     path,
     title: titleOf(path),
     links: [...text.matchAll(/\[\[([^\]|#]+)/g)].map((m) => m[1]),
-    tags: [...text.matchAll(/(?:^|\s)#([A-Za-z][\w/-]*)/g)].map((m) => m[1]),
+    tags: tagsOf(text),
     encrypted: path.endsWith(".age"),
     locked: path.endsWith(".age") && !encryption.unlocked,
     board: isBoard(text),

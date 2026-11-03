@@ -145,7 +145,8 @@ export function newLane(title: string): Lane {
   return { id: id(), title, complete: false, cards: [] };
 }
 
-export const TAG = /(^|\s)#([A-Za-z][\w/-]*)/g;
+// Tag letters as the Rust index reads them (its \w is Unicode), so #café is "café", not "caf".
+export const TAG = /(^|\s)#([A-Za-z][\p{Alphabetic}\p{M}\p{Nd}\p{Pc}\p{Join_Control}/-]*)/gu;
 export const LINK = /\[\[([^\]|#\n]+)(?:#[^\]|\n]*)?(?:\|([^\]\n]*))?\]\]/g;
 
 export function tagsOf(text: string) {
@@ -155,7 +156,7 @@ export function tagsOf(text: string) {
 /** Splits card text into plain runs, [[links]] and #tags for display. */
 export function tokens(text: string) {
   const out: ({ kind: "text"; text: string } | { kind: "link"; target: string; label: string } | { kind: "tag"; tag: string })[] = [];
-  const re = /\[\[([^\]|#\n]+)(?:#[^\]|\n]*)?(?:\|([^\]\n]*))?\]\]|(^|\s)#([A-Za-z][\w/-]*)/g;
+  const re = /\[\[([^\]|#\n]+)(?:#[^\]|\n]*)?(?:\|([^\]\n]*))?\]\]|(^|\s)#([A-Za-z][\p{Alphabetic}\p{M}\p{Nd}\p{Pc}\p{Join_Control}/-]*)/gu;
   let last = 0;
   for (const m of text.matchAll(re)) {
     const start = m.index!;
