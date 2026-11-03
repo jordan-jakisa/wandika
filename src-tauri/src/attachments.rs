@@ -153,4 +153,165 @@ mod tests {
         assert_eq!(read(&dir, &b, &crypto).unwrap(), b"two");
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    fn temp_vault(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("wandika-att-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn put(root: &Path, rel: &str, bytes: &[u8]) {
+        let path = root.join(rel);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, bytes).unwrap();
+    }
+
+    fn plain(root: &Path) -> Crypto {
+        Crypto::load(root, &crate::secrets::Secrets::new(root.join(".secrets")), "test/att")
+    }
+
+    /// An unlocked vault key without the passphrase step: the key is placed where a device keeps it.
+    fn unlocked(root: &Path, folders: &[&str]) -> Crypto {
+        let identity = age::x25519::Identity::generate();
+        let config = crypto::EncConfig {
+            version: 1,
+            recipient: identity.to_public().to_string(),
+            identity: String::new(),
+            folders: folders.iter().map(|f| f.to_string()).collect(),
+        };
+        crypto::save_config(root, &config).unwrap();
+        let secrets = crate::secrets::Secrets::new(root.join(".secrets"));
+        use age::secrecy::ExposeSecret;
+        secrets.set("age-identity:test/att", identity.to_string().expose_secret()).unwrap();
+        let c = Crypto::load(root, &secrets, "test/att");
+        assert!(c.unlocked());
+        c
+    }
+
+    #[test]
+    fn every_obsidian_attachment_setting() {
+        let dir = temp_vault("settings");
+        let set = |v: &str| put(&dir, ".obsidian/app.json", format!(r#"{{"attachmentFolderPath":"{v}"}}"#).as_bytes());
+        set("/");
+        assert_eq!(folder_for(&dir, "Projects/Plan.md"), "");
+        set("");
+        assert_eq!(folder_for(&dir, "Projects/Plan.md"), "");
+        set(".");
+        assert_eq!(folder_for(&dir, "Projects/Plan.md"), "Projects");
+        assert_eq!(folder_for(&dir, "Top.md"), "");
+        set("./img/2026");
+        assert_eq!(folder_for(&dir, "a/b/Plan.md"), "a/b/img/2026");
+        assert_eq!(folder_for(&dir, "Top.md"), "img/2026");
+        set("/Assets/");
+        assert_eq!(folder_for(&dir, "Projects/Plan.md"), "Assets");
+        put(&dir, ".obsidian/app.json", b"{broken");
+        assert_eq!(folder_for(&dir, "Projects/Plan.md"), "", "unreadable settings: the vault root");
+        put(&dir, ".obsidian/app.json", br#"{"attachmentFolderPath":5}"#);
+        assert_eq!(folder_for(&dir, "Projects/Plan.md"), "");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn file_names_are_cleaned_for_links() {
+        assert_eq!(clean_file_name("C:\\Users\\amina\\photo.jpg").unwrap(), "photo.jpg");
+        assert_eq!(clean_file_name("/tmp/x/Scan 2026 (1).pdf").unwrap(), "Scan 2026 (1).pdf");
+        assert_eq!(clean_file_name("Picha ya Café.png").unwrap(), "Picha ya Café.png", "letters in any script stay");
+        assert_eq!(clean_file_name("a|b^c#d.png").unwrap(), "a-b-c-d.png");
+        assert_eq!(clean_file_name(".env").unwrap(), "env", "never a hidden file");
+        assert_eq!(clean_file_name("  spaced.png  ").unwrap(), "spaced.png");
+        for bad in ["", "   ", "dir/", "...", "./"] {
+            assert_eq!(clean_file_name(bad).unwrap_err().to_string(), "That file has no usable name.", "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn saved_names_are_unique_across_the_vault_without_case() {
+        let dir = temp_vault("unique");
+        let crypto = plain(&dir);
+        put(&dir, "elsewhere/Photo.PNG", b"x");
+        put(&dir, "Private/scan.pdf.age", b"x");
+        put(&dir, ".trash/notes.txt", b"x");
+        assert_eq!(save(&dir, "Plan.md", "photo.png", b"1", &crypto).unwrap(), "photo 1.png");
+        assert_eq!(save(&dir, "Plan.md", "scan.pdf", b"1", &crypto).unwrap(), "scan 1.pdf", "an encrypted copy takes the name");
+        assert_eq!(save(&dir, "Plan.md", "notes.txt", b"1", &crypto).unwrap(), "notes.txt", "the trash doesn't count");
+        assert_eq!(save(&dir, "Plan.md", "README", b"1", &crypto).unwrap(), "README");
+        assert_eq!(save(&dir, "Plan.md", "README", b"2", &crypto).unwrap(), "README 1");
+        assert_eq!(save(&dir, "Plan.md", "archive.tar.gz", b"1", &crypto).unwrap(), "archive.tar.gz");
+        assert_eq!(save(&dir, "Plan.md", "archive.tar.gz", b"2", &crypto).unwrap(), "archive.tar 1.gz");
+        assert_eq!(std::fs::read(dir.join("README 1")).unwrap(), b"2");
+        assert!(save(&dir, "Plan.md", "???", b"1", &crypto).is_ok(), "symbols become dashes");
+        assert!(save(&dir, "Plan.md", "", b"1", &crypto).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn encrypted_folders_and_notes_keep_their_pictures_encrypted() {
+        let dir = temp_vault("encrypted");
+        put(&dir, ".obsidian/app.json", br#"{"attachmentFolderPath":"./"}"#);
+        let crypto = unlocked(&dir, &["Private"]);
+        let rel = save(&dir, "Private/Diary.md.age", "face.jpg", b"jpeg bytes", &crypto).unwrap();
+        assert_eq!(rel, "Private/face.jpg", "the link names the picture, not the .age file");
+        assert!(!dir.join("Private/face.jpg").exists());
+        let sealed = std::fs::read(dir.join("Private/face.jpg.age")).unwrap();
+        assert!(sealed.starts_with(b"-----BEGIN AGE ENCRYPTED FILE-----"));
+
+        // An encrypted note outside an encrypted folder: its picture is encrypted too.
+        let rel = save(&dir, "Health.md.age", "xray.png", b"png", &crypto).unwrap();
+        assert_eq!(rel, "xray.png");
+        let found = resolve(&dir, "xray.png", "Health.md.age").unwrap();
+        assert_eq!(found, "xray.png.age");
+        assert_eq!(read(&dir, &found, &crypto).unwrap(), b"png");
+        assert_eq!(read(&dir, &resolve(&dir, "face.jpg", "Private/Diary.md.age").unwrap(), &crypto).unwrap(), b"jpeg bytes");
+
+        // A plain note's picture stays plain.
+        assert_eq!(save(&dir, "Plan.md", "chart.png", b"c", &crypto).unwrap(), "chart.png");
+        assert_eq!(std::fs::read(dir.join("chart.png")).unwrap(), b"c");
+
+        // Locked on another device: the picture can't be read.
+        let locked = Crypto::load(&dir, &crate::secrets::Secrets::new(dir.join(".phone")), "test/att");
+        assert!(matches!(read(&dir, "xray.png.age", &locked), Err(crate::error::Error::Locked)));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_encrypted_note_without_set_up_cannot_take_pictures() {
+        let dir = temp_vault("no-setup");
+        let crypto = plain(&dir);
+        assert_eq!(save(&dir, "Diary.md.age", "a.png", b"x", &crypto).unwrap_err().to_string(), "Set up encryption first.");
+        assert!(!dir.join("a.png").exists() && !dir.join("a.png.age").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn resolve_looks_beside_the_note_then_the_root_then_by_name() {
+        let dir = temp_vault("resolve");
+        put(&dir, "Projects/pic.png", b"beside");
+        put(&dir, "pic.png", b"root");
+        put(&dir, "deep/er/Unique Café.PNG", b"by name");
+        put(&dir, "a/far/away/dup.png", b"long");
+        put(&dir, "b/dup.png", b"short");
+        put(&dir, ".trash/gone.png", b"x");
+        assert_eq!(resolve(&dir, "pic.png", "Projects/Plan.md").as_deref(), Some("Projects/pic.png"));
+        assert_eq!(resolve(&dir, "pic.png", "Daily/Today.md").as_deref(), Some("pic.png"));
+        assert_eq!(resolve(&dir, "./pic.png", "Daily/Today.md").as_deref(), Some("pic.png"));
+        assert_eq!(resolve(&dir, " /pic.png ", "Daily/Today.md").as_deref(), Some("pic.png"));
+        assert_eq!(resolve(&dir, "unique café.png", "Plan.md").as_deref(), Some("deep/er/Unique Café.PNG"), "any case, any folder");
+        assert_eq!(resolve(&dir, "dup.png", "Plan.md").as_deref(), Some("b/dup.png"), "the shortest path wins");
+        assert_eq!(resolve(&dir, "other/dup.png", "Plan.md").as_deref(), Some("b/dup.png"), "a wrong folder still finds the name");
+        assert_eq!(resolve(&dir, "gone.png", "Plan.md"), None, "hidden folders are not searched");
+        assert_eq!(resolve(&dir, "", "Plan.md"), None);
+        assert_eq!(resolve(&dir, "  ", "Plan.md"), None);
+        assert_eq!(resolve(&dir, "Projects", "Plan.md"), None, "a folder is not a file");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn read_refuses_paths_outside_the_vault() {
+        let dir = temp_vault("read");
+        let crypto = plain(&dir);
+        assert!(read(&dir, "../secret", &crypto).is_err());
+        assert_eq!(read(&dir, "missing.png", &crypto).unwrap_err().friendly().0, "not_found");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
