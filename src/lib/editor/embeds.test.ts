@@ -77,6 +77,12 @@ test("a Markdown image embeds with its alt text, size and decoded path", () => {
   assert.deepEqual(vi.mocked(imageUrl).mock.calls, [["my cat.png", "Notes/Here.md"]]);
 });
 
+test("a Markdown image path in angle brackets may hold spaces", () => {
+  const { view } = setup("‸\n![x](<my cat.png>) ![y](<plain.png>)");
+  assert.deepEqual(vi.mocked(imageUrl).mock.calls.map((c) => c[0]), ["my cat.png", "plain.png"]);
+  assert.equal(view.dom.querySelectorAll(".cm-embed").length, 2);
+});
+
 test("a path with a broken escape is used as written", () => {
   setup("‸\n![x](bad%E0%A4%A.png)");
   assert.deepEqual(vi.mocked(imageUrl).mock.calls.map((c) => c[0]), ["bad%E0%A4%A.png"]);

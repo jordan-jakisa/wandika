@@ -10,7 +10,8 @@ import { activeLines, inCode } from "./livePreview";
 import { renderLite, section } from "./noteText";
 
 const WIKI_EMBED = /!\[\[([^\]\n]+?)\]\]/g;
-const MD_IMAGE = /!\[([^\]\n]*)\]\(<?([^)\s>]+)>?(?:\s+"[^"]*")?\)/g;
+// The path may sit in angle brackets, which lets it hold spaces: `![alt](<my photo.png>)`.
+const MD_IMAGE = /!\[([^\]\n]*)\]\((?:<([^>\n]+)>|([^)\s<>]+))(?:\s+"[^"]*")?\)/g;
 
 class ImageEmbed extends WidgetType {
   constructor(
@@ -138,7 +139,7 @@ function build(view: EditorView, from: string, onOpen: (target: string) => void)
         out.push(Decoration.replace({ widget }).range(line.from + m.index!, line.from + m.index! + m[0].length));
       }
       for (const m of line.text.matchAll(MD_IMAGE)) {
-        let target = m[2];
+        let target = m[2] ?? m[3];
         try {
           target = decodeURI(target);
         } catch {
