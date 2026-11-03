@@ -120,6 +120,8 @@
   }
 
   async function commitRename(e: Entry) {
+    // Escape already ended the rename; the blur as the field leaves the page must not save it.
+    if (renaming !== e.path) return;
     const name = renameValue.trim();
     renaming = null;
     if (!name || name === e.name) return;
