@@ -11,8 +11,12 @@ pub enum Access {
     /// Android: EventKit doesn't exist there.
     #[cfg_attr(any(target_os = "macos", target_os = "ios"), allow(dead_code))]
     Unsupported,
+    // Mac and iPhone only; Android never has EventKit to ask.
+    #[cfg_attr(target_os = "android", allow(dead_code))]
     NotAsked,
+    #[cfg_attr(target_os = "android", allow(dead_code))]
     Granted,
+    #[cfg_attr(target_os = "android", allow(dead_code))]
     Denied,
 }
 
