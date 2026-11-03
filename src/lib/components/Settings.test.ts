@@ -355,7 +355,7 @@ describe("Encryption", () => {
 
   test("Lock locks encrypted notes, closes an open one and says so", async () => {
     const user = userEvent.setup();
-    const lock = vi.spyOn(api, "encryptionLock").mockResolvedValue({ set_up: true, unlocked: false });
+    const lock = vi.spyOn(api, "encryptionLock").mockResolvedValue({ set_up: true, unlocked: false, folders: [] });
     vi.spyOn(api, "status").mockResolvedValue(status({ encryption: { set_up: true, unlocked: false, folders: ["Private"] } }));
     app.current = "Private/Passport renewal.md.age";
     await open("encryption");
@@ -369,7 +369,7 @@ describe("Encryption", () => {
 
   test("Lock leaves a plain open note open", async () => {
     const user = userEvent.setup();
-    vi.spyOn(api, "encryptionLock").mockResolvedValue({ set_up: true, unlocked: false });
+    vi.spyOn(api, "encryptionLock").mockResolvedValue({ set_up: true, unlocked: false, folders: [] });
     vi.spyOn(api, "status").mockResolvedValue(status({ encryption: { set_up: true, unlocked: false, folders: [] } }));
     app.current = "Welcome.md";
     await open("encryption");
