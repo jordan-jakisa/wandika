@@ -57,8 +57,10 @@
       confirm: "Remove from list",
     });
     if (ok === null) return;
-    await api.vaultForget(v.id);
-    await app.refreshStatus();
+    await run(async () => {
+      await api.vaultForget(v.id);
+      await app.refreshStatus();
+    });
   }
 
   const where = (v: VaultConfig) =>
@@ -99,7 +101,7 @@
         <GitHubSignIn />
       {:else}
         <RepoPicker mode="open" />
-        <button class="btn quiet" onclick={() => app.signOut()}>Sign out of GitHub ({app.status.user.login})</button>
+        <button class="btn quiet" onclick={() => run(() => app.signOut())} disabled={busy}>Sign out of GitHub ({app.status.user.login})</button>
       {/if}
     </section>
 
