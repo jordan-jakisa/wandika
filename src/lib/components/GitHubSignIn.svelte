@@ -16,7 +16,9 @@
     error = null;
     starting = true;
     try {
-      code = await api.githubStartLogin();
+      const started = await api.githubStartLogin();
+      if (gone) return;
+      code = started;
       interval = code.interval;
       timer = setTimeout(poll, interval * 1000);
     } catch (e) {
@@ -28,8 +30,11 @@
 
   async function poll() {
     if (!code) return;
+    // Cancel, or leaving the screen, ends this sign-in; an answer that arrives later is ignored.
+    const mine = code;
     try {
-      const r = await api.githubPollLogin(code.device_code);
+      const r = await api.githubPollLogin(mine.device_code);
+      if (code !== mine || gone) return;
       if (r?.user) {
         code = null;
         await app.refreshStatus();
@@ -39,6 +44,7 @@
       if (r?.slow_down) interval += 5;
       timer = setTimeout(poll, interval * 1000);
     } catch (e) {
+      if (code !== mine || gone) return;
       // A dropped connection while you approve on GitHub isn't a failure; keep waiting.
       if (codeOf(e) === "offline") {
         timer = setTimeout(poll, interval * 1000);
@@ -65,7 +71,11 @@
     code = null;
   }
 
-  $effect(() => () => clearTimeout(timer));
+  let gone = false;
+  $effect(() => () => {
+    gone = true;
+    clearTimeout(timer);
+  });
 </script>
 
 <div class="signin">
