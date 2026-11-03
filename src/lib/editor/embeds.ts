@@ -6,6 +6,7 @@ import { type Range } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate, WidgetType } from "@codemirror/view";
 import { api } from "../api";
 import { imageUrl, isImage, readyUrl } from "../attachments";
+import { MARK } from "../sketch";
 import { activeLines, inCode } from "./livePreview";
 import { renderLite, section } from "./noteText";
 
@@ -33,6 +34,26 @@ class ImageEmbed extends WidgetType {
     img.decoding = "async";
     if (this.width) img.style.width = `${this.width}px`;
     wrap.append(img);
+    // A drawing made in Wandika offers to open on the drawing pad again.
+    if (/\.svg$/i.test(this.target)) {
+      api.attachmentRead(this.target, this.from).then(
+        (buf) => {
+          if (!new TextDecoder().decode(buf).includes(MARK)) return;
+          const edit = document.createElement("button");
+          edit.type = "button";
+          edit.className = "cm-drawing-edit";
+          edit.textContent = "Edit drawing";
+          edit.addEventListener("mousedown", (e) => e.preventDefault());
+          edit.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const detail = { target: this.target, from: this.from };
+            wrap.dispatchEvent(new CustomEvent("wandika-edit-drawing", { bubbles: true, detail }));
+          });
+          wrap.append(edit);
+        },
+        () => {},
+      );
+    }
     const known = readyUrl(this.target, this.from);
     if (known) {
       img.src = known;
@@ -171,7 +192,22 @@ export function embeds(getPath: () => string, onOpen: (target: string) => void) 
 }
 
 export const embedTheme = EditorView.theme({
-  ".cm-embed": { display: "block", margin: "6px 0" },
+  ".cm-embed": { display: "block", position: "relative", width: "fit-content", maxWidth: "100%", margin: "6px 0" },
+  ".cm-drawing-edit": {
+    position: "absolute",
+    top: "8px",
+    right: "8px",
+    minHeight: "32px",
+    padding: "0 12px",
+    border: "1px solid var(--rule)",
+    borderRadius: "999px",
+    background: "var(--sheet)",
+    color: "var(--papyrus)",
+    fontFamily: "var(--font-ui)",
+    fontSize: "var(--small)",
+    fontWeight: "600",
+    cursor: "pointer",
+  },
   ".cm-embed img": { display: "block", maxWidth: "100%", height: "auto", borderRadius: "8px" },
   ".cm-embed-loading": { minHeight: "120px", borderRadius: "var(--radius-sm)", background: "var(--press)" },
   ".cm-embed-missing": { color: "var(--graphite)", fontSize: "var(--small)" },

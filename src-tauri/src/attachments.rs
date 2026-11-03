@@ -120,6 +120,29 @@ pub fn resolve(root: &Path, target: &str, from: &str) -> Option<String> {
     best
 }
 
+/// Marks an SVG as a drawing made in Wandika (see `src/lib/sketch.ts`).
+const DRAWING_MARK: &str = "data-wandika-drawing";
+
+/// Saves a changed drawing over the file it came from. Only drawings Wandika made are rewritten,
+/// so an SVG from anywhere else is never overwritten.
+pub fn write_drawing(root: &Path, rel: &str, svg: &str, crypto: &Crypto) -> Result<()> {
+    if !rel.trim_end_matches(crypto::EXT).to_lowercase().ends_with(".svg") || !svg.contains(DRAWING_MARK) {
+        return Err(msg("That isn't a drawing."));
+    }
+    let path = safe(root, rel)?;
+    if !path.is_file() {
+        return Err(msg("That drawing isn't in the vault any more."));
+    }
+    if !String::from_utf8_lossy(&read(root, rel, crypto)?).contains(DRAWING_MARK) {
+        return Err(msg("Only drawings made in Wandika can be changed here."));
+    }
+    if crypto::is_encrypted(rel) {
+        write_atomic(&path, &crypto.encrypt(svg.as_bytes())?)
+    } else {
+        write_atomic(&path, svg.as_bytes())
+    }
+}
+
 pub fn read(root: &Path, rel: &str, crypto: &Crypto) -> Result<Vec<u8>> {
     let bytes = std::fs::read(safe(root, rel)?)?;
     if crypto::is_encrypted(rel) { crypto.decrypt(&bytes) } else { Ok(bytes) }
@@ -317,6 +340,27 @@ mod tests {
         let crypto = plain(&dir);
         assert!(read(&dir, "../secret", &crypto).is_err());
         assert_eq!(read(&dir, "missing.png", &crypto).unwrap_err().friendly().0, "not_found");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn only_wandika_drawings_are_rewritten() {
+        let dir = std::env::temp_dir().join(format!("wandika-drawing-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("attachments")).unwrap();
+        let crypto = Crypto::load(&dir, &crate::secrets::Secrets::new(dir.join(".secrets")), "test/drawing");
+        let ours = r#"<svg data-wandika-drawing="1"><path/></svg>"#;
+        std::fs::write(dir.join("attachments/Drawing.svg"), ours).unwrap();
+        std::fs::write(dir.join("attachments/Logo.svg"), "<svg><circle/></svg>").unwrap();
+        let changed = r#"<svg data-wandika-drawing="1"><path d="M1 1"/></svg>"#;
+        write_drawing(&dir, "attachments/Drawing.svg", changed, &crypto).unwrap();
+        assert_eq!(std::fs::read_to_string(dir.join("attachments/Drawing.svg")).unwrap(), changed);
+        let said = |r: Result<()>| r.unwrap_err().to_string();
+        assert_eq!(said(write_drawing(&dir, "attachments/Logo.svg", changed, &crypto)), "Only drawings made in Wandika can be changed here.");
+        assert_eq!(said(write_drawing(&dir, "attachments/Drawing.svg", "<svg/>", &crypto)), "That isn't a drawing.");
+        assert_eq!(said(write_drawing(&dir, "Notes.md", changed, &crypto)), "That isn't a drawing.");
+        assert_eq!(said(write_drawing(&dir, "attachments/Gone.svg", changed, &crypto)), "That drawing isn't in the vault any more.");
+        assert_eq!(said(write_drawing(&dir, "../x.svg", changed, &crypto)), "That path is outside the vault.");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

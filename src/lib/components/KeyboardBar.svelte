@@ -10,6 +10,7 @@
     ListChecks,
     ListIndentDecrease,
     ListIndentIncrease,
+    PenLine,
     Redo2,
     Undo2,
   } from "@lucide/svelte";
@@ -17,13 +18,15 @@
   import * as w from "../editor/writing";
 
   /** The writing toolbar that sits on top of the phone keyboard while a note is being edited. */
-  let { view, onImage }: { view: () => EditorView | null; onImage: () => void } = $props();
+  let { view, onImage, onDrawing }: { view: () => EditorView | null; onImage: () => void; onDrawing?: () => void } = $props();
 
   /** `picker` buttons open a system picker, so the note gives up focus for it. */
-  const BUTTONS: { label: string; icon: Component<any>; run: (v: EditorView) => boolean; picker?: boolean }[] = [
+  type Button = { label: string; icon: Component<any>; run: (v: EditorView) => boolean; picker?: boolean };
+  const BUTTONS = $derived<Button[]>([
     { label: "Link to a note", icon: Link, run: w.link },
     { label: "Tag", icon: Hash, run: w.tag },
     { label: "Add image", icon: ImagePlus, run: () => (onImage(), true), picker: true },
+    ...(onDrawing ? [{ label: "Add drawing", icon: PenLine, run: () => (onDrawing(), true), picker: true }] : []),
     { label: "Checklist", icon: ListChecks, run: (v) => w.lines(v, "task") },
     { label: "Heading", icon: Heading, run: w.heading },
     { label: "Bulleted list", icon: List, run: (v) => w.lines(v, "bullet") },
@@ -31,7 +34,7 @@
     { label: "Outdent", icon: ListIndentDecrease, run: w.indentLess },
     { label: "Undo", icon: Undo2, run: w.undo },
     { label: "Redo", icon: Redo2, run: w.redo },
-  ];
+  ]);
 
   // iOS keeps the page height when the keyboard opens, so the bar follows the visible viewport.
   // Android resizes the page (interactive-widget=resizes-content) and the offset stays 0.

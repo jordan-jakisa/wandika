@@ -507,12 +507,12 @@ describe("on a phone", () => {
     expect(screen.getByRole("tree", { name: "Notes" })).toBeInTheDocument();
   });
 
-  test("the More menu offers the graph and projects; New folder is a button beside it", async () => {
+  test("the More menu offers the graph, projects and a new drawing; New folder is a button beside it", async () => {
     const user = userEvent.setup();
     renderWorkspace();
     expect(within(document.querySelector<HTMLElement>(".phone-head")!).getByRole("button", { name: "New folder" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "More" }));
-    expect(screen.getAllByRole("menuitem").map((m) => m.textContent?.trim())).toEqual(["Graph", "Projects"]);
+    expect(screen.getAllByRole("menuitem").map((m) => m.textContent?.trim())).toEqual(["Graph", "Projects", "New drawing"]);
   });
 
   test("a synced vault's More menu also syncs now", async () => {

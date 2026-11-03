@@ -359,6 +359,13 @@ const handlers: Record<string, (a: Args) => unknown> = {
     files.set(path, bytes);
     return path;
   },
+  drawing_write: ({ target, svg }) => {
+    const name = String(target).split("/").pop()!.toLowerCase();
+    const path = [...files.keys()].find((p) => p === target || p.split("/").pop()!.toLowerCase() === name);
+    if (!path) throw "That drawing isn't in the vault any more.";
+    if (!new TextDecoder().decode(files.get(path)).includes("data-wandika-drawing")) throw "Only drawings made in Wandika can be changed here.";
+    files.set(path, new TextEncoder().encode(String(svg)));
+  },
   attachment_read: ({ target }) => {
     const name = target.split("/").pop()!.toLowerCase();
     const hit = [...files.keys()].find((p) => p === target || p.split("/").pop()!.toLowerCase() === name);

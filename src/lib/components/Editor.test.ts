@@ -324,6 +324,26 @@ test("Add image saves the picked images and embeds each on its own line", async 
   expect(write.mock.lastCall![1]).toMatch(/^Photos:\n!\[\[beach( \d+)?\.png\]\]\n!\[\[sunset( \d+)?\.png\]\]$/);
 });
 
+test("Add drawing opens the drawing pad; the saved drawing is embedded in the note", async () => {
+  const user = userEvent.setup();
+  const { path } = await openNote("Sketches", "Ideas:");
+  await action(user, "Add drawing");
+  expect(app.drawing).toMatchObject({ note: path, edit: null });
+  app.drawing!.saved!("attachments/Drawing 2026-11-03 0900.svg");
+  app.drawing = null;
+  const write = vi.spyOn(api, "noteWrite");
+  await waitFor(() => expect(write).toHaveBeenCalled());
+  expect(write.mock.lastCall![1]).toBe("Ideas:\n![[Drawing 2026-11-03 0900.svg]]");
+});
+
+test("Edit drawing on a drawing in the note opens it on the pad", async () => {
+  const { path } = await openNote("Sketches", "Ideas:");
+  document.querySelector(".cm-content")!.dispatchEvent(
+    new CustomEvent("wandika-edit-drawing", { bubbles: true, detail: { target: "Drawing.svg", from: path } }),
+  );
+  expect(app.drawing).toEqual({ note: path, edit: { target: "Drawing.svg", from: path } });
+});
+
 test("an image that can't be saved says which one", async () => {
   const user = userEvent.setup();
   await openNote("Broken", "Text");

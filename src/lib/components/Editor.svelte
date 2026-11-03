@@ -1,7 +1,7 @@
 <script lang="ts">
   import { EditorState } from "@codemirror/state";
   import { EditorView } from "@codemirror/view";
-  import { ChevronLeft, Code, ImagePlus, LayoutTemplate, Columns3, Lock, LockOpen, Network, Trash2, Link2 } from "@lucide/svelte";
+  import { ChevronLeft, Code, ImagePlus, LayoutTemplate, Columns3, Lock, LockOpen, Network, PenLine, Trash2, Link2 } from "@lucide/svelte";
   import { onDestroy, untrack } from "svelte";
   import { api, codeOf } from "../api";
   import { app, titleOf } from "../app.svelte";
@@ -54,11 +54,37 @@
     }
     if (!links.length || v !== view) return;
     void app.refreshFiles();
+    embedAt(v, pos, links);
+  }
+
+  /** Puts embeds at `pos`, each on its own line. */
+  function embedAt(v: EditorView, pos: number, links: string[]) {
     pos = Math.min(pos, v.state.doc.length);
     const line = v.state.doc.lineAt(pos);
     const insert = (pos > line.from ? "\n" : "") + links.join("\n") + (pos < line.to ? "\n" : "");
     v.dispatch({ changes: { from: pos, insert }, selection: { anchor: pos + insert.length } });
     v.focus();
+  }
+
+  // "Edit drawing" on a drawing in the note opens it on the pad again.
+  $effect(() => {
+    const el = host;
+    if (!el) return;
+    const edit = (e: Event) => (app.drawing = { note: path, edit: (e as CustomEvent<{ target: string; from: string }>).detail });
+    el.addEventListener("wandika-edit-drawing", edit);
+    return () => el.removeEventListener("wandika-edit-drawing", edit);
+  });
+
+  /** Opens the drawing pad; the drawing lands where the cursor was. */
+  function addDrawing() {
+    const v = view;
+    if (!v) return;
+    const at = insertAt(v);
+    app.drawing = {
+      note: loadedPath ?? path,
+      edit: null,
+      saved: (rel) => v === view && embedAt(v, at, [`![[${rel.split("/").pop()}]]`]),
+    };
   }
 
   async function insertTemplate() {
@@ -366,6 +392,7 @@
       {/if}
       {#if boardText === null && !locked && !error}
         <button role="menuitem" onclick={pickImages}><ImagePlus size={16} /> Add image</button>
+        <button role="menuitem" onclick={addDrawing}><PenLine size={16} /> Add drawing</button>
         <button role="menuitem" onclick={insertTemplate}><LayoutTemplate size={16} /> Insert template</button>
       {/if}
       <button role="menuitem" onclick={async () => { await save(); app.showGraph(true); }}><Network size={16} /> Show in graph</button>
@@ -461,7 +488,7 @@
     }}
   />
   {#if writing}
-    <KeyboardBar view={() => view} onImage={pickImages} />
+    <KeyboardBar view={() => view} onImage={pickImages} onDrawing={addDrawing} />
   {/if}
 </article>
 

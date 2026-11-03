@@ -332,6 +332,16 @@ pub async fn attachment_save(app: S<'_>, request: tauri::ipc::Request<'_>) -> Re
     Ok(rel)
 }
 
+/// Saves a changed drawing over the file an embed in `from` points at.
+#[tauri::command]
+pub async fn drawing_write(app: S<'_>, target: String, from: String, svg: String) -> Result<()> {
+    let root = app.root()?;
+    let rel = crate::attachments::resolve(&root, &target, &from).ok_or_else(|| msg("That drawing isn't in the vault any more."))?;
+    crate::attachments::write_drawing(&root, &rel, &svg, &app.crypto()?)?;
+    changed(&app);
+    Ok(())
+}
+
 /// The bytes of the file an embed in `from` points at.
 #[tauri::command]
 pub async fn attachment_read(app: S<'_>, target: String, from: String) -> Result<tauri::ipc::Response> {

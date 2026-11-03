@@ -1,13 +1,17 @@
 <script lang="ts">
-  import { X } from "@lucide/svelte";
+  import { PenLine, X } from "@lucide/svelte";
+  import { api } from "../api";
   import { app } from "../app.svelte";
   import { imageUrl } from "../attachments";
+  import { MARK } from "../sketch";
 
   /** An image from the vault, shown full size over everything else. */
   let dialogEl: HTMLDialogElement;
   let src = $state<string | null>(null);
   let failed = $state(false);
   let loaded = $state(false);
+  /** A drawing made in Wandika can go back to the drawing pad. */
+  let drawing = $state(false);
   const name = $derived(app.viewing?.split("/").pop()?.replace(/\.age$/, "") ?? "");
 
   $effect(() => {
@@ -16,6 +20,12 @@
       src = null;
       failed = false;
       loaded = false;
+      drawing = false;
+      if (/\.svg(\.age)?$/i.test(path))
+        api.attachmentRead(path, "").then(
+          (buf) => app.viewing === path && (drawing = new TextDecoder().decode(buf).includes(MARK)),
+          () => {},
+        );
       imageUrl(path, "").then(
         (url) => app.viewing === path && (src = url),
         () => app.viewing === path && (failed = true),
@@ -36,6 +46,16 @@
 >
   <header>
     <span class="name">{name}</span>
+    {#if drawing}
+      <button
+        class="btn quiet"
+        onclick={() => {
+          const target = app.viewing!;
+          app.viewing = null;
+          app.drawing = { note: "", edit: { target, from: "" } };
+        }}><PenLine size={18} /> Edit drawing</button
+      >
+    {/if}
     <button class="icon-btn" onclick={() => (app.viewing = null)} aria-label="Close"><X size={22} /></button>
   </header>
   <div class="stage">

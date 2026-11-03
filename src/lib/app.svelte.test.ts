@@ -1052,6 +1052,18 @@ describe("links and tasks from Today", () => {
   });
 });
 
+describe("drawings", () => {
+  test("New drawing opens the pad; Done makes a note holding the drawing and opens it", async () => {
+    const { app, api } = await started();
+    await settle(app.newDrawing());
+    expect(app.drawing).toMatchObject({ edit: null });
+    expect(app.drawing!.note.endsWith("Drawing.md")).toBe(true);
+    await settle(app.drawing!.saved!("attachments/Drawing 2026-11-03 0900.svg") as unknown as Promise<void>);
+    expect(app.current).toMatch(/Drawing 2026-11-03 0900\.md$/);
+    expect(await settle(api.noteRead(app.current!))).toBe("![[Drawing 2026-11-03 0900.svg]]\n");
+  });
+});
+
 describe("deleting and archiving tasks", () => {
   test("deleting a task removes it and its notes; Undo puts them back", async () => {
     const { app, api } = await started();

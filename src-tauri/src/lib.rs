@@ -66,6 +66,7 @@ pub fn run() {
             commands::folder_create,
             commands::note_discard_if_empty,
             commands::attachment_save,
+            commands::drawing_write,
             commands::attachment_read,
             commands::new_note_folder,
             commands::new_note_location,

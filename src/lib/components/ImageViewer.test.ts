@@ -114,3 +114,22 @@ test("a slow failure for an image already closed doesn't spoil the next one", as
   expect(screen.getByRole("img", { name: "Photo.jpg" })).toBeInTheDocument();
   expect(screen.queryByText("This image couldn't be opened.")).not.toBeInTheDocument();
 });
+
+test("a drawing made in Wandika offers Edit drawing, which opens it on the pad", async () => {
+  const user = userEvent.setup();
+  vi.spyOn(api, "attachmentRead").mockResolvedValue(new TextEncoder().encode('<svg data-wandika-drawing="1"></svg>').slice().buffer as ArrayBuffer);
+  render(ImageViewer);
+  view("attachments/Drawing.svg");
+  await user.click(await screen.findByRole("button", { name: "Edit drawing" }));
+  expect(app.viewing).toBeNull();
+  expect(app.drawing).toEqual({ note: "", edit: { target: "attachments/Drawing.svg", from: "" } });
+});
+
+test("any other picture has no Edit drawing", async () => {
+  vi.spyOn(api, "attachmentRead").mockResolvedValue(new TextEncoder().encode("<svg><circle/></svg>").slice().buffer as ArrayBuffer);
+  render(ImageViewer);
+  view("attachments/Logo.svg");
+  await waitFor(() => expect(api.attachmentRead).toHaveBeenCalledTimes(2));
+  expect(screen.queryByRole("button", { name: "Edit drawing" })).not.toBeInTheDocument();
+  view("photo.png");
+});

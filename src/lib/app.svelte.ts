@@ -53,6 +53,9 @@ class AppState {
   openCount = $state(0);
   /** Vault path of the image open in the viewer. */
   viewing = $state<string | null>(null);
+  /** The drawing open on the pad: a new one for `note`, or one to change, found the way the embed
+   *  `target` in note `from` is. `saved` hears where a new drawing went, so the note can embed it. */
+  drawing = $state<{ note: string; edit: { target: string; from: string } | null; saved?: (path: string) => void } | null>(null);
   /** The email open in the reader; `url` opens it in the mail app on the web. */
   reading = $state<(MailRef & { url: string | null }) | null>(null);
   /** The task open in the task editor. */
@@ -447,6 +450,24 @@ class AppState {
       this.say((e as Error).message);
       return null;
     }
+  }
+
+  /** A note that starts as a drawing: the pad opens, and Done makes a note holding the drawing. */
+  async newDrawing() {
+    const folder = await this.newNoteFolder();
+    this.drawing = {
+      // Where the note will be, so the drawing goes where its attachments would.
+      note: folder ? `${folder}/Drawing.md` : "Drawing.md",
+      edit: null,
+      saved: async (rel) => {
+        const name = rel.split("/").pop()!;
+        try {
+          await this.#create(folder, name.replace(/\.svg$/i, ""), `![[${name}]]\n`);
+        } catch (e) {
+          this.say((e as Error).message);
+        }
+      },
+    };
   }
 
   async newBoard() {

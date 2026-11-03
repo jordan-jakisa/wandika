@@ -130,6 +130,8 @@ export const api = {
       : call<string>("attachment_save", { note, name, bytes });
   },
   attachmentRead: (target: string, from: string) => call<ArrayBuffer>("attachment_read", { target, from }),
+  /** Saves a changed drawing over the file an embed in `from` points at. */
+  drawingWrite: (target: string, from: string, svg: string) => call<void>("drawing_write", { target, from, svg }),
   /** Where a new note goes, following Obsidian's "Default location for new notes". */
   newNoteFolder: (current: string | null) => call<string>("new_note_folder", { current }),
   /** Where new notes go, from the vault's Obsidian settings. */

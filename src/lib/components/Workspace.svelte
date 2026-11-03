@@ -12,6 +12,7 @@
     FolderClosed,
     Columns3,
     Network,
+    PenLine,
     PanelLeftClose,
     PanelLeftOpen,
     ChevronLeft,
@@ -479,6 +480,7 @@
                 <Menu label="More" size={22}>
                   <button role="menuitem" onclick={() => app.showGraph()}><Network size={18} /> Graph</button>
                   <button role="menuitem" onclick={() => (app.tab = "projects")}><Columns3 size={18} /> Projects</button>
+                  <button role="menuitem" onclick={() => app.newDrawing()}><PenLine size={18} /> New drawing</button>
                   {#if app.synced}
                     <button role="menuitem" onclick={() => app.sync(true)}><RefreshCw size={18} /> Sync now</button>
                   {/if}

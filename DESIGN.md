@@ -85,6 +85,12 @@ Save in its top bar and Pin as a switch. Task rows swipe on both phones: right f
 Archive and Delete. Back gestures follow the platform (iOS edge swipe, Android system back), and
 text follows the phone's text size setting.
 
+Drawings (Jordan, 2026-11-03): a full-screen pad with Cancel, Undo and Done on top, the drawing on
+its own light paper, and three inks, two widths, an eraser and Clear below. A pen draws with
+pressure and, once used, makes a resting palm draw nothing. The drawing is saved as an SVG in the
+attachments folder and embedded with `![[…]]`, so Obsidian and GitHub show it; Wandika keeps the
+strokes inside the file and offers "Edit drawing" on its own drawings only.
+
 Left aligned throughout. The one memorable element is the page itself: Literata at a generous size on
 a quiet sheet. Everything else is restrained.
 
