@@ -550,7 +550,6 @@
           {@const showGoogle = !!s?.configured.google || !!c?.google}
           {@const showOutlook = !!s?.configured.microsoft || !!c?.microsoft}
           {@const mail = showOutlook || (showGoogle && s?.configured.gmail !== false)}
-          <div class="conn">
           {#if showGoogle || showOutlook}
           <h4>Mail and calendars</h4>
           <div class="group">
@@ -579,14 +578,13 @@
           {:else}
             <!-- What connecting means, kept last and quiet: the rows above are the page. -->
             <footer class="about">
-              <Info size={20} aria-hidden="true" />
+              <Info size={16} aria-hidden="true" />
               <p>
                 {mail ? "Mail, calendars and tasks" : "Calendars and tasks"} you connect appear in Today. Wandika only
                 reads them, except when you tick off a task.
               </p>
             </footer>
           {/if}
-          </div>
         {:else if section === "account"}
           <div class="group">
             {#if s?.user}
@@ -701,10 +699,10 @@
     padding-bottom: calc(96px + var(--safe-bottom));
   }
   .settings.embedded .nav-head {
-    padding: calc(14px + var(--safe-top)) 20px 6px;
+    padding: 12px 20px 6px;
   }
   .settings.embedded .pane-head {
-    padding-top: calc(10px + var(--safe-top));
+    padding-top: 4px;
   }
   h2.large {
     font-size: var(--text-2xl);
@@ -728,7 +726,7 @@
     padding: 20px 16px 10px;
   }
   .phone .nav-head {
-    padding: calc(14px + var(--safe-top)) 12px 10px 20px;
+    padding: 12px 12px 10px 20px;
   }
   h2 {
     margin: 0;
@@ -799,7 +797,7 @@
     padding: 12px 12px 4px 24px;
   }
   .phone .pane-head {
-    padding: calc(10px + var(--safe-top)) 8px 4px 4px;
+    padding: 4px 8px 4px 4px;
   }
   .pane-head h3 {
     flex: 1;
@@ -892,24 +890,22 @@
     max-width: 55%;
     min-width: 0;
   }
-  /* Connections: the rows first, what they mean at the foot of the page. */
-  .conn {
-    display: flex;
-    flex-direction: column;
-    min-height: 100%;
-  }
+  /* Connections: what the rows mean, as the footer under them, left aligned with their text. */
   .about {
-    display: grid;
-    justify-items: center;
+    display: flex;
+    align-items: flex-start;
     gap: var(--space-2);
-    margin-top: auto;
-    padding: var(--space-7) var(--space-4) 0;
+    margin: 8px 2px 0;
     color: var(--graphite);
-    text-align: center;
+  }
+  .about :global(svg) {
+    flex: none;
+    width: 1.15em;
+    height: 1.15em;
+    margin-top: 0.1em;
   }
   .about p {
     margin: 0;
-    max-width: 34ch;
     font-size: var(--small);
   }
   .small {

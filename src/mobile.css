@@ -144,7 +144,8 @@
     .settings .row + .row {
       border-top: 1px solid var(--hairline);
     }
-    .settings .note {
+    .settings .note,
+    .settings .about {
       margin: 6px 20px 0;
     }
     .settings .footer-actions {
@@ -153,7 +154,7 @@
     /* The Settings tab opens with the tab's large title, as Notes does. */
     .settings.embedded .nav-head {
       display: flex;
-      padding: calc(14px + var(--safe-top)) 20px 6px;
+      padding: 12px 20px 6px;
     }
     .settings.embedded .nav-head h2 {
       font-size: var(--text-2xl);
@@ -282,7 +283,7 @@
     }
     .settings.embedded .nav-head {
       display: flex;
-      padding: calc(14px + var(--safe-top)) 20px 6px;
+      padding: 12px 20px 6px;
     }
     .settings.embedded .nav-head h2 {
       font-size: var(--text-2xl);
@@ -290,7 +291,7 @@
       text-align: left;
     }
     .settings.embedded .pane-head {
-      padding-top: calc(6px + var(--safe-top));
+      padding-top: 4px;
     }
 
     /* The section list: one inset group, icon, label and detail, a disclosure chevron. */
@@ -334,9 +335,12 @@
       font-weight: 400;
       color: var(--graphite);
     }
-    .settings .pane-body > .group:first-child,
-    .settings .conn > .group:first-child {
-      margin-top: 16px;
+    /* The first section sits close under the title, as in iOS Settings. */
+    .settings .pane-body > .group:first-child {
+      margin-top: 8px;
+    }
+    .settings .pane-body > h4:first-child {
+      margin-top: 12px;
     }
     .settings .group {
       border-radius: var(--radius-xl);
@@ -366,7 +370,8 @@
       background: none;
       opacity: 0.5;
     }
-    .settings .note {
+    .settings .note,
+    .settings .about {
       margin: 8px 16px 0;
       font-size: var(--text-sm);
     }
