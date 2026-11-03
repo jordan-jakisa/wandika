@@ -150,3 +150,11 @@ test("the heading button on an empty line starts a heading", () => {
 test("a hash without a space is text, not a heading", () => {
   assert.equal(cycleHeading("#tag"), "# #tag");
 });
+
+test("italic and bold stack instead of undoing each other", () => {
+  assert.equal(toggleWrap("**word**", "*"), "***word***");
+  assert.equal(toggleWrap("*word*", "**"), "***word***");
+  assert.equal(toggleWrap("***word***", "*"), "**word**");
+  assert.equal(toggleWrap("***word***", "**"), "*word*");
+  assert.equal(toggleWrap("*word*", "*"), "word");
+});

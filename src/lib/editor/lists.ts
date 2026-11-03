@@ -64,9 +64,24 @@ export function convertLines(lines: string[], kind: LineKind): string[] {
   });
 }
 
-/** Wraps text in a Markdown mark, or removes the mark when the text already has it. */
+/** How many times `ch` repeats at the start and at the end of `text`, whichever is fewer. */
+function run(text: string, ch: string) {
+  let a = 0;
+  while (a < text.length && text[a] === ch) a++;
+  let b = 0;
+  while (b < text.length && text[text.length - 1 - b] === ch) b++;
+  return Math.min(a, b);
+}
+
+/**
+ * Wraps text in a Markdown mark, or removes the mark when the text already has it. Stars count
+ * by their number: `**bold**` is not italic, so italic wraps it to `***bold***`, and bold or
+ * italic each come off `***both***` alone.
+ */
 export function toggleWrap(text: string, mark: string): string {
-  if (text.length >= mark.length * 2 && text.startsWith(mark) && text.endsWith(mark)) {
+  const n = run(text, mark[0]);
+  const has = mark === "*" ? n % 2 === 1 : n >= mark.length;
+  if (text.length >= mark.length * 2 && has) {
     return text.slice(mark.length, text.length - mark.length);
   }
   // Keep surrounding spaces outside the marks, or Markdown won't render them.

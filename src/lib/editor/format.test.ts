@@ -117,6 +117,14 @@ test("wrapping keeps spaces outside the marks and handles unicode", () => {
   assert.equal(show(view.state), "« *café 🎉* »");
 });
 
+test("shortcuts: bold and italic", () => {
+  const view = viewOf("«word»", formatting);
+  assert.ok(press(view, "b"));
+  assert.equal(show(view.state), "«**word**»");
+  assert.ok(press(view, "i"));
+  assert.equal(show(view.state), "«***word***»");
+});
+
 test("shortcuts: checklist, bullets and numbers", () => {
   const view = viewOf("«a\nb»", formatting);
   assert.ok(press(view, "l"));
@@ -159,6 +167,17 @@ test("the format bar has the list buttons, a divider, then the text buttons", ()
     assert.equal(b.title, b.getAttribute("aria-label"));
     assert.ok(b.querySelector("svg"), `${b.title} has an icon`);
   }
+});
+
+test("format bar buttons act on mousedown without taking the selection away", () => {
+  const view = viewOf("«word»", formatting);
+  const e = mousedown(button(view, "Bold"));
+  assert.ok(e.defaultPrevented);
+  assert.equal(show(view.state), "«**word**»");
+  mousedown(button(view, "Italic"));
+  mousedown(button(view, "Strikethrough"));
+  mousedown(button(view, "Code"));
+  assert.equal(show(view.state), "«`~~***word***~~`»");
 });
 
 test("each list button on the format bar converts the selected lines", () => {
