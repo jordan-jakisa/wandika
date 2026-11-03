@@ -15,6 +15,10 @@ export default defineConfig(() => ({
     setupFiles: ["src/test/setup.ts"],
   },
 
+  // The app loads its bundle from disk, not the network, so Vite's 500 kB download warning doesn't
+  // apply. The editor screen (CodeMirror and the app) is about 760 kB; warn only well past that.
+  build: { chunkSizeWarningLimit: 1000 },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors
