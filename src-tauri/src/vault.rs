@@ -720,6 +720,12 @@ fn moment_format(fmt: &str, at: NaiveDateTime) -> String {
     let mut out = String::new();
     let mut rest = fmt;
     'outer: while !rest.is_empty() {
+        // `[text]` is kept as written, as moment.js does.
+        if let Some((literal, after)) = rest.strip_prefix('[').and_then(|r| r.split_once(']')) {
+            out.push_str(literal);
+            rest = after;
+            continue;
+        }
         for (tok, chrono_fmt) in tokens {
             if let Some(r) = rest.strip_prefix(tok) {
                 if tok == "Do" {
@@ -944,6 +950,10 @@ mod tests {
         let day = |n| NaiveDate::from_ymd_opt(2026, 1, n).unwrap().and_hms_opt(0, 0, 0).unwrap();
         let ords: Vec<String> = [1, 2, 3, 4, 11, 12, 13, 21, 22, 23, 31].map(|n| moment_format("Do", day(n))).into();
         assert_eq!(ords, ["1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st", "22nd", "23rd", "31st"]);
+        // Text in brackets is literal; a lone bracket is just a character.
+        assert_eq!(moment_format("YYYY-MM-DD [Daily]", d), "2026-11-02 Daily");
+        assert_eq!(moment_format("[Week of] MMM D", d), "Week of Nov 2");
+        assert_eq!(moment_format("YYYY [", d), "2026 [");
     }
 
     #[test]
