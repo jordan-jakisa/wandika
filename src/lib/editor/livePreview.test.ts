@@ -246,6 +246,12 @@ test("tags are styled and carry their name", () => {
   ]);
 });
 
+test("tags with accents are read whole, as the index reads them", () => {
+  const { view } = setup("‸\n#café and #naïve/über");
+  const tags = [...view.dom.querySelectorAll<HTMLElement>(".cm-tag")];
+  assert.deepEqual(tags.map((t) => t.dataset.tag), ["café", "naïve/über"]);
+});
+
 test("a heading's own # is not a tag, but a tag in a heading is", () => {
   const { view } = setup("‸\n# Title #tag");
   const tags = [...view.dom.querySelectorAll<HTMLElement>(".cm-tag")];

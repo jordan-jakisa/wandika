@@ -94,7 +94,7 @@
   async function toNote(c: Card) {
     const title = c.text
       .replace(/\[\[([^\]|]+)(\|[^\]]*)?\]\]/g, "$1")
-      .replace(/(^|\s)#[A-Za-z][\w/-]*/g, "")
+      .replace(/(^|\s)#[A-Za-z][\p{Alphabetic}\p{M}\p{Nd}\p{Pc}\p{Join_Control}/-]*/gu, "")
       .replace(/📅\s?\d{4}-\d{2}-\d{2}/, "")
       .split("\n")[0]
       .trim()

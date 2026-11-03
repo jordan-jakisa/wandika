@@ -81,6 +81,10 @@ test("tags render as tags, but not inside code or after a letter", () => {
   assert.equal(inline("#1"), "#1");
 });
 
+test("tags with accents in a table are read whole", () => {
+  assert.equal(inline("#café"), '<span class="cm-tag" data-tag="café">#café</span>');
+});
+
 test("marks inside code are left as written", () => {
   assert.equal(inline("`**a**` **b**"), "<code>**a**</code> <strong>b</strong>");
 });

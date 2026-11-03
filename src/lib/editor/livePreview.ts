@@ -14,7 +14,7 @@ import {
 
 const hide = Decoration.replace({});
 const WIKILINK = /\[\[([^\]\n]+?)\]\]/g;
-const TAG = /(^|\s)(#[A-Za-z][\w/-]*)/g;
+const TAG = /(^|\s)(#[A-Za-z][\p{Alphabetic}\p{M}\p{Nd}\p{Pc}\p{Join_Control}/-]*)/gu;
 
 class Checkbox extends WidgetType {
   constructor(

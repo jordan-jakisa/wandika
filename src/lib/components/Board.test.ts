@@ -467,6 +467,15 @@ describe("making a card into a note", () => {
     await vi.waitFor(() => expect(create).toHaveBeenCalledWith("", "Write Plan up", "Board: [[Board]]\n\n"));
   });
 
+  test("a tag with an accent leaves the note title whole", async () => {
+    const create = vi.spyOn(api, "noteCreate").mockResolvedValue("Menu.md");
+    vi.spyOn(app, "refreshFiles").mockResolvedValue();
+    const { user } = setup("## Ideas\n\n- [ ] Menu #café\n", "Board.md");
+    await user.click(screen.getByRole("button", { name: cardMenu }));
+    await user.click(screen.getByRole("menuitem", { name: "Make into a note" }));
+    await vi.waitFor(() => expect(create).toHaveBeenCalledWith("", "Menu", "Board: [[Board]] #café\n\n"));
+  });
+
   test("a card that already starts with a link doesn't offer it", async () => {
     const { user } = setup();
     await user.click(within(card("Doing", "sync design")).getByRole("button", { name: cardMenu }));
