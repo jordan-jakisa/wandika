@@ -368,3 +368,29 @@ test("clicking plain text opens nothing", () => {
   mousedown(view.dom.querySelectorAll(".cm-line")[1]);
   assert.equal(onOpenLink.mock.calls.length + onTag.mock.calls.length, 0);
 });
+
+test("a bare web address is a link that opens with a click away from the cursor", () => {
+  const { view } = setup("‸\nSee https://www.producthunt.com/stories ) and www.x.com.");
+  const links = [...view.dom.querySelectorAll<HTMLElement>(".cm-md-link")];
+  assert.deepEqual(
+    links.map((l) => l.dataset.href),
+    ["https://www.producthunt.com/stories", "https://www.x.com"],
+  );
+  const opened = vi.fn();
+  const listener = (e: Event) => opened((e as CustomEvent).detail);
+  window.addEventListener("wandika:open-url", listener);
+  try {
+    mousedown(links[0]);
+  } finally {
+    window.removeEventListener("wandika:open-url", listener);
+  }
+  assert.deepEqual(opened.mock.calls, [["https://www.producthunt.com/stories"]]);
+});
+
+test("an address inside a Markdown link or code is not linked twice", () => {
+  const { view } = setup("‸\n[home](https://x.com) `https://y.com`");
+  assert.deepEqual(
+    [...view.dom.querySelectorAll<HTMLElement>(".cm-md-link")].map((l) => l.dataset.href),
+    ["https://x.com"],
+  );
+});

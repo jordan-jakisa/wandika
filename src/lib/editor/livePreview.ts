@@ -173,6 +173,15 @@ function build(view: EditorView): DecorationSet {
           }
           return false;
         }
+        // A bare address (GFM autolink) or `<https://…>` is a link too.
+        if (name === "URL" && node.node.parent?.name !== "Link" && node.node.parent?.name !== "Image") {
+          const href = state.sliceDoc(node.from, node.to);
+          if (/^(https?:|mailto:)/i.test(href) || /^www\./i.test(href)) {
+            const full = /^www\./i.test(href) ? `https://${href}` : href;
+            out.push(Decoration.mark({ class: "cm-md-link", attributes: { "data-href": full } }).range(node.from, node.to));
+          }
+          return;
+        }
         if (name === "TaskMarker") {
           const sel = state.selection.main;
           const inside = sel.from <= node.to && sel.to >= node.from;
