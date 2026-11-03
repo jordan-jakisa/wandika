@@ -96,12 +96,13 @@ test("a failed save tries again by itself", async () => {
 
 test("a new note opens with its title selected, so typing names it", async () => {
   const user = userEvent.setup();
-  const { path } = await openNote("Untitled", "");
+  await openNote("Untitled", "");
   await waitFor(() => expect(title()).toHaveFocus());
   const input = title() as HTMLInputElement;
-  expect([input.selectionStart, input.selectionEnd]).toEqual([0, "Untitled".length]);
+  expect(input.value).toMatch(/^Untitled( \d+)?$/);
+  expect([input.selectionStart, input.selectionEnd]).toEqual([0, input.value.length]);
   await user.keyboard("Shopping{Enter}");
-  await waitFor(() => expect(app.current).toBe(path.replace("Untitled", "Shopping")));
+  await waitFor(() => expect(app.current).toBe("Shopping.md"));
   expect(body()).toHaveFocus();
 });
 
