@@ -39,22 +39,46 @@ export interface Prefs {
 
 const KEY = "wandika.appearance";
 const DEFAULTS: Prefs = { theme: "system", accent: "papyrus", font: "serif", size: null, width: "normal" };
+/** The note size slider's range in Settings. */
+const SIZES = { min: 14, max: 24 };
 
+/** Saved choices, each checked: one that is missing, unknown or damaged falls back to its default. */
 function load(): Prefs {
+  let s: Record<string, unknown> = {};
   try {
-    return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) ?? "{}") };
+    const saved: unknown = JSON.parse(localStorage.getItem(KEY) ?? "{}");
+    if (saved && typeof saved === "object") s = saved as Record<string, unknown>;
   } catch {
-    return { ...DEFAULTS };
+    // Unreadable: every choice takes its default.
   }
+  const one = <T extends string>(v: unknown, allowed: readonly T[], fallback: T) => (allowed.includes(v as T) ? (v as T) : fallback);
+  return {
+    theme: one(s.theme, ["system", "light", "dark"], DEFAULTS.theme),
+    accent: one(s.accent, ACCENTS.map((a) => a.id), DEFAULTS.accent),
+    font: one(s.font, Object.keys(FONTS) as NoteFont[], DEFAULTS.font),
+    size: typeof s.size === "number" && s.size > 0 && Number.isFinite(s.size) ? Math.min(SIZES.max, Math.max(SIZES.min, Math.round(s.size))) : null,
+    width: one(s.width, Object.keys(WIDTHS) as Width[], DEFAULTS.width),
+  };
 }
 
 class PrefsState {
   value = $state<Prefs>(load());
-  #media: MediaQueryList | null = null;
+  /** The system's light or dark setting, kept current so screens showing `mode` follow it. */
+  #systemDark = $state(false);
+
+  constructor() {
+    if (typeof matchMedia === "undefined") return;
+    const media = matchMedia("(prefers-color-scheme: dark)");
+    this.#systemDark = media.matches;
+    media.addEventListener("change", (e) => {
+      this.#systemDark = e.matches;
+      if (this.value.theme === "system") this.apply();
+    });
+  }
 
   get mode(): "light" | "dark" {
     if (this.value.theme !== "system") return this.value.theme;
-    return this.#media?.matches ? "dark" : "light";
+    return this.#systemDark ? "dark" : "light";
   }
 
   set(patch: Partial<Prefs>) {
@@ -74,10 +98,6 @@ class PrefsState {
   /** Writes the choices onto <html>. Safe to call often. */
   apply() {
     if (typeof document === "undefined") return;
-    if (!this.#media) {
-      this.#media = matchMedia("(prefers-color-scheme: dark)");
-      this.#media.addEventListener("change", () => this.value.theme === "system" && this.apply());
-    }
     const root = document.documentElement;
     const mode = this.mode;
     root.dataset.mode = mode;
