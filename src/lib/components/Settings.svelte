@@ -14,7 +14,7 @@
     UserRound,
     X,
   } from "@lucide/svelte";
-  import { api, openUrl } from "../api";
+  import { api, listen, openUrl } from "../api";
   import { ago, app, type SettingsSection } from "../app.svelte";
   import { ACCENTS, FONTS, WIDTHS, prefs, type NoteFont, type Theme, type Width } from "../prefs.svelte";
   import type { AppleAccess } from "../types";
@@ -247,6 +247,19 @@
   $effect(() => {
     // Google finished in the browser: stop showing "Waiting…".
     if (waiting === "google" && c?.google) waiting = null;
+  });
+
+  // A sign-in in the browser that failed or was cancelled ends the wait too, so Connect works again.
+  $effect(() => {
+    let stop: (() => void) | undefined;
+    let gone = false;
+    void listen<{ provider: string }>("connectors-changed", (p) => {
+      if (waiting === p.provider) waiting = null;
+    }).then((unlisten) => (gone ? unlisten() : (stop = unlisten)));
+    return () => {
+      gone = true;
+      stop?.();
+    };
   });
 
   const NAMES: Record<string, string> = { google: "Google", microsoft: "Outlook", apple_calendar: "Apple Calendar", apple_reminders: "Apple Reminders" };
