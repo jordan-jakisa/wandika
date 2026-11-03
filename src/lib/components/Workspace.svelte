@@ -253,12 +253,14 @@
     </div>
   {/if}
   {#if app.heldDeletions.length}
+    {@const one = app.heldDeletions.length === 1}
     <div class="banner conflict" role="status">
       <p>
-        {app.heldDeletions.length} files are missing on this device, so sync kept them on GitHub instead of deleting
-        them everywhere. A moved or emptied folder can cause this.
+        {one ? "One file is" : `${app.heldDeletions.length} files are`} missing on this device, so sync kept
+        {one ? "it" : "them"} on GitHub instead of deleting {one ? "it" : "them"} everywhere. A moved or emptied folder
+        can cause this.
       </p>
-      <button class="btn" onclick={() => app.resolveHeld(false)}>Bring them back</button>
+      <button class="btn" onclick={() => app.resolveHeld(false)}>{one ? "Bring it back" : "Bring them back"}</button>
       <button class="btn danger" onclick={() => app.resolveHeld(true)}>Delete everywhere</button>
     </div>
   {/if}
