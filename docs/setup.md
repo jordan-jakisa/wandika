@@ -75,16 +75,11 @@ running Wandika reloads what Claude changed within a few seconds, and sync takes
 Public builds are made with `WANDIKA_PUBLIC=1` (no Gmail; Google only after Google's review) and
 only from code that is pushed to GitHub. Compliance: docs/store/compliance-2026-11-03.md.
 
-**Android (signed APK).** Once, in Terminal (you choose the password; keep the file and the
-password safe, because a lost key means existing installs can't be updated):
-
-```bash
-keytool -genkey -v -keystore ~/wandika-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias wandika
-```
-
-Then create `src-tauri/gen/android/keystore.properties` (git-ignored) with four lines:
-`storeFile=/Users/<you>/wandika-release.jks`, `storePassword=...`, `keyAlias=wandika`,
-`keyPassword=...`. Back up the .jks file somewhere safe. Build with `scripts/release-android.sh`.
+**Android (signed APK).** The release key lives outside the repo in `~/keys/wandika/`, like the
+other projects' keys: `wandika-release.jks`, `signing.properties` (its passwords) and a README with
+the certificate fingerprint. `src-tauri/gen/android/keystore.properties` is a git-ignored link to
+that `signing.properties`. Back up the folder in two places: a lost key means existing installs
+can't be updated. Build with `scripts/release-android.sh`.
 
 **Mac (notarized .dmg).** Once:
 1. Xcode, Settings, Accounts, Manage Certificates, +, Developer ID Application.

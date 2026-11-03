@@ -29,7 +29,8 @@ Android, and a public TestFlight link for iPhone. Public builds leave Gmail out.
 ## Jordan's steps, in order (one at a time)
 
 1. **Mac certificate.** Done 2026-11-03: "Developer ID Application" is in the keychain.
-2. **Android release key.** One `keytool` command and keystore.properties (docs/setup.md, Releases).
+2. **Android release key.** Done 2026-11-03: `~/keys/wandika/` (RSA 4096, SHA-256 F1:85:CD:0C:...:85:C7).
+   Jordan to back the folder up in two places.
 3. **iPhone.** An App Store Connect app record (console, Jordan's yes), then Xcode Archive and
    Upload with the Apple Account Xcode already has, then the review-readiness checklist and an
    external TestFlight group.
