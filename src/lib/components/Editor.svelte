@@ -20,6 +20,8 @@
   let host: HTMLDivElement;
   let view: EditorView | null = null;
   let loadedPath: string | null = null;
+  /** Set once the note is closed, so a read still under way doesn't draw into it. */
+  let destroyed = false;
   /** Text typed or changed on the board that hasn't reached the disk yet. */
   let pending: string | null = null;
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -140,7 +142,7 @@
       chars: body.length,
       cards: board ? (body.match(/^[-*+] \[[ xX]\]/gm)?.length ?? 0) : null,
       backlinks: backlinks.length,
-      encrypted: path.endsWith(".age"),
+      encrypted: !!loadedPath?.endsWith(".age"),
     };
   }
 
@@ -174,7 +176,8 @@
       view = null;
       return;
     }
-    if (loadedPath !== p) return;
+    // Closed or moved on while the note was read.
+    if (destroyed || loadedPath !== p) return;
     // The note draws first; "Linked from" fills in after without holding it up.
     void api.backlinks(p).then(
       (b) => {
@@ -327,6 +330,8 @@
   });
 
   onDestroy(() => {
+    destroyed = true;
+    clearTimeout(statsTimer);
     rememberPosition();
     const leaving = loadedPath;
     const empty = !!view && view.state.doc.length === 0;
