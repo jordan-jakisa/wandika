@@ -43,7 +43,7 @@
     },
     "iOS": {
       "minimumSystemVersion": "17.0",
-      "bundleVersion": "2"
+      "bundleVersion": "3"
     },
     "android": {
       "minSdkVersion": 26
