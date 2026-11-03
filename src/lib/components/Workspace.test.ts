@@ -369,6 +369,15 @@ describe("banners", () => {
     expect(screen.queryByText(/missing on this device/)).not.toBeInTheDocument();
   });
 
+  test("one file held back is spoken of as one", () => {
+    app.heldDeletions = ["a.md"];
+    renderWorkspace();
+    expect(screen.getByText(/missing on this device/)).toHaveTextContent(
+      "One file is missing on this device, so sync kept it on GitHub instead of deleting it everywhere.",
+    );
+    expect(screen.getByRole("button", { name: "Bring it back" })).toBeInTheDocument();
+  });
+
   test("files held back from deletion can be deleted everywhere, after a question", async () => {
     const user = userEvent.setup();
     app.status = synced();
