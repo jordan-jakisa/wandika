@@ -1,0 +1,266 @@
+import "@testing-library/jest-dom/vitest";
+import { resetApp, task, todayFixture } from "../../test/components-views";
+import { render, screen, within } from "@testing-library/svelte";
+import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { api } from "../api";
+import { app } from "../app.svelte";
+import type { RemoteTask, VaultTask } from "../types";
+import TasksView from "./TasksView.svelte";
+
+const vaultTasks = (): VaultTask[] => [
+  task("Projects/Launch.md", 3, "Set up OAuth apps"),
+  task("Projects/Launch.md", 4, "Test on the phone 📅 2026-11-03", { due: "2026-11-03" }),
+  task("Welcome.md", 7, "Pick a repository", { done: true }),
+  task("Welcome.md", 8, "Write your first note"),
+];
+
+const remote = (over: Partial<RemoteTask> = {}): RemoteTask => ({
+  id: "r1",
+  source: "google",
+  list_id: "l1",
+  list: "My Tasks",
+  title: "Renew domain",
+  done: false,
+  due: null,
+  ...over,
+});
+
+beforeEach(() => {
+  resetApp();
+  vi.spyOn(api, "tasksVault").mockResolvedValue(vaultTasks());
+  vi.spyOn(api, "today").mockResolvedValue(todayFixture());
+});
+afterEach(() => vi.restoreAllMocks());
+
+const summary = () => screen.getByText(/open task|No open tasks|Gathering|Couldn't/);
+const group = (title: string) => screen.getByRole("button", { name: title }).closest("section")!;
+
+describe("states", () => {
+  test("says it is gathering while the notes are read", () => {
+    vi.mocked(api.tasksVault).mockReturnValue(new Promise(() => {}));
+    render(TasksView);
+    expect(screen.getByRole("heading", { name: "Tasks" })).toBeInTheDocument();
+    expect(summary()).toHaveTextContent("Gathering tasks from your notes…");
+  });
+
+  test("empty: says how to add a task", async () => {
+    vi.mocked(api.tasksVault).mockResolvedValue([]);
+    render(TasksView);
+    expect(await screen.findByText("No open tasks. Write - [ ] in any note to add one.")).toBeInTheDocument();
+  });
+
+  test("counts open tasks", async () => {
+    render(TasksView);
+    expect(await screen.findByText("3 open tasks in your notes.")).toBeInTheDocument();
+  });
+
+  test("one open task is singular", async () => {
+    vi.mocked(api.tasksVault).mockResolvedValue([task("A.md", 0, "Only one")]);
+    render(TasksView);
+    expect(await screen.findByText("1 open task in your notes.")).toBeInTheDocument();
+  });
+
+  test("a failed read says so instead of claiming there are no tasks", async () => {
+    vi.mocked(api.tasksVault).mockRejectedValue(new Error("The vault folder can't be read."));
+    render(TasksView);
+    await vi.waitFor(() => expect(app.toast).toBe("The vault folder can't be read."));
+    expect(summary()).toHaveTextContent("Couldn't gather your tasks.");
+    expect(screen.queryByText(/No open tasks/)).not.toBeInTheDocument();
+  });
+
+  test("vault tasks show without waiting for calendars and mail", async () => {
+    let arrive!: () => void;
+    vi.mocked(api.today).mockReturnValue(new Promise((r) => (arrive = () => r(todayFixture({ remote_tasks: [remote()] })))));
+    render(TasksView);
+    try {
+      expect(await screen.findByText("3 open tasks in your notes.")).toBeInTheDocument();
+      expect(screen.getByRole("checkbox", { name: "Set up OAuth apps" })).toBeInTheDocument();
+    } finally {
+      arrive();
+    }
+    expect(await screen.findByRole("checkbox", { name: "Renew domain" })).toBeInTheDocument();
+  });
+});
+
+describe("grouped by note", () => {
+  test("each note is a group of its open tasks, with its folder", async () => {
+    render(TasksView);
+    await screen.findByText("3 open tasks in your notes.");
+    const launch = group("Launch");
+    expect(within(launch).getAllByRole("checkbox").map((c) => c.getAttribute("aria-label"))).toEqual([
+      "Set up OAuth apps",
+      "Test on the phone",
+    ]);
+    expect(within(launch).getAllByText("Projects")).toHaveLength(2);
+    const welcome = group("Welcome");
+    expect(within(welcome).getAllByRole("checkbox").map((c) => c.getAttribute("aria-label"))).toEqual(["Write your first note"]);
+    expect(within(welcome).getByText("Vault")).toBeInTheDocument();
+  });
+
+  test("a due date shows on the task", async () => {
+    render(TasksView);
+    await screen.findByText("3 open tasks in your notes.");
+    expect(within(group("Launch")).getByText("Today")).toBeInTheDocument();
+  });
+
+  test("a note's title opens the note", async () => {
+    const user = userEvent.setup();
+    render(TasksView);
+    await user.click(await screen.findByRole("button", { name: "Launch" }));
+    expect(app.current).toBe("Projects/Launch.md");
+    expect(app.tab).toBe("notes");
+  });
+
+  test("a note whose tasks are all done is left out", async () => {
+    vi.mocked(api.tasksVault).mockResolvedValue([task("Done.md", 0, "Old", { done: true }), task("A.md", 0, "New")]);
+    render(TasksView);
+    await screen.findByText("1 open task in your notes.");
+    expect(screen.queryByRole("button", { name: "Done" })).not.toBeInTheDocument();
+  });
+});
+
+describe("Show done", () => {
+  test("off at first; on shows done tasks ticked, off hides them again", async () => {
+    const user = userEvent.setup();
+    render(TasksView);
+    await screen.findByText("3 open tasks in your notes.");
+    const chip = screen.getByRole("button", { name: "Show done" });
+    expect(chip).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByRole("checkbox", { name: "Pick a repository" })).not.toBeInTheDocument();
+    await user.click(chip);
+    expect(chip).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("checkbox", { name: "Pick a repository" })).toBeChecked();
+    expect(summary()).toHaveTextContent("3 open tasks in your notes.");
+    await user.click(chip);
+    expect(screen.queryByRole("checkbox", { name: "Pick a repository" })).not.toBeInTheDocument();
+  });
+
+  test("is remembered on this device", async () => {
+    const user = userEvent.setup();
+    const first = render(TasksView);
+    await user.click(await screen.findByRole("button", { name: "Show done" }));
+    first.unmount();
+    render(TasksView);
+    expect(screen.getByRole("button", { name: "Show done" })).toHaveAttribute("aria-pressed", "true");
+  });
+});
+
+describe("ticking a task in a note", () => {
+  test("writes the note, then the list reloads without it", async () => {
+    const user = userEvent.setup();
+    const toggle = vi.spyOn(api, "taskToggle").mockResolvedValue(true);
+    render(TasksView);
+    const box = await screen.findByRole("checkbox", { name: "Write your first note" });
+    vi.mocked(api.tasksVault).mockResolvedValue(
+      vaultTasks().map((t) => (t.line === 8 ? { ...t, done: true } : t)),
+    );
+    await user.click(box);
+    expect(box).toBeChecked();
+    await vi.waitFor(() => expect(toggle).toHaveBeenCalledWith("Welcome.md", 8, "Write your first note"), { timeout: 2000 });
+    await vi.waitFor(() => expect(screen.getByText("2 open tasks in your notes.")).toBeInTheDocument());
+    expect(screen.queryByRole("checkbox", { name: "Write your first note" })).not.toBeInTheDocument();
+    expect(app.changed.paths).toEqual(["Welcome.md"]);
+  });
+
+  test("with Show done on, saves at once and stays in the list", async () => {
+    const user = userEvent.setup();
+    const toggle = vi.spyOn(api, "taskToggle").mockResolvedValue(false);
+    render(TasksView);
+    await user.click(await screen.findByRole("button", { name: "Show done" }));
+    vi.mocked(api.tasksVault).mockResolvedValue(vaultTasks().map((t) => (t.line === 7 ? { ...t, done: false } : t)));
+    await user.click(screen.getByRole("checkbox", { name: "Pick a repository" }));
+    expect(toggle).toHaveBeenCalledWith("Welcome.md", 7, "Pick a repository");
+    await vi.waitFor(() => expect(screen.getByText("4 open tasks in your notes.")).toBeInTheDocument());
+    expect(screen.getByRole("checkbox", { name: "Pick a repository" })).not.toBeChecked();
+  });
+
+  test("a failed write puts the box back and says why", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(api, "taskToggle").mockRejectedValue(new Error("That note no longer exists."));
+    render(TasksView);
+    await user.click(await screen.findByRole("button", { name: "Show done" }));
+    const box = screen.getByRole("checkbox", { name: "Set up OAuth apps" });
+    await user.click(box);
+    await vi.waitFor(() => expect(app.toast).toBe("Couldn't update that task. That note no longer exists."));
+    expect(box).not.toBeChecked();
+  });
+});
+
+describe("tasks from other apps", () => {
+  test("grouped by app and list, after the notes", async () => {
+    vi.mocked(api.today).mockResolvedValue(
+      todayFixture({
+        remote_tasks: [
+          remote(),
+          remote({ id: "r2", title: "Pay rent", due: "2026-11-01" }),
+          remote({ id: "a1", source: "apple", list: "Groceries", title: "Milk" }),
+        ],
+      }),
+    );
+    render(TasksView);
+    const google = (await screen.findByRole("heading", { name: "Google Tasks: My Tasks" })).closest("section")!;
+    expect(within(google).getAllByRole("checkbox").map((c) => c.getAttribute("aria-label"))).toEqual(["Renew domain", "Pay rent"]);
+    expect(within(google).getByText("Overdue, 2026-11-01")).toBeInTheDocument();
+    const apple = screen.getByRole("heading", { name: "Reminders: Groceries" }).closest("section")!;
+    expect(within(apple).getByRole("checkbox", { name: "Milk" })).toBeInTheDocument();
+    const headings = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
+    expect(headings).toEqual(["Launch", "Welcome", "Google Tasks: My Tasks", "Reminders: Groceries"]);
+  });
+
+  test("ticking one marks it done in that app and refreshes", async () => {
+    const user = userEvent.setup();
+    const toggle = vi.spyOn(api, "remoteTaskToggle").mockResolvedValue();
+    vi.mocked(api.today).mockResolvedValue(todayFixture({ remote_tasks: [remote()] }));
+    render(TasksView);
+    await user.click(await screen.findByRole("button", { name: "Show done" }));
+    const calls = vi.mocked(api.today).mock.calls.length;
+    vi.mocked(api.today).mockResolvedValue(todayFixture({ remote_tasks: [remote({ done: true })] }));
+    await user.click(screen.getByRole("checkbox", { name: "Renew domain" }));
+    expect(toggle).toHaveBeenCalledWith("google", "l1", "r1", true);
+    await vi.waitFor(() => expect(vi.mocked(api.today).mock.calls.length).toBe(calls + 1));
+    await vi.waitFor(() => expect(screen.getByRole("checkbox", { name: "Renew domain" })).toBeChecked());
+  });
+});
+
+describe("a long list", () => {
+  const many = (n: number) => Array.from({ length: n }, (_, i) => task(`Notes/Note ${String(i).padStart(3, "0")}.md`, 0, `Task ${i}`));
+  const groups = () => screen.getAllByRole("heading", { level: 3 });
+
+  test("shows 40 notes at a time", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.tasksVault).mockResolvedValue(many(100));
+    render(TasksView);
+    await screen.findByText("100 open tasks in your notes.");
+    expect(groups()).toHaveLength(40);
+    await user.click(screen.getByRole("button", { name: "Show 40 more notes of 60" }));
+    expect(groups()).toHaveLength(80);
+    await user.click(screen.getByRole("button", { name: "Show 20 more notes" }));
+    expect(groups()).toHaveLength(100);
+    expect(screen.queryByRole("button", { name: /^Show \d+ more/ })).not.toBeInTheDocument();
+  });
+
+  test("one note left is singular", async () => {
+    vi.mocked(api.tasksVault).mockResolvedValue(many(41));
+    render(TasksView);
+    await screen.findByText("41 open tasks in your notes.");
+    expect(screen.getByRole("button", { name: "Show 1 more note" })).toBeInTheDocument();
+  });
+
+  test("40 or fewer notes need no button", async () => {
+    vi.mocked(api.tasksVault).mockResolvedValue(many(40));
+    render(TasksView);
+    await screen.findByText("40 open tasks in your notes.");
+    expect(groups()).toHaveLength(40);
+    expect(screen.queryByRole("button", { name: /^Show \d+ more/ })).not.toBeInTheDocument();
+  });
+});
+
+test("reloads when a sync changes the notes", async () => {
+  render(TasksView);
+  await screen.findByText("3 open tasks in your notes.");
+  vi.mocked(api.tasksVault).mockResolvedValue([task("New.md", 0, "From the phone")]);
+  app.changed = { paths: ["New.md"], at: Date.now() };
+  expect(await screen.findByRole("checkbox", { name: "From the phone" })).toBeInTheDocument();
+  expect(screen.getByText("1 open task in your notes.")).toBeInTheDocument();
+});
