@@ -159,7 +159,9 @@
       case "connections": {
         const n = [st?.connectors.google, st?.connectors.microsoft].filter(Boolean).length +
           [st?.connectors.apple_calendar, st?.connectors.apple_reminders].filter((a) => a === "granted").length;
-        return n ? `${n} connected` : "Mail, calendars and reminders";
+        const cfg = st?.configured;
+        if (n) return `${n} connected`;
+        return cfg && !cfg.google && !cfg.microsoft && !cfg.apple ? "Nothing to connect yet" : "Mail, calendars and reminders";
       }
       case "account":
         return st?.user ? `GitHub: ${st.user.login}` : "Not signed in";

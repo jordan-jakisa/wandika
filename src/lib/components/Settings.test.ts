@@ -738,6 +738,12 @@ describe("About", () => {
 describe("on a phone", () => {
   beforeEach(() => setWidth(400));
 
+  test("the section list says when there's nothing to connect", async () => {
+    app.status = status({ configured: { github: true, google: false, microsoft: false, apple: false, gmail: false } });
+    await open();
+    expect(screen.getByText("Nothing to connect yet")).toBeInTheDocument();
+  });
+
   test("opens on the list of sections, each with what is inside", async () => {
     await open();
     expect(document.querySelector(".pane")).toBeNull();
