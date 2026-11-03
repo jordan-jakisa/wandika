@@ -156,7 +156,7 @@ class AppState {
     }
     listen<SyncProgress>("sync-progress", (p) => (this.syncProgress = p));
     listen<{ provider: string; error: string | null }>("connectors-changed", async (p) => {
-      this.status = await api.status();
+      await this.refreshStatus().catch(() => {});
       this.say(p.error ?? `${p.provider === "google" ? "Google" : p.provider} is connected.`);
     });
   }
@@ -310,9 +310,13 @@ class AppState {
   }
 
   async openDaily() {
-    const path = await api.dailyNote();
-    await this.refreshFiles();
-    this.open(path);
+    try {
+      const path = await api.dailyNote();
+      await this.refreshFiles();
+      this.open(path);
+    } catch (e) {
+      this.say((e as Error).message);
+    }
   }
 
   /** Asks for a name, creates the folder under `parent` and starts a note in it. */
@@ -392,21 +396,31 @@ class AppState {
 
   /** A note in `folder`, or where Obsidian's settings put new notes. */
   async newNote(folder?: string) {
-    folder ??= await this.newNoteFolder();
-    const path = await api.noteCreate(folder, "Untitled");
-    await this.refreshFiles();
-    this.open(path);
-    this.edited();
-    return path;
+    try {
+      return await this.#create(folder ?? (await this.newNoteFolder()), "Untitled");
+    } catch (e) {
+      this.say((e as Error).message);
+      return null;
+    }
   }
 
   async newBoard() {
     const name = await this.ask({ title: "New board", confirm: "Create board", input: { label: "Board name", value: "" } });
     if (!name?.trim()) return;
-    const path = await api.noteCreate("Projects", name.trim(), TEMPLATE);
+    try {
+      await this.#create("Projects", name.trim(), TEMPLATE);
+    } catch (e) {
+      this.say((e as Error).message);
+    }
+  }
+
+  /** Creates a note and opens it. Buttons call the actions above without waiting, so they say failures. */
+  async #create(folder: string, title: string, body?: string) {
+    const path = await api.noteCreate(folder, title, body);
     await this.refreshFiles();
     this.open(path);
     this.edited();
+    return path;
   }
 
   /** The graph; `local` centres it on the open note. */
@@ -433,14 +447,15 @@ class AppState {
   async follow(target: string) {
     const clean = target.split("|")[0].split("#")[0].trim();
     if (!clean) return;
-    const found = await api.resolveLink(clean);
-    if (found) return this.open(found);
-    const slash = clean.lastIndexOf("/");
-    const folder = slash >= 0 ? clean.slice(0, slash) : await this.newNoteFolder();
-    const path = await api.noteCreate(folder, clean.slice(slash + 1));
-    await this.refreshFiles();
-    this.open(path);
-    this.edited();
+    try {
+      const found = await api.resolveLink(clean);
+      if (found) return this.open(found);
+      const slash = clean.lastIndexOf("/");
+      const folder = slash >= 0 ? clean.slice(0, slash) : await this.newNoteFolder();
+      await this.#create(folder, clean.slice(slash + 1));
+    } catch (e) {
+      this.say((e as Error).message);
+    }
   }
 
   /**
