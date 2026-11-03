@@ -19,6 +19,10 @@
   let dropAt = $state<{ lane: string; index: number } | null>(null);
 
   const allTags = $derived([...new Set(board.lanes.flatMap((l) => l.cards.flatMap((c) => tagsOf(c.text))))].sort());
+  // A tag no card carries any more (its last card was deleted or edited) stops filtering.
+  $effect(() => {
+    if (filter && !allTags.includes(filter)) filter = null;
+  });
   const visible = (c: Card) => !filter || tagsOf(c.text).includes(filter);
   const today = $derived(clock.today);
 
@@ -32,6 +36,14 @@
 
   function display(text: string) {
     return text.replace(/\s*📅\s?\d{4}-\d{2}-\d{2}/, "").replace(/\s*✅ \d{4}-\d{2}-\d{2}/, "");
+  }
+
+  /** The card's first line as read aloud: links by their label, no date. */
+  function plain(text: string) {
+    return tokens(display(text).split("\n")[0])
+      .map((t) => (t.kind === "link" ? t.label : t.kind === "tag" ? `#${t.tag}` : t.text))
+      .join("")
+      .trim();
   }
 
   function startEdit(c: Card) {
@@ -263,7 +275,7 @@
                         {/if}
                       {/each}
                     </div>
-                    <Menu label="Card actions" size={16}>
+                    <Menu label={`Actions for ${plain(card.text)}`} size={16}>
                       <button role="menuitem" onclick={() => startEdit(card)}><Pencil size={16} /> Edit card</button>
                       {#if !/^\[\[[^\]]+\]\]/.test(card.text)}
                         <button role="menuitem" onclick={() => toNote(card)}><FilePlus size={16} /> Make into a note</button>
