@@ -17,7 +17,7 @@
 	<key>CFBundleShortVersionString</key>
 	<string>0.1.0</string>
 	<key>CFBundleVersion</key>
-	<string>0.1.0</string>
+	<string>1</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
@@ -44,5 +44,16 @@
 	<string>Wandika shows today&apos;s events beside your notes and turns a meeting into a note.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
 	<string>Wandika lists your reminders beside the tasks in your notes so you can tick them off.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.300312260148-1ggsg58n56qsu9j5qsc529tla9pl8d6t</string>
+			</array>
+			<key>CFBundleURLName</key>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER).com.googleusercontent.apps.300312260148-1ggsg58n56qsu9j5qsc529tla9pl8d6t</string>
+		</dict>
+	</array>
 </dict>
 </plist>
