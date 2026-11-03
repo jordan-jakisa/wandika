@@ -8,6 +8,8 @@ mod github;
 mod secrets;
 mod state;
 mod sync;
+#[cfg(test)]
+mod test_http;
 mod vault;
 
 use tauri::Manager;

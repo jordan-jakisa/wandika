@@ -96,7 +96,11 @@ impl Error {
                 _ => ("io", "Wandika couldn't read or write a file. Try again.".into()),
             },
             Error::Git(_) => ("git", "Sync couldn't finish. Your notes are safe here; it will try again shortly.".into()),
+            // A reply that arrived but couldn't be read is not a connection problem.
             Error::Json(_) => ("bad_response", "A service sent a reply Wandika didn't expect. Try again in a minute.".into()),
+            Error::Http(e) if e.is_decode() => {
+                ("bad_response", "A service sent a reply Wandika didn't expect. Try again in a minute.".into())
+            }
             Error::Http(_) => ("network", "Couldn't reach the service. Check your connection and try again.".into()),
         }
     }
@@ -234,5 +238,17 @@ mod tests {
         let e = Error::from(bad);
         assert!(matches!(e, Error::Http(_)));
         assert_eq!(code(e), "network");
+    }
+
+    #[test]
+    fn a_reply_that_isnt_json_is_a_bad_response_not_a_connection_problem() {
+        let s = crate::test_http::serve(vec![crate::test_http::reply(200, "<html>Sign in to Wi-Fi</html>")]);
+        let e = crate::test_http::block_on(async {
+            reqwest::get(&s.url).await?.json::<serde_json::Value>().await.map_err(Error::from)
+        })
+        .unwrap_err();
+        let (code, text) = e.friendly();
+        assert_eq!(code, "bad_response");
+        assert!(!text.contains("connection"));
     }
 }
