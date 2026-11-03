@@ -34,6 +34,7 @@ test("inCode finds fenced and indented code, not paragraphs or inline code", () 
   assert.equal(inCode(state, doc.indexOf("let a")), true);
   assert.equal(inCode(state, doc.indexOf("```js")), true);
   assert.equal(inCode(state, doc.indexOf("indented")), true);
+  assert.equal(inCode(state, doc.indexOf("    indented")), true);
   assert.equal(inCode(state, doc.indexOf("text")), false);
   assert.equal(inCode(state, doc.indexOf("code")), false);
 });
@@ -249,6 +250,12 @@ test("a heading's own # is not a tag, but a tag in a heading is", () => {
   const { view } = setup("‸\n# Title #tag");
   const tags = [...view.dom.querySelectorAll<HTMLElement>(".cm-tag")];
   assert.deepEqual(tags.map((t) => t.dataset.tag), ["tag"]);
+});
+
+test("links and tags inside code blocks stay code", () => {
+  const { view } = setup("‸\n```\n[[Plan]] #tag\n```\n\n    [[Indented]] #tag");
+  assert.ok(!view.dom.querySelector(".cm-wikilink"));
+  assert.ok(!view.dom.querySelector(".cm-tag"));
 });
 
 test("frontmatter is dimmed and never rendered as Markdown", async () => {

@@ -270,8 +270,12 @@ function build(view: EditorView): DecorationSet {
   return Decoration.set(out, true);
 }
 
+/** Whether `pos` is in a code block. A position in a line's indent counts by the line's text. */
 export function inCode(state: EditorState, pos: number) {
-  let node = syntaxTree(state).resolveInner(pos, 1);
+  const line = state.doc.lineAt(pos);
+  const indent = /^\s*/.exec(line.text)![0].length;
+  const at = Math.max(pos, Math.min(line.from + indent, line.to));
+  let node = syntaxTree(state).resolveInner(at, 1);
   for (let n: typeof node | null = node; n; n = n.parent) {
     if (n.name === "FencedCode" || n.name === "CodeBlock") return true;
   }
