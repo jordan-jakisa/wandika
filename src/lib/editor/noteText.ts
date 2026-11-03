@@ -3,7 +3,7 @@
 
 /** `Note#Heading` gives that section; `Note#^id` the line carrying that block id. */
 export function section(text: string, sub: string | undefined): string {
-  const body = text.replace(/^---\n[\s\S]*?\n---\n?/, "");
+  const body = text.replace(/^---\n(?:[\s\S]*?\n)?---(?:\n|$)/, "");
   if (!sub) return body;
   const lines = body.split("\n");
   if (sub.startsWith("^")) {

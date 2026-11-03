@@ -57,6 +57,15 @@ test("a block id keeps trailing spaces out and a missing id gives nothing", () =
   assert.equal(section("Rain^r1", "^r1"), "");
 });
 
+test("an empty frontmatter block is not shown in an embed", () => {
+  assert.equal(section("---\n---\nBody", undefined), "Body");
+  assert.equal(section("---\n---\n# A\nx", "A"), "# A\nx");
+});
+
+test("a line that starts with --- but is not a fence does not end the frontmatter", () => {
+  assert.equal(section("---\na: 1\n---x\n---\nBody", undefined), "Body");
+});
+
 test("embedded lines render as headings, lists, quotes and paragraphs", () => {
   const { html, more } = renderLite("## Title\n\n- one\n  * two\n3) three\n> quoted\nplain");
   assert.equal(
