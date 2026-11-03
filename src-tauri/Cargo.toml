@@ -37,8 +37,9 @@ chrono = { version = "0.4", features = ["serde"] }
 url = "2"
 rand = "0.8"
 age = { version = "0.12", features = ["armor"] }
-# Sync is git: libgit2 built into the app (the Mac uses the system TLS).
-git2 = { version = "0.20", default-features = false, features = ["https", "vendored-libgit2"] }
+# Sync is git: libgit2 and its OpenSSL built into the app on every platform. A Mac build that
+# linked Homebrew's OpenSSL wouldn't start: a signed app can't load another team's library.
+git2 = { version = "0.20", default-features = false, features = ["https", "vendored-libgit2", "vendored-openssl"] }
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 keyring = { version = "3", features = ["apple-native"] }
@@ -59,6 +60,3 @@ opt-level = 3
 panic = "abort"
 strip = true
 
-# iPhone and Android have no system OpenSSL for libgit2's HTTPS, so it is built from source.
-[target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
-git2 = { version = "0.20", default-features = false, features = ["https", "vendored-libgit2", "vendored-openssl"] }

@@ -14,10 +14,17 @@ fi
 export PATH="$HOME/.cargo/bin:$PATH"
 APPLE_SIGNING_IDENTITY="$identity" npm run tauri build -- --bundles app
 
+# Every library must be built in or come with macOS; anything from Homebrew stops a signed app at launch.
+app=src-tauri/target/release/bundle/macos/Wandika.app
+if otool -L "$app/Contents/MacOS/wandika" | tail -n +2 | grep -v -e "^[[:space:]]*/System/" -e "^[[:space:]]*/usr/lib/"; then
+  echo "The build links the libraries above from outside macOS, so it wouldn't start. Not installed."
+  exit 1
+fi
+
 if pgrep -f "/Applications/Wandika.app/Contents/MacOS" >/dev/null; then
   echo "Quit Wandika, then run this again to install."
   exit 1
 fi
 rm -rf /Applications/Wandika.app
-ditto src-tauri/target/release/bundle/macos/Wandika.app /Applications/Wandika.app
+ditto "$app" /Applications/Wandika.app
 echo "Installed /Applications/Wandika.app"
