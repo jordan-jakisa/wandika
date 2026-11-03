@@ -193,6 +193,54 @@ pub fn new_note_folder(root: &Path, current: Option<&str>) -> String {
     }
 }
 
+#[derive(Serialize, serde::Deserialize, Debug, PartialEq)]
+pub struct NewNoteLocation {
+    /// Obsidian's values: "root" (the vault's top level), "current" (the open note's folder), "folder".
+    pub location: String,
+    /// The folder, when `location` is "folder".
+    pub folder: String,
+}
+
+fn obsidian_app(root: &Path) -> serde_json::Map<String, serde_json::Value> {
+    std::fs::read(root.join(".obsidian/app.json"))
+        .ok()
+        .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+        .and_then(|v| v.as_object().cloned())
+        .unwrap_or_default()
+}
+
+/// Where new notes go, as Obsidian's "Default location for new notes" says.
+pub fn new_note_location(root: &Path) -> NewNoteLocation {
+    let app = obsidian_app(root);
+    let text = |k: &str| app.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let location = match text("newFileLocation").as_str() {
+        l @ ("current" | "folder") => l.to_string(),
+        _ => "root".to_string(),
+    };
+    NewNoteLocation { location, folder: text("newFileFolderPath").trim_matches('/').to_string() }
+}
+
+/// Sets where new notes go, in Obsidian's own settings, so Obsidian and every synced device agree.
+/// The rest of `.obsidian/app.json` stays as it was.
+pub fn set_new_note_location(root: &Path, location: &str, folder: &str) -> Result<()> {
+    let folder = folder.trim_matches('/');
+    match location {
+        "root" | "current" => {}
+        "folder" if !folder.is_empty() && safe(root, folder)?.is_dir() => {}
+        "folder" => return Err(msg("Pick a folder that's in the vault.")),
+        _ => return Err(msg("Pick where new notes go.")),
+    }
+    let mut app = obsidian_app(root);
+    app.insert("newFileLocation".into(), location.into());
+    if location == "folder" {
+        app.insert("newFileFolderPath".into(), folder.into());
+    }
+    std::fs::create_dir_all(root.join(".obsidian"))?;
+    let mut text = serde_json::to_string_pretty(&serde_json::Value::Object(app)).map_err(|e| msg(e.to_string()))?;
+    text.push('\n');
+    write_atomic(&root.join(".obsidian/app.json"), text.as_bytes())
+}
+
 /// Creates a note with a unique name. Notes in encrypted folders are created encrypted.
 pub fn create_note(root: &Path, folder: &str, title: &str, body: &str, crypto: &Crypto) -> Result<String> {
     let base = clean_name(title)?;
@@ -1146,6 +1194,27 @@ mod tests {
         assert_eq!(new_note_folder(&root, Some("Projects/Plan.md")), "Projects");
         std::fs::write(root.join(".obsidian/app.json"), r#"{"newFileLocation":"folder","newFileFolderPath":"00_Inbox"}"#).unwrap();
         assert_eq!(new_note_folder(&root, Some("Projects/Plan.md")), "00_Inbox");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn the_new_note_location_is_read_and_set_in_obsidians_settings() {
+        let (root, _) = temp_vault("newloc-set");
+        assert_eq!(new_note_location(&root), NewNoteLocation { location: "root".into(), folder: "".into() });
+        put(&root, ".obsidian/app.json", r#"{"vimMode":true,"newFileLocation":"current"}"#);
+        assert_eq!(new_note_location(&root).location, "current");
+        std::fs::create_dir_all(root.join("00_Inbox")).unwrap();
+        set_new_note_location(&root, "folder", "/00_Inbox/").unwrap();
+        assert_eq!(new_note_location(&root), NewNoteLocation { location: "folder".into(), folder: "00_Inbox".into() });
+        assert_eq!(new_note_folder(&root, None), "00_Inbox");
+        let saved: serde_json::Value = serde_json::from_str(&get(&root, ".obsidian/app.json")).unwrap();
+        assert_eq!(saved["vimMode"], true, "the rest of Obsidian's settings stay");
+        set_new_note_location(&root, "root", "").unwrap();
+        assert_eq!(new_note_folder(&root, Some("Projects/Plan.md")), "");
+        let said = |r: Result<()>| r.unwrap_err().to_string();
+        assert_eq!(said(set_new_note_location(&root, "folder", "Missing")), "Pick a folder that's in the vault.");
+        assert_eq!(said(set_new_note_location(&root, "folder", "../out")), "That path is outside the vault.");
+        assert_eq!(said(set_new_note_location(&root, "elsewhere", "")), "Pick where new notes go.");
         let _ = std::fs::remove_dir_all(&root);
     }
 

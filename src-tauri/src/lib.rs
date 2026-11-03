@@ -68,6 +68,8 @@ pub fn run() {
             commands::attachment_save,
             commands::attachment_read,
             commands::new_note_folder,
+            commands::new_note_location,
+            commands::new_note_location_set,
             commands::templates_list,
             commands::template_render,
             commands::entry_rename,

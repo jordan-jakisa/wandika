@@ -293,6 +293,19 @@ pub async fn new_note_folder(app: S<'_>, current: Option<String>) -> Result<Stri
 }
 
 #[tauri::command]
+pub async fn new_note_location(app: S<'_>) -> Result<vault::NewNoteLocation> {
+    Ok(vault::new_note_location(&app.root()?))
+}
+
+/// Sets where new notes go, in the vault's Obsidian settings (they sync with the vault).
+#[tauri::command]
+pub async fn new_note_location_set(app: S<'_>, location: String, folder: String) -> Result<()> {
+    vault::set_new_note_location(&app.root()?, &location, &folder)?;
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn templates_list(app: S<'_>) -> Result<Vec<String>> {
     Ok(vault::templates(&app.root()?))
 }

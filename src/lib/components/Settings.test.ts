@@ -112,6 +112,25 @@ describe("on a desktop", () => {
 });
 
 describe("Vault", () => {
+  test("New notes go in: the top, the open note's folder or a folder, saved in Obsidian's settings", async () => {
+    const user = userEvent.setup();
+    await app.refreshFiles();
+    const set = vi.spyOn(api, "newNoteLocationSet");
+    await open("vault");
+    const place = await pane().findByRole("combobox", { name: "New notes go in" });
+    expect(place).toHaveValue("current");
+    const options = [...place.querySelectorAll("option")].map((o) => o.textContent);
+    expect(options.slice(0, 2)).toEqual(["The top of the vault", "The open note's folder"]);
+    expect(options).toContain("Projects");
+    await user.selectOptions(place, "folder:Projects");
+    expect(set).toHaveBeenCalledWith("folder", "Projects");
+    expect(await api.newNoteFolder(null)).toBe("Projects");
+    await user.selectOptions(place, "root");
+    expect(set).toHaveBeenLastCalledWith("root", "");
+    expect(await api.newNoteFolder("Projects/Plan.md")).toBe("");
+    expect(pane().getByText(/Obsidian and your other devices use it too/)).toBeInTheDocument();
+  });
+
   test("names the vault and where it lives", async () => {
     await open("vault");
     expect(row("Notes").getByText("In Wandika's storage on this device")).toBeInTheDocument();

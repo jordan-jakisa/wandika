@@ -2,7 +2,7 @@
 // (`npm run dev` in a browser) so screens can be designed and checked without a device.
 
 import { isBoard, tagsOf } from "./kanban";
-import type { CalEvent, Entry, NoteMeta, Status, VaultTask } from "./types";
+import type { CalEvent, Entry, NewNoteLocation, NoteMeta, Status, VaultTask } from "./types";
 
 type Args = Record<string, any>;
 const listeners = new Map<string, Set<(p: unknown) => void>>();
@@ -81,6 +81,8 @@ if (BIG_NOTES) {
 }
 
 let encryption = { set_up: true, unlocked: false, folders: ["Private"] };
+/** The demo vault puts new notes beside the open one, as Obsidian's "Same folder as current file". */
+let newNotes: NewNoteLocation = { location: "current", folder: "" };
 // `?mock=vault` opens straight into a vault, for checking screens after a reload.
 const startInVault = typeof location !== "undefined" && new URLSearchParams(location.search).get("mock") === "vault";
 let signedIn = startInVault;
@@ -333,7 +335,18 @@ const handlers: Record<string, (a: Args) => unknown> = {
     notes.delete(path);
     return true;
   },
-  new_note_folder: ({ current }) => (current && current.includes("/") ? current.slice(0, current.lastIndexOf("/")) : ""),
+  new_note_folder: ({ current }) =>
+    newNotes.location === "folder"
+      ? newNotes.folder
+      : newNotes.location === "current" && current && String(current).includes("/")
+        ? String(current).slice(0, String(current).lastIndexOf("/"))
+        : "",
+  new_note_location: () => ({ ...newNotes }),
+  new_note_location_set: ({ location, folder }) => {
+    if (location === "folder" && !entries().some((e) => e.kind === "folder" && e.path === folder)) throw "Pick a folder that's in the vault.";
+    if (!["root", "current", "folder"].includes(String(location))) throw "Pick where new notes go.";
+    newNotes = { location: location as NewNoteLocation["location"], folder: location === "folder" ? String(folder) : newNotes.folder };
+  },
   templates_list: () => [...notes.keys()].filter((p) => p.startsWith("Templates/")),
   template_render: ({ path, title }) =>
     (notes.get(path) ?? "")

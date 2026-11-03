@@ -1,5 +1,6 @@
 import type {
   Archived,
+  NewNoteLocation,
   CalEvent,
   ConnectStart,
   CryptoStatus,
@@ -131,6 +132,10 @@ export const api = {
   attachmentRead: (target: string, from: string) => call<ArrayBuffer>("attachment_read", { target, from }),
   /** Where a new note goes, following Obsidian's "Default location for new notes". */
   newNoteFolder: (current: string | null) => call<string>("new_note_folder", { current }),
+  /** Where new notes go, from the vault's Obsidian settings. */
+  newNoteLocation: () => call<NewNoteLocation>("new_note_location"),
+  newNoteLocationSet: (location: NewNoteLocation["location"], folder: string) =>
+    call<void>("new_note_location_set", { location, folder }),
   templatesList: () => call<string[]>("templates_list"),
   templateRender: (path: string, title: string) => call<string>("template_render", { path, title }),
   /** Removes a note left empty and still named "Untitled". True when it was removed. */

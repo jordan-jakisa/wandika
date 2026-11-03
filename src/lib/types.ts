@@ -113,6 +113,12 @@ export interface VaultTask {
   details: string;
 }
 
+/** Where new notes go: Obsidian's "Default location for new notes". */
+export interface NewNoteLocation {
+  location: "root" | "current" | "folder";
+  folder: string;
+}
+
 /** A task moved to the archive note, with what Undo needs to put it back. */
 export interface Archived {
   archive: string;

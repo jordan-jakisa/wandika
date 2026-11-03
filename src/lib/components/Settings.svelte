@@ -18,11 +18,12 @@
     UserRound,
     X,
   } from "@lucide/svelte";
+  import { untrack } from "svelte";
   import { api, listen, openUrl } from "../api";
   import { ago, app, type SettingsSection } from "../app.svelte";
   import { ACCENTS, FONTS, WIDTHS, prefs, type NoteFont, type Theme, type Width } from "../prefs.svelte";
   import { isIOS } from "../platform";
-  import type { AppleAccess } from "../types";
+  import type { AppleAccess, NewNoteLocation } from "../types";
   import GitHubSignIn from "./GitHubSignIn.svelte";
   import RepoPicker from "./RepoPicker.svelte";
   import Unlock from "./Unlock.svelte";
@@ -51,6 +52,28 @@
   let pollTimer: ReturnType<typeof setTimeout> | undefined;
   let connecting = $state(false);
   const defaultSize = typeof window !== "undefined" && window.innerWidth < 900 ? 17 : 18;
+
+  // Where new notes go: Obsidian's own setting in the vault, so Obsidian and other devices agree.
+  let newNotes = $state<NewNoteLocation | null>(null);
+  const folders = $derived(app.tree.filter((e) => e.kind === "folder").map((e) => e.path));
+  const placeValue = $derived(newNotes ? (newNotes.location === "folder" ? `folder:${newNotes.folder}` : newNotes.location) : "");
+  $effect(() => {
+    if (section !== "vault") return;
+    void app.vault?.id;
+    untrack(() => {
+      api.newNoteLocation().then((l) => (newNotes = l)).catch(() => (newNotes = null));
+    });
+  });
+  async function setPlace(value: string) {
+    const [location, folder] = value.startsWith("folder:") ? (["folder", value.slice(7)] as const) : ([value as NewNoteLocation["location"], ""] as const);
+    try {
+      await api.newNoteLocationSet(location, folder);
+      newNotes = { location, folder: location === "folder" ? folder : (newNotes?.folder ?? "") };
+      app.edited();
+    } catch (e) {
+      app.say((e as Error).message);
+    }
+  }
 
   $effect(() => {
     if (embedded) return;
@@ -345,6 +368,23 @@
               <button class="btn" onclick={() => app.switchVault()}>Switch vault</button>
             </div>
           </div>
+
+          {#if newNotes}
+            <h4>New notes</h4>
+            <div class="group">
+              <label class="row">
+                <span class="row-label">New notes go in</span>
+                <select class="field place" value={placeValue} onchange={(e) => setPlace(e.currentTarget.value)}>
+                  <option value="root">The top of the vault</option>
+                  <option value="current">The open note's folder</option>
+                  {#each newNotes.location === "folder" && !folders.includes(newNotes.folder) ? [newNotes.folder, ...folders] : folders as f (f)}
+                    <option value={`folder:${f}`}>{f}</option>
+                  {/each}
+                </select>
+              </label>
+            </div>
+            <p class="note">Kept in the vault's Obsidian settings, so Obsidian and your other devices use it too.</p>
+          {/if}
 
           <h4>Sync</h4>
           <div class="group">
@@ -847,6 +887,10 @@
   }
   .footer-actions {
     margin-top: 24px;
+  }
+  .place {
+    max-width: 55%;
+    min-width: 0;
   }
   /* Connections: the rows first, what they mean at the foot of the page. */
   .conn {
