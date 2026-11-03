@@ -195,3 +195,31 @@ mod imp {
 }
 
 pub use imp::*;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn access_states_reach_the_interface_in_snake_case() {
+        let names: Vec<String> = [Access::Unsupported, Access::NotAsked, Access::Granted, Access::Denied]
+            .iter()
+            .map(|a| serde_json::to_value(a).unwrap().as_str().unwrap().to_string())
+            .collect();
+        assert_eq!(names, ["unsupported", "not_asked", "granted", "denied"]);
+    }
+
+    /// Only the status is read: asking for access, or reading events and reminders, would touch
+    /// the calendars of whoever runs the tests.
+    #[test]
+    fn eventkit_status_is_known_on_apple_platforms() {
+        for kind in [Kind::Calendar, Kind::Reminders] {
+            let a = access(kind);
+            if cfg!(any(target_os = "macos", target_os = "ios")) {
+                assert_ne!(a, Access::Unsupported);
+            } else {
+                assert_eq!(a, Access::Unsupported);
+            }
+        }
+    }
+}
