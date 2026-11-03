@@ -694,6 +694,11 @@ pub fn daily_note(root: &Path, date: NaiveDate, crypto: &Crypto) -> Result<Strin
     let format = if cfg.format.trim().is_empty() { "YYYY-MM-DD".to_string() } else { cfg.format.clone() };
     let at = date.and_time(Local::now().time());
     let name = moment_format(&format, at);
+    // A format like `YYYY/MM/YYYY-MM-DD` keeps daily notes in dated subfolders, as Obsidian does.
+    let (folder, name) = match name.rsplit_once('/') {
+        Some((sub, file)) => (join(&folder, sub.trim_matches('/')), file.to_string()),
+        None => (folder, name),
+    };
     for ext in [".md", ".md.age"] {
         let rel = join(&folder, &format!("{name}{ext}"));
         if safe(root, &rel)?.exists() {
@@ -954,6 +959,21 @@ mod tests {
         assert_eq!(moment_format("YYYY-MM-DD [Daily]", d), "2026-11-02 Daily");
         assert_eq!(moment_format("[Week of] MMM D", d), "Week of Nov 2");
         assert_eq!(moment_format("YYYY [", d), "2026 [");
+    }
+
+    #[test]
+    fn daily_note_formats_with_folders_make_one_note_in_dated_subfolders() {
+        let root = std::env::temp_dir().join(format!("wandika-daily-nested-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join(".obsidian")).unwrap();
+        std::fs::write(root.join(".obsidian/daily-notes.json"), r#"{"folder":"Journal","format":"YYYY/MM/YYYY-MM-DD"}"#).unwrap();
+        let crypto = Crypto::load(&root, &crate::secrets::Secrets::new(root.clone()), "test/daily-nested");
+        let day = NaiveDate::from_ymd_opt(2026, 11, 2).unwrap();
+        let first = daily_note(&root, day, &crypto).unwrap();
+        assert_eq!(first, "Journal/2026/11/2026-11-02.md");
+        assert_eq!(daily_note(&root, day, &crypto).unwrap(), first, "the second open finds the same note");
+        assert_eq!(tree(&root).unwrap().iter().filter(|e| e.kind == "note").count(), 1);
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
