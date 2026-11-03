@@ -144,3 +144,44 @@ test("LINK finds targets and aliases", () => {
     ["C", "c"],
   ]);
 });
+
+test("text in a lane that isn't a card is kept in its place", () => {
+  const text = "## To do\n\nWhat we agreed on Monday.\n\n- [ ] A\n\nWaiting on design:\n\n- [ ] B\n\nP1\n\nP2\n\n\n## Done\n\n**Complete**\n\nArchived weekly.\n- [x] C\n";
+  const b = parse(text);
+  const [todo, done] = b.lanes;
+  assert.deepEqual(todo.cards.map((c) => c.text), ["A", "B"]);
+  assert.deepEqual(todo.notes, [
+    { after: null, text: "What we agreed on Monday." },
+    { after: todo.cards[0].id, text: "Waiting on design:" },
+    { after: todo.cards[1].id, text: "P1\n\nP2" },
+  ]);
+  assert.deepEqual(done.notes, [{ after: null, text: "Archived weekly." }]);
+  const saved = serialize(b);
+  assert.equal(saved, text.replace("Archived weekly.\n- [x] C", "Archived weekly.\n\n- [x] C"));
+  assert.equal(serialize(parse(saved)), saved);
+});
+
+test("text right under a card, or indented, is kept word for word", () => {
+  const b = parse("## L\n\n- [ ] A\nloose text\n  indented after it\n- [ ] B\n");
+  assert.deepEqual(b.lanes[0].cards.map((c) => c.text), ["A", "B"]);
+  assert.deepEqual(b.lanes[0].notes, [{ after: b.lanes[0].cards[0].id, text: "loose text\n  indented after it" }]);
+  const again = parse(serialize(b));
+  assert.equal(again.lanes[0].notes![0].text, "loose text\n  indented after it");
+});
+
+test("a lane's text stays when its card moves, going to the end of the lane", () => {
+  const b = parse("## A\n\n- [ ] One\n\nAbout one.\n\n- [ ] Two\n\n\n## B\n\n");
+  b.lanes[1].cards.push(b.lanes[0].cards.shift()!);
+  const again = parse(serialize(b));
+  assert.deepEqual(again.lanes[0].cards.map((c) => c.text), ["Two"]);
+  assert.equal(again.lanes[0].notes![0].text, "About one.");
+  assert.equal(again.lanes[0].notes![0].after, again.lanes[0].cards[0].id);
+  assert.equal(again.lanes[1].notes, undefined);
+});
+
+test("lanes without text have no notes, and new lanes need none", () => {
+  assert.equal(parse(TEMPLATE).lanes.every((l) => l.notes === undefined), true);
+  const b = parse(TEMPLATE);
+  b.lanes.push(newLane("Later"));
+  assert.ok(serialize(b).includes("## Later"));
+});
