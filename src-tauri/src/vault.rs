@@ -256,12 +256,18 @@ pub fn rename(root: &Path, from: &str, new_name: &str, crypto: &Crypto, index: &
     if dst.exists() && to.to_lowercase() != from.to_lowercase() {
         return Err(msg(format!("“{name}” already exists here.")));
     }
+    let (old, new) = (title_of(from), title_of(&to));
+    // Which note a bare `[[Plan]]` means when two share the name, decided before the move.
+    let bare_here = !is_dir && {
+        index.refresh(root, crypto);
+        index.resolve(&old).is_none_or(|r| r == from)
+    };
+    let from_stem = from.trim_end_matches(".age").trim_end_matches(".md").to_lowercase();
     std::fs::rename(&src, &dst)?;
     if is_dir {
         move_encrypted_folders(root, crypto, from, Some(&to))?;
     }
     if !is_dir {
-        let (old, new) = (title_of(from), title_of(&to));
         index.refresh(root, crypto);
         for note in index.notes_linking_to(&old) {
             let Ok(text) = read_note(root, &note, crypto) else { continue };
@@ -269,7 +275,14 @@ pub fn rename(root: &Path, from: &str, new_name: &str, crypto: &Crypto, index: &
                 // `[[Plan]]` and `[[Projects/Plan]]` both point at Plan; keep the folder as written.
                 let target = c[1].trim();
                 let (folder, last) = target.rsplit_once('/').map_or(("", target), |(f, l)| (f, l));
-                if last.eq_ignore_ascii_case(&old) {
+                // `[[Other/Plan]]` is another note called Plan; only links to this one change.
+                let lower = target.to_lowercase();
+                let points_here = if folder.is_empty() {
+                    bare_here
+                } else {
+                    from_stem == lower || from_stem.ends_with(&format!("/{lower}"))
+                };
+                if points_here && last.eq_ignore_ascii_case(&old) {
                     format!(
                         "[[{}{new}{}{}]]",
                         if folder.is_empty() { String::new() } else { format!("{folder}/") },
@@ -873,6 +886,32 @@ mod tests {
         assert_eq!(rename(&root, "Projects/Plan.md", "Roadmap", &crypto, &mut index).unwrap(), "Projects/Roadmap.md");
         let daily = std::fs::read_to_string(root.join("Daily.md")).unwrap();
         assert_eq!(daily, "See [[Projects/Roadmap#Goals|the plan]] and ![[beach.png|300]]\n");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn rename_leaves_links_to_another_note_with_the_same_name() {
+        let root = std::env::temp_dir().join(format!("wandika-rename-same-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("Projects/Old")).unwrap();
+        std::fs::write(root.join("Plan.md"), "root plan").unwrap();
+        std::fs::write(root.join("Projects/Old/Plan.md"), "old plan").unwrap();
+        std::fs::write(root.join("Daily.md"), "[[Plan]] [[Old/Plan]] [[Projects/Old/Plan|old]] [[Projects/Plan]]").unwrap();
+        let crypto = Crypto::load(&root, &crate::secrets::Secrets::new(root.clone()), "test/rename-same");
+        let mut index = Index::default();
+
+        // A bare [[Plan]] means the shortest path, the root note, as Obsidian resolves it.
+        rename(&root, "Projects/Old/Plan.md", "Archive", &crypto, &mut index).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(root.join("Daily.md")).unwrap(),
+            "[[Plan]] [[Old/Archive]] [[Projects/Old/Archive|old]] [[Projects/Plan]]"
+        );
+        rename(&root, "Plan.md", "Roadmap", &crypto, &mut index).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(root.join("Daily.md")).unwrap(),
+            "[[Roadmap]] [[Old/Archive]] [[Projects/Old/Archive|old]] [[Projects/Plan]]",
+            "[[Projects/Plan]] named no existing note, so it stays as written"
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 
