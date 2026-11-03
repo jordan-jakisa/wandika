@@ -183,10 +183,35 @@ function meta(): NoteMeta[] {
   }));
 }
 
+/** Cuts a task and the notes under it out of its note, the way the app's vault does. */
+function takeTask(path: string, line: number, expected: string): string[] {
+  if (locked(path)) throw LOCKED;
+  const lines = (notes.get(path) ?? "").split("\n");
+  const m = lines[line]?.match(/^(\s*)[-*+] \[[ xX]\] (.*)$/);
+  if (!m) throw "That task moved. Refresh and try again.";
+  if (m[2].trim() !== expected.trim()) throw "That task changed. Refresh and try again.";
+  let n = 1;
+  for (const next of lines.slice(line + 1)) {
+    if (!next.trim() || next.length - next.trimStart().length <= m[1].length || /^\s*[-*+] \[[ xX]\] /.test(next)) break;
+    n++;
+  }
+  const taken = lines.splice(line, n);
+  notes.set(path, lines.join("\n"));
+  return taken;
+}
+
+function putBack(path: string, line: number, taken: string[]) {
+  if (!/^\s*[-*+] \[[ xX]\] /.test(taken[0] ?? "")) throw "There's no task to put back.";
+  const lines = (notes.get(path) ?? "").split("\n");
+  const end = lines.at(-1) === "" ? lines.length - 1 : lines.length;
+  lines.splice(Math.min(line, end), 0, ...taken);
+  notes.set(path, lines.join("\n"));
+}
+
 function tasks(): VaultTask[] {
   const out: VaultTask[] = [];
   for (const [path, text] of notes) {
-    if ((path.endsWith(".age") && !encryption.unlocked) || path.startsWith("Templates/")) continue;
+    if ((path.endsWith(".age") && !encryption.unlocked) || path.startsWith("Templates/") || /^archive\.md(\.age)?$/i.test(path)) continue;
     const lines = text.split("\n");
     lines.forEach((line, i) => {
       const m = line.match(/^(\s*)[-*+] \[([ xX])\] (.*)$/);
@@ -458,6 +483,26 @@ const handlers: Record<string, (a: Args) => unknown> = {
     const notesUnder = String(details).split("\n").map((l) => l.trim()).filter(Boolean).map((l) => `${m[1]}  ${l}`);
     lines.splice(line, 1 + old, `${m[1]}${m[2]}${String(text).trim()}`, ...notesUnder);
     notes.set(path, lines.join("\n"));
+  },
+  task_delete: ({ path, line, expected }) => takeTask(String(path), Number(line), String(expected)),
+  task_restore: ({ path, line, lines }) => putBack(String(path), Number(line), lines as string[]),
+  task_archive: ({ path, line, expected }) => {
+    const archive = String(path).endsWith(".age") ? "Archive.md.age" : "Archive.md";
+    if (/^archive\.md(\.age)?$/i.test(String(path))) throw "That task is already in the archive.";
+    const taken = takeTask(String(path), Number(line), String(expected));
+    const indent = taken[0].length - taken[0].trimStart().length;
+    const block = taken.map((l) => l.slice(indent));
+    block.splice(1, 0, `  From [[${String(path).replace(/(\.md)?(\.age)?$/, "")}]], archived ${iso(new Date())}`);
+    const appended = `${block.join("\n")}\n`;
+    const was = notes.get(archive) ?? "# Archive\n";
+    notes.set(archive, `${was.endsWith("\n") ? was : `${was}\n`}${appended}`);
+    return { archive, taken, appended };
+  },
+  task_unarchive: ({ archive, appended, path, line, lines }) => {
+    putBack(String(path), Number(line), lines as string[]);
+    const text = notes.get(String(archive)) ?? "";
+    const at = text.lastIndexOf(String(appended));
+    if (at >= 0) notes.set(String(archive), text.slice(0, at) + text.slice(at + String(appended).length));
   },
   task_add: ({ text }) => {
     const path = daily(undefined);

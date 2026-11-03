@@ -1,4 +1,5 @@
 import type {
+  Archived,
   CalEvent,
   ConnectStart,
   CryptoStatus,
@@ -152,6 +153,13 @@ export const api = {
     call<boolean>("task_toggle", { path, line, text }),
   taskEdit: (path: string, line: number, expected: string, text: string, details: string) =>
     call<void>("task_edit", { path, line, expected, text, details }),
+  /** Deletes a task and its notes; returns the removed lines, for Undo. */
+  taskDelete: (path: string, line: number, expected: string) => call<string[]>("task_delete", { path, line, expected }),
+  taskRestore: (path: string, line: number, lines: string[]) => call<void>("task_restore", { path, line, lines }),
+  /** Moves a task and its notes to the vault's archive note. */
+  taskArchive: (path: string, line: number, expected: string) => call<Archived>("task_archive", { path, line, expected }),
+  taskUnarchive: (done: Archived, path: string, line: number) =>
+    call<void>("task_unarchive", { archive: done.archive, appended: done.appended, path, line, lines: done.taken }),
   /** Adds a task to today's note; returns the note's path. */
   taskAdd: (text: string) => call<string>("task_add", { text }),
   dailyNote: (date?: string) => call<string>("daily_note", { date }),

@@ -1052,6 +1052,39 @@ describe("links and tasks from Today", () => {
   });
 });
 
+describe("deleting and archiving tasks", () => {
+  test("deleting a task removes it and its notes; Undo puts them back", async () => {
+    const { app, api } = await started();
+    await settle(api.noteWrite("Plan.md", "# Plan\n- [ ] Call Amina\n  about the lease\n- [ ] Next\n"));
+    const task = { path: "Plan.md", title: "Plan", line: 1, text: "Call Amina", done: false, due: null, details: "about the lease" };
+    await settle(app.deleteTask(task));
+    expect(await settle(api.noteRead("Plan.md"))).toBe("# Plan\n- [ ] Next\n");
+    expect(app.toast).toBe("Task deleted.");
+    expect(app.changed.paths).toEqual(["Plan.md"]);
+    app.toastAction!.run();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await settle(api.noteRead("Plan.md"))).toBe("# Plan\n- [ ] Call Amina\n  about the lease\n- [ ] Next\n");
+    await settle(app.deleteTask({ ...task, text: "Something else" }));
+    expect(app.toast).toBe("That task changed. Refresh and try again.");
+  });
+
+  test("archiving moves a task to Archive and out of the lists; Undo brings it back", async () => {
+    const { app, api } = await started();
+    await settle(api.noteWrite("Plan.md", "# Plan\n- [ ] Call Amina\n- [ ] Next\n"));
+    const task = { path: "Plan.md", title: "Plan", line: 1, text: "Call Amina", done: false, due: null, details: "" };
+    await settle(app.archiveTask(task));
+    expect(app.toast).toBe("Moved to Archive.");
+    expect(app.changed.paths).toEqual(["Plan.md", "Archive.md"]);
+    expect(await settle(api.noteRead("Archive.md"))).toMatch(/^# Archive\n- \[ \] Call Amina\n  From \[\[Plan\]\], archived \d{4}-\d{2}-\d{2}\n$/);
+    const listed = (await settle(api.tasksVault())) as { text: string }[];
+    expect(listed.map((t) => t.text)).not.toContain("Call Amina");
+    app.toastAction!.run();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await settle(api.noteRead("Plan.md"))).toBe("# Plan\n- [ ] Call Amina\n- [ ] Next\n");
+    expect(await settle(api.noteRead("Archive.md"))).toBe("# Archive\n");
+  });
+});
+
 describe("notes changed by Claude Code", () => {
   test("a change made outside reloads the file list and the open note, once", async () => {
     const { app } = await started();

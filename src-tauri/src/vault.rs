@@ -676,13 +676,14 @@ impl Index {
         scored.into_iter().take(50).map(|(_, c)| self.hit(c, words[0], crypto)).collect()
     }
 
-    /// Every task in the vault, except the blanks in templates.
+    /// Every task in the vault, except the blanks in templates and the archived ones.
     pub fn tasks(&self) -> Vec<VaultTask> {
         let templates = templates_folder(&self.root).map(|f| format!("{}/", f.to_lowercase()));
         let mut out: Vec<VaultTask> = self
             .notes
             .values()
             .filter(|c| templates.as_ref().is_none_or(|t| !c.path_lower.starts_with(t.as_str())))
+            .filter(|c| !is_archive(&c.path_lower))
             .flat_map(|c| c.tasks.iter().cloned())
             .collect();
         out.sort_by(|a, b| {
@@ -744,6 +745,93 @@ pub fn edit_task(root: &Path, rel: &str, line: usize, expected: &str, text: &str
     lines[line] = format!("{}{}{}{text}{cr}", &caps[1], &caps[2], &caps[3]);
     lines.splice(line + 1..line + 1 + old_details, new_details);
     write_note(root, rel, &lines.join("\n"), crypto)
+}
+
+/// Where archived tasks go: one note at the vault root, encrypted when the task's note is, so an
+/// encrypted task never lands in a plain file.
+pub fn archive_note_for(rel: &str) -> &'static str {
+    if crypto::is_encrypted(rel) { "Archive.md.age" } else { "Archive.md" }
+}
+
+fn is_archive(path_lower: &str) -> bool {
+    path_lower == "archive.md" || path_lower == "archive.md.age"
+}
+
+/// Cuts the task on `line` and the notes under it out of its note. Returns the lines as they were,
+/// so they can be put back.
+pub fn take_task(root: &Path, rel: &str, line: usize, expected: &str, crypto: &Crypto) -> Result<Vec<String>> {
+    let note = read_note(root, rel, crypto)?;
+    let mut lines: Vec<String> = note.split('\n').map(str::to_string).collect();
+    let current = lines.get(line).ok_or_else(|| msg("That task moved. Refresh and try again."))?.clone();
+    let caps = TASK.captures(&current).ok_or_else(|| msg("That task moved. Refresh and try again."))?;
+    if caps[4].trim() != expected.trim() {
+        return Err(msg("That task changed. Refresh and try again."));
+    }
+    let below: Vec<&str> = lines[line + 1..].iter().map(String::as_str).collect();
+    let n = 1 + detail_block(&below, indent_of(&caps[1])).len();
+    let taken: Vec<String> = lines.drain(line..line + n).collect();
+    write_note(root, rel, &lines.join("\n"), crypto)?;
+    Ok(taken)
+}
+
+/// Puts lines that `take_task` cut back at `line`, or at the end if the note got shorter since.
+pub fn put_back(root: &Path, rel: &str, line: usize, taken: &[String], crypto: &Crypto) -> Result<()> {
+    if !taken.first().is_some_and(|l| TASK.is_match(l)) {
+        return Err(msg("There's no task to put back."));
+    }
+    let note = read_note(root, rel, crypto)?;
+    let mut lines: Vec<String> = note.split('\n').map(str::to_string).collect();
+    // A note ending in a newline splits into a last empty line; keep that newline last.
+    let end = if lines.last().is_some_and(String::is_empty) { lines.len() - 1 } else { lines.len() };
+    let at = line.min(end);
+    lines.splice(at..at, taken.iter().cloned());
+    write_note(root, rel, &lines.join("\n"), crypto)
+}
+
+#[derive(Serialize, Debug)]
+pub struct Archived {
+    /// The archive note the task went to.
+    pub archive: String,
+    /// The lines cut from the task's note, for Undo.
+    pub taken: Vec<String>,
+    /// The text added to the end of the archive note, for Undo.
+    pub appended: String,
+}
+
+/// Moves the task on `line` and its notes to the end of the archive note, with a line saying where
+/// it came from. Archive notes are left out of task lists.
+pub fn archive_task(root: &Path, rel: &str, line: usize, expected: &str, crypto: &Crypto) -> Result<Archived> {
+    let archive = archive_note_for(rel);
+    if is_archive(&rel.to_lowercase()) {
+        return Err(msg("That task is already in the archive."));
+    }
+    // Read the archive before cutting anything, so a locked or unreadable archive changes nothing.
+    let mut out = if safe(root, archive)?.is_file() { read_note(root, archive, crypto)? } else { "# Archive\n".to_string() };
+    let taken = take_task(root, rel, line, expected, crypto)?;
+    let indent = TASK.captures(&taken[0]).map_or(0, |c| indent_of(&c[1]));
+    let mut block: Vec<String> = taken.iter().map(|l| l.trim_end_matches('\r').chars().skip(indent).collect()).collect();
+    let from = rel.trim_end_matches(crypto::EXT).trim_end_matches(".md");
+    block.insert(1, format!("  From [[{from}]], archived {}", Local::now().format("%Y-%m-%d")));
+    let appended = format!("{}\n", block.join("\n"));
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out.push_str(&appended);
+    if let Err(e) = write_note(root, archive, &out, crypto) {
+        let _ = put_back(root, rel, line, &taken, crypto);
+        return Err(e);
+    }
+    Ok(Archived { archive: archive.to_string(), taken, appended })
+}
+
+/// Undoes `archive_task`: the task goes back to its note and leaves the archive.
+pub fn unarchive_task(root: &Path, archive: &str, appended: &str, rel: &str, line: usize, taken: &[String], crypto: &Crypto) -> Result<()> {
+    put_back(root, rel, line, taken, crypto)?;
+    let text = read_note(root, archive, crypto)?;
+    if let Some(at) = text.rfind(appended) {
+        write_note(root, archive, &format!("{}{}", &text[..at], &text[at + appended.len()..]), crypto)?;
+    }
+    Ok(())
 }
 
 /// Adds `- [ ] text` to the end of the Tasks section of the note at `rel`, or a new Tasks section.
@@ -1516,6 +1604,53 @@ mod tests {
         assert_eq!(said(edit_task(&root, "T.md", 3, "end", "x", "", &crypto)), "That task moved. Refresh and try again.");
         assert_eq!(said(edit_task(&root, "T.md", 1, "Call Amina", "  ", "", &crypto)), "Give the task a name.");
         assert_eq!(said(edit_task(&root, "T.md", 1, "Call Amina", "a\nb", "", &crypto)), "A task is one line. Put the rest in its notes.");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn take_task_cuts_the_task_and_its_notes_and_put_back_restores_them() {
+        let (root, crypto) = temp_vault("take");
+        put(&root, "T.md", "# T\n- [ ] Call Amina\n  ask about the lease\n  - [ ] Subtask\n- [ ] Next\n");
+        let taken = take_task(&root, "T.md", 1, "Call Amina", &crypto).unwrap();
+        assert_eq!(taken, ["- [ ] Call Amina", "  ask about the lease"]);
+        assert_eq!(get(&root, "T.md"), "# T\n  - [ ] Subtask\n- [ ] Next\n", "a subtask is its own task and stays");
+        put_back(&root, "T.md", 1, &taken, &crypto).unwrap();
+        assert_eq!(get(&root, "T.md"), "# T\n- [ ] Call Amina\n  ask about the lease\n  - [ ] Subtask\n- [ ] Next\n");
+        put_back(&root, "T.md", 99, &taken, &crypto).unwrap();
+        assert!(get(&root, "T.md").ends_with("- [ ] Next\n- [ ] Call Amina\n  ask about the lease\n"), "a shorter note gets it at the end, before the last newline");
+        let said = |r: Result<Vec<String>>| r.unwrap_err().to_string();
+        assert_eq!(said(take_task(&root, "T.md", 1, "Something else", &crypto)), "That task changed. Refresh and try again.");
+        assert_eq!(said(take_task(&root, "T.md", 0, "T", &crypto)), "That task moved. Refresh and try again.");
+        assert_eq!(put_back(&root, "T.md", 0, &["not a task".into()], &crypto).unwrap_err().to_string(), "There's no task to put back.");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn archive_task_moves_it_to_the_archive_note_and_out_of_task_lists() {
+        let (root, crypto) = temp_vault("archive");
+        put(&root, "Projects/Plan.md", "# Plan\n  - [ ] Call Amina 📅 2026-11-05\n    ask about the lease\n  - [ ] Next\n");
+        let done = archive_task(&root, "Projects/Plan.md", 1, "Call Amina 📅 2026-11-05", &crypto).unwrap();
+        assert_eq!(done.archive, "Archive.md");
+        assert_eq!(get(&root, "Projects/Plan.md"), "# Plan\n  - [ ] Next\n");
+        let today = Local::now().format("%Y-%m-%d");
+        assert_eq!(
+            get(&root, "Archive.md"),
+            format!("# Archive\n- [ ] Call Amina 📅 2026-11-05\n  From [[Projects/Plan]], archived {today}\n  ask about the lease\n"),
+            "a new archive note, the task at the top level, where it came from as its first note"
+        );
+        let mut index = Index::default();
+        index.refresh(&root, &crypto);
+        let texts: Vec<String> = index.tasks().into_iter().map(|t| t.text).collect();
+        assert_eq!(texts, ["Next"], "archived tasks leave every task list");
+
+        // A second task is added after the first; Undo takes only its own block back.
+        let second = archive_task(&root, "Projects/Plan.md", 1, "Next", &crypto).unwrap();
+        assert_eq!(get(&root, "Projects/Plan.md"), "# Plan\n");
+        unarchive_task(&root, &second.archive, &second.appended, "Projects/Plan.md", 1, &second.taken, &crypto).unwrap();
+        assert_eq!(get(&root, "Projects/Plan.md"), "# Plan\n  - [ ] Next\n");
+        assert!(get(&root, "Archive.md").ends_with("ask about the lease\n"), "the first archived task stays");
+        assert_eq!(archive_task(&root, "Archive.md", 1, "Call Amina 📅 2026-11-05", &crypto).unwrap_err().to_string(), "That task is already in the archive.");
+        assert_eq!(archive_note_for("Private/Diary.md.age"), "Archive.md.age", "an encrypted task goes to the encrypted archive");
         let _ = std::fs::remove_dir_all(&root);
     }
 

@@ -113,6 +113,13 @@ export interface VaultTask {
   details: string;
 }
 
+/** A task moved to the archive note, with what Undo needs to put it back. */
+export interface Archived {
+  archive: string;
+  taken: string[];
+  appended: string;
+}
+
 export interface CalEvent {
   id: string;
   source: "google" | "microsoft" | "apple";

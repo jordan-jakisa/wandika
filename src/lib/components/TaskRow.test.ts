@@ -24,6 +24,8 @@ type Props = {
   onEdit?: () => void;
   onPin?: () => Promise<void>;
   onFocus?: () => void;
+  onArchive?: () => void;
+  onDelete?: () => void;
 };
 
 function setup(p: Props) {
@@ -270,5 +272,100 @@ describe("pins, priority, notes and actions", () => {
   test("an ordinary link is not an email", () => {
     setup({ text: "Read [the docs](https://example.com)" });
     expect(screen.queryByRole("button", { name: "Open email" })).not.toBeInTheDocument();
+  });
+});
+
+describe("swipe actions", () => {
+  beforeEach(() => {
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(390);
+  });
+  const touch = { pointerType: "touch", pointerId: 1 };
+  function swipe(row: Element, dx: number, dy = 0) {
+    fireEvent.pointerDown(row, { ...touch, clientX: 200, clientY: 100 });
+    fireEvent.pointerMove(row, { ...touch, clientX: 200 + dx / 2, clientY: 100 + dy / 2 });
+    fireEvent.pointerMove(row, { ...touch, clientX: 200 + dx, clientY: 100 + dy });
+    fireEvent.pointerUp(row, { ...touch, clientX: 200 + dx, clientY: 100 + dy });
+  }
+  const actions = () => ({ onPin: vi.fn(async () => {}), onArchive: vi.fn(), onDelete: vi.fn(), onEdit: vi.fn() });
+
+  test("the menu offers Archive and Delete as well", async () => {
+    const user = userEvent.setup();
+    const a = actions();
+    setup({ text: "Write the brief", ...a });
+    await user.click(screen.getByRole("button", { name: "Actions for Write the brief" }));
+    await user.click(screen.getByRole("menuitem", { name: "Archive" }));
+    await user.click(screen.getByRole("button", { name: "Actions for Write the brief" }));
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+    expect([a.onArchive.mock.calls.length, a.onDelete.mock.calls.length]).toEqual([1, 1]);
+  });
+
+  test("a swipe left shows Archive and Delete; tapping one runs it and closes the row", async () => {
+    const a = actions();
+    const { container } = setup({ text: "Write the brief", ...a });
+    const row = container.querySelector("li")!;
+    swipe(row, -120);
+    const trail = container.querySelector(".swipe.trail")!;
+    expect(trail).toHaveTextContent("Archive");
+    expect(trail).toHaveTextContent("Delete");
+    expect(container.querySelector<HTMLElement>(".slide")!.style.transform).toBe("translateX(-152px)");
+    await fireEvent.click(trail.querySelector(".archive")!);
+    expect(a.onArchive).toHaveBeenCalledTimes(1);
+    expect(a.onDelete).not.toHaveBeenCalled();
+    expect(container.querySelector(".swipe")).toBeNull();
+  });
+
+  test("a long swipe left deletes straight away", () => {
+    const a = actions();
+    const { container } = setup({ text: "Write the brief", ...a });
+    swipe(container.querySelector("li")!, -300);
+    expect(a.onDelete).toHaveBeenCalledTimes(1);
+  });
+
+  test("a swipe right shows Pin, or Unpin on a pinned task", async () => {
+    const a = actions();
+    const { container } = setup({ text: "Ship it 📌", ...a });
+    swipe(container.querySelector("li")!, 100);
+    const lead = container.querySelector(".swipe.lead")!;
+    expect(lead).toHaveTextContent("Unpin");
+    await fireEvent.click(lead.querySelector("button")!);
+    expect(a.onPin).toHaveBeenCalledTimes(1);
+  });
+
+  test("a short swipe springs back; scrolling and a mouse drag never swipe", () => {
+    const a = actions();
+    const { container } = setup({ text: "Write the brief", ...a });
+    const row = container.querySelector("li")!;
+    swipe(row, -30);
+    swipe(row, -10, 80);
+    fireEvent.pointerDown(row, { pointerType: "mouse", pointerId: 2, clientX: 200, clientY: 100 });
+    fireEvent.pointerMove(row, { pointerType: "mouse", pointerId: 2, clientX: 20, clientY: 100 });
+    fireEvent.pointerUp(row, { pointerType: "mouse", pointerId: 2, clientX: 20, clientY: 100 });
+    expect(container.querySelector(".swipe")).toBeNull();
+    expect(a.onDelete).not.toHaveBeenCalled();
+  });
+
+  test("a tap on an open row closes it instead of opening the task", async () => {
+    const a = actions();
+    const { container } = setup({ text: "Write the brief", ...a });
+    swipe(container.querySelector("li")!, -120);
+    await fireEvent.click(screen.getByRole("button", { name: "Write the brief" }));
+    expect(a.onEdit).not.toHaveBeenCalled();
+    expect(container.querySelector(".swipe")).toBeNull();
+  });
+
+  test("opening one row closes the one that was open", () => {
+    const a = actions();
+    const first = setup({ text: "First", ...a });
+    const second = render(TaskRow, { text: "Second", done: false, where: "Projects", onToggle: vi.fn(async () => {}), ...actions() });
+    swipe(first.container.querySelector("li")!, -120);
+    swipe(second.container.querySelector("li")!, -120);
+    expect(first.container.querySelector(".swipe")).toBeNull();
+    expect(second.container.querySelector(".swipe")).not.toBeNull();
+  });
+
+  test("a task without vault actions has no swipe", () => {
+    const { container } = setup({ text: "From Reminders", onFocus: vi.fn() });
+    swipe(container.querySelector("li")!, -300);
+    expect(container.querySelector(".swipe")).toBeNull();
   });
 });

@@ -416,6 +416,38 @@ pub async fn task_edit(app: S<'_>, path: String, line: usize, expected: String, 
     Ok(())
 }
 
+/// Deletes a task and the notes under it. Returns the removed lines, for Undo.
+#[tauri::command]
+pub async fn task_delete(app: S<'_>, path: String, line: usize, expected: String) -> Result<Vec<String>> {
+    let taken = vault::take_task(&app.root()?, &path, line, &expected, &app.crypto()?)?;
+    changed(&app);
+    Ok(taken)
+}
+
+/// Puts a deleted task back where it was.
+#[tauri::command]
+pub async fn task_restore(app: S<'_>, path: String, line: usize, lines: Vec<String>) -> Result<()> {
+    vault::put_back(&app.root()?, &path, line, &lines, &app.crypto()?)?;
+    changed(&app);
+    Ok(())
+}
+
+/// Moves a task and its notes to the vault's archive note.
+#[tauri::command]
+pub async fn task_archive(app: S<'_>, path: String, line: usize, expected: String) -> Result<vault::Archived> {
+    let done = vault::archive_task(&app.root()?, &path, line, &expected, &app.crypto()?)?;
+    changed(&app);
+    Ok(done)
+}
+
+/// Undoes an archive: the task goes back to its note.
+#[tauri::command]
+pub async fn task_unarchive(app: S<'_>, archive: String, appended: String, path: String, line: usize, lines: Vec<String>) -> Result<()> {
+    vault::unarchive_task(&app.root()?, &archive, &appended, &path, line, &lines, &app.crypto()?)?;
+    changed(&app);
+    Ok(())
+}
+
 /// Adds a task to today's note, in its Tasks section. Returns the note's path.
 #[tauri::command]
 pub async fn task_add(app: S<'_>, text: String) -> Result<String> {

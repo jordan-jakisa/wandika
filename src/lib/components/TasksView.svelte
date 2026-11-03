@@ -144,6 +144,8 @@
       onEdit={() => (app.editingTask = t)}
       onPin={pin(t)}
       onFocus={() => focus.start({ text: parseTask(t.text).name, task: t })}
+      onArchive={() => app.archiveTask(t)}
+      onDelete={() => app.deleteTask(t)}
     />
   {/snippet}
 

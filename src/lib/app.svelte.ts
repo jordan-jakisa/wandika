@@ -575,6 +575,48 @@ class AppState {
     }
   }
 
+  /** Deletes a task and its notes from their note, with Undo. */
+  async deleteTask(t: VaultTask) {
+    try {
+      const taken = await api.taskDelete(t.path, t.line, t.text);
+      this.#taskChanged(t.path);
+      this.say("Task deleted.", {
+        label: "Undo",
+        run: () => void this.#undoTask(t.path, () => api.taskRestore(t.path, t.line, taken)),
+      });
+    } catch (e) {
+      this.say((e as Error).message);
+    }
+  }
+
+  /** Moves a task and its notes to the vault's archive note, with Undo. */
+  async archiveTask(t: VaultTask) {
+    try {
+      const done = await api.taskArchive(t.path, t.line, t.text);
+      this.#taskChanged(t.path, done.archive);
+      this.say(`Moved to ${done.archive.replace(/\.md(\.age)?$/, "")}.`, {
+        label: "Undo",
+        run: () => void this.#undoTask(t.path, () => api.taskUnarchive(done, t.path, t.line), done.archive),
+      });
+    } catch (e) {
+      this.say((e as Error).message);
+    }
+  }
+
+  #taskChanged(...paths: string[]) {
+    this.edited();
+    this.changed = { paths, at: Date.now() };
+  }
+
+  async #undoTask(path: string, undo: () => Promise<void>, archive?: string) {
+    try {
+      await undo();
+      this.#taskChanged(path, ...(archive ? [archive] : []));
+    } catch (e) {
+      this.say((e as Error).message);
+    }
+  }
+
   say(message: string, action?: { label: string; run: () => void }) {
     this.toast = message;
     this.toastAction = action ?? null;
