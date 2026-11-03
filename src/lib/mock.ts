@@ -107,6 +107,13 @@ const cleanName = (name: string) => {
 /** The path itself and everything inside it, when it is a folder. */
 const within = (path: string) => (k: string) => k === path || k.startsWith(path + "/");
 // Thrown the way the core sends it, so the interface sees code "locked" and shows the passphrase form.
+/** Notes changed outside the app (by Claude Code); tests push to it with `changeOutside`. */
+const outside: { path: string; at: number }[] = [];
+export function changeOutside(path: string, content: string) {
+  notes.set(path, content);
+  outside.push({ path, at: Date.now() });
+}
+
 /** The mock inbox's first email, the flight booking. */
 const FLIGHT = "18c2f0a1b2c3d4e5";
 
@@ -467,6 +474,7 @@ const handlers: Record<string, (a: Args) => unknown> = {
     html: id === FLIGHT ? '<h1>You are going to Nairobi</h1><p>Booking reference <b>UR8K2</b>.</p><p><a href="https://example.com/checkin">Check in</a></p><img src="https://tracker.example.com/pixel.gif" alt="">' : null,
     url: `https://mail.google.com/mail/u/0/#all/${id}`,
   }),
+  external_changes: () => outside,
   daily_note: ({ date }) => daily(date),
   encryption_setup: () => (encryption = { ...encryption, set_up: true, unlocked: true }),
   encryption_unlock: ({ passphrase }) => {

@@ -1051,3 +1051,31 @@ describe("links and tasks from Today", () => {
     expect(app.toast).toBe("Give the task a name.");
   });
 });
+
+describe("notes changed by Claude Code", () => {
+  test("a change made outside reloads the file list and the open note, once", async () => {
+    const { app } = await started();
+    const before = app.changed.at;
+    await settle(app.checkOutside());
+    expect(app.changed.at).toBe(before);
+    const { changeOutside } = real.mock!;
+    await vi.advanceTimersByTimeAsync(10);
+    changeOutside("Welcome.md", "# Welcome\n\nClaude was here.\n");
+    changeOutside("Claude.md", "# Claude\n");
+    await settle(app.checkOutside());
+    expect(app.changed.paths).toEqual(["Welcome.md", "Claude.md"]);
+    expect(app.tree.some((e) => e.path === "Claude.md")).toBe(true);
+    const seen = app.changed.at;
+    await settle(app.checkOutside());
+    expect(app.changed.at).toBe(seen);
+  });
+
+  test("the app looks every few seconds while it's in front", async () => {
+    const { app } = await started();
+    const { changeOutside } = real.mock!;
+    await vi.advanceTimersByTimeAsync(10);
+    changeOutside("Welcome.md", "# Welcome\n\nAgain.\n");
+    await vi.advanceTimersByTimeAsync(3_500);
+    expect(app.changed.paths).toEqual(["Welcome.md"]);
+  });
+});

@@ -26,6 +26,8 @@ export interface Ask {
 const SYNC_AFTER_EDIT_MS = 20_000;
 const SESSION_KEY = "wandika.session";
 const SYNC_EVERY_MS = 3 * 60_000;
+/** How often the app looks for notes changed by Claude Code. */
+const OUTSIDE_EVERY_MS = 3_000;
 /** Mail and calendars are fetched at most this often unless asked; vault tasks are always fresh. */
 const TODAY_TTL_MS = 2 * 60_000;
 /** A Today load that hasn't answered by then is given up, so one hung call can't hold Today and Tasks. */
@@ -94,6 +96,9 @@ class AppState {
 
   #editTimer: ReturnType<typeof setTimeout> | undefined;
   #interval: ReturnType<typeof setInterval> | undefined;
+  #watch: ReturnType<typeof setInterval> | undefined;
+  /** Changes made outside the app up to this time are already shown. */
+  #outsideSeen = Date.now();
   #toastTimer: ReturnType<typeof setTimeout> | undefined;
 
   get vault() {
@@ -164,6 +169,7 @@ class AppState {
       }
       this.status = status;
       if (status.vault) void this.loadSnippets();
+      this.#watchOutside();
       if (status.vault?.remote) {
         this.startAutoSync();
         void this.sync();
@@ -245,6 +251,26 @@ class AppState {
     const [tree, titles] = await Promise.all([api.tree(), api.noteTitles()]);
     this.tree = tree;
     this.titles = titles;
+  }
+
+  /** Claude Code can change notes through `wandika mcp` while the app is open; every few seconds the
+   *  app looks for those changes, so an open note and the file list show them. */
+  #watchOutside() {
+    clearInterval(this.#watch);
+    this.#watch = setInterval(() => {
+      if (document.visibilityState === "visible" && this.status?.vault) void this.checkOutside();
+    }, OUTSIDE_EVERY_MS);
+  }
+
+  async checkOutside() {
+    const list = await api.externalChanges().catch(() => []);
+    const fresh = list.filter((c) => c.at > this.#outsideSeen);
+    if (!fresh.length) return;
+    this.#outsideSeen = Math.max(...fresh.map((c) => c.at));
+    const paths = [...new Set(fresh.map((c) => c.path))];
+    await this.refreshFiles();
+    this.changed = { paths, at: Date.now() };
+    this.edited();
   }
 
   startAutoSync() {

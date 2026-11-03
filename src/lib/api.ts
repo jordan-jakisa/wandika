@@ -171,6 +171,8 @@ export const api = {
     call<void>("remote_task_toggle", { source, listId, id, done }),
   mailToNote: (source: string, id: string) => call<string>("mail_to_note", { source, id }),
   mailRead: (source: string, id: string) => call<MailBody>("mail_read", { source, id }),
+  /** Notes Claude Code changed through Wandika's MCP server, newest last, from the last two minutes. */
+  externalChanges: () => call<{ path: string; at: number }[]>("external_changes"),
   eventToNote: (event: CalEvent) => call<string>("event_to_note", { event }),
   agendaToDaily: (events: CalEvent[], date?: string) =>
     call<string>("agenda_to_daily", { events, date }),

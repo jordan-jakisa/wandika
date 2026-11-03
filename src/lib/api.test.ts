@@ -102,6 +102,7 @@ const calls: [string, (a: Api["api"]) => Promise<unknown>, string, Record<string
   ["remoteTaskToggle", (a) => a.remoteTaskToggle("google", "list", "t1", true), "remote_task_toggle", { source: "google", listId: "list", id: "t1", done: true }],
   ["mailToNote", (a) => a.mailToNote("google", "m1"), "mail_to_note", { source: "google", id: "m1" }],
   ["mailRead", (a) => a.mailRead("google", "m1"), "mail_read", { source: "google", id: "m1" }],
+  ["externalChanges", (a) => a.externalChanges(), "external_changes", undefined],
   ["eventToNote", (a) => a.eventToNote(event), "event_to_note", { event }],
   ["agendaToDaily", (a) => a.agendaToDaily([event], "2026-11-03"), "agenda_to_daily", { events: [event], date: "2026-11-03" }],
 ];
