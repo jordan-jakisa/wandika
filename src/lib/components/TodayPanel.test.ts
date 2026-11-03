@@ -364,11 +364,31 @@ describe("inbox", () => {
     vi.spyOn(api, "mailToNote").mockResolvedValue("Mail/x.md");
     const { user } = await setup(todayFixture({ mail: [mail({ url: "https://mail.google.com/x" })] }));
     await user.click(screen.getByRole("button", { name: "Actions for Your flight is confirmed" }));
-    await user.click(screen.getByRole("menuitem", { name: "Open in mail" }));
+    await user.click(screen.getByRole("menuitem", { name: "Open in Gmail" }));
     expect(window.open).toHaveBeenCalledWith("https://mail.google.com/x", "_blank", "noopener");
     await user.click(screen.getByRole("button", { name: "Actions for Your flight is confirmed" }));
     await user.click(screen.getByRole("menuitem", { name: "Save as note" }));
     await vi.waitFor(() => expect(app.current).toBe("Mail/x.md"));
+  });
+
+  test("tapping an email opens it in Wandika's reader", async () => {
+    const { user } = await setup(todayFixture({ mail: [mail({ url: "https://mail.google.com/mail/u/0/#inbox/t1" })] }));
+    await user.click(within(section("Inbox")).getByRole("button", { name: /^Your flight is confirmed/ }));
+    expect(app.reading).toEqual({ source: "google", id: "m1", url: "https://mail.google.com/mail/u/0/#inbox/t1" });
+    app.reading = null;
+    await user.click(screen.getByRole("button", { name: "Actions for Your flight is confirmed" }));
+    await user.click(screen.getByRole("menuitem", { name: "Read" }));
+    expect(app.reading).toMatchObject({ id: "m1" });
+  });
+
+  test("Add as task puts the email in today's note with a link back to the message", async () => {
+    const add = vi.spyOn(app, "addTask").mockResolvedValue();
+    const { user } = await setup(todayFixture({ mail: [mail({ id: "18c2f0a1", from: "Uganda Airlines <noreply@ua.com>" })] }));
+    await user.click(within(section("Inbox")).getByRole("button", { name: "Add as task" }));
+    expect(add).toHaveBeenCalledWith("Your flight is confirmed [email from Uganda Airlines](https://mail.google.com/mail/u/0/#all/18c2f0a1)");
+    await user.click(screen.getByRole("button", { name: "Actions for Your flight is confirmed" }));
+    await user.click(screen.getByRole("menuitem", { name: "Add as task" }));
+    expect(add).toHaveBeenCalledTimes(2);
   });
 
   test("an email without a subject still has a named menu", async () => {

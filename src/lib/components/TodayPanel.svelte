@@ -1,9 +1,11 @@
 <script lang="ts">
-  import { CalendarPlus, CircleCheck, ExternalLink, FileText, NotebookPen } from "@lucide/svelte";
+  import { CalendarPlus, CircleCheck, ExternalLink, FileText, ListPlus, MailOpen, NotebookPen } from "@lucide/svelte";
   import { untrack } from "svelte";
   import { api, openUrl } from "../api";
   import { app } from "../app.svelte";
   import { clock } from "../clock.svelte";
+  import { mailUrl } from "../mailLinks";
+  import { emailTask } from "../taskText";
   import type { CalEvent, MailItem } from "../types";
   import Menu from "./Menu.svelte";
   import TaskRow from "./TaskRow.svelte";
@@ -79,6 +81,12 @@
 
   const meetingNote = (e: CalEvent) => run(`event-${e.id}`, () => api.eventToNote(e));
   const saveMail = (m: MailItem) => run(`mail-${m.id}`, () => api.mailToNote(m.source, m.id));
+  const readMail = (m: MailItem) => (app.reading = { source: m.source, id: m.id, url: m.url });
+  async function mailTask(m: MailItem) {
+    busy = `task-${m.id}`;
+    await app.addTask(emailTask(m.subject, m.from, mailUrl({ source: m.source, id: m.id }, m.url)));
+    busy = null;
+  }
   const addAgenda = () => run("agenda", () => api.agendaToDaily(data?.events ?? []));
 
   const heading = $derived(clock.heading);
@@ -226,22 +234,26 @@
               <span class="meta">{mailTime(m.date)}</span>
               <span class="row-menu">
                 <Menu label={`Actions for ${m.subject || "this email"}`}>
+                  <button role="menuitem" onclick={() => readMail(m)}><MailOpen size={18} /> Read</button>
+                  <button role="menuitem" onclick={() => mailTask(m)}><ListPlus size={18} /> Add as task</button>
                   <button role="menuitem" onclick={() => saveMail(m)}><FileText size={18} /> Save as note</button>
                   {#if m.url}
-                    <button role="menuitem" onclick={() => openUrl(m.url!)}><ExternalLink size={18} /> Open in mail</button>
+                    <button role="menuitem" onclick={() => openUrl(m.url!)}><ExternalLink size={18} /> Open in {m.source === "microsoft" ? "Outlook" : "Gmail"}</button>
                   {/if}
                 </Menu>
               </span>
             </div>
-            <span class="subject">{m.subject || "(No subject)"}</span>
-            <span class="snippet">{m.snippet}</span>
+            <button class="open-mail" onclick={() => readMail(m)}>
+              <span class="subject">{m.subject || "(No subject)"}</span>
+              <span class="snippet">{m.snippet}</span>
+            </button>
             <span class="row-actions">
+              <button class="link-btn" onclick={() => mailTask(m)} disabled={busy === `task-${m.id}`}>
+                <ListPlus size={14} /> Add as task
+              </button>
               <button class="link-btn" onclick={() => saveMail(m)} disabled={busy === `mail-${m.id}`}>
                 <FileText size={14} /> Save as note
               </button>
-              {#if m.url}
-                <button class="link-btn" onclick={() => openUrl(m.url!)}><ExternalLink size={14} /> Open</button>
-              {/if}
             </span>
           </li>
         {/each}
@@ -348,6 +360,23 @@
   }
   .mail li + li {
     border-top: 1px solid var(--rule);
+  }
+  /* The subject and preview open the email in Wandika. */
+  .open-mail {
+    display: grid;
+    gap: 2px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    min-width: 0;
+  }
+  @media (hover: hover) {
+    .open-mail:hover .subject {
+      color: var(--papyrus);
+    }
   }
   .mail-top {
     display: flex;
