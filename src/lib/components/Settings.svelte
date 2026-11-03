@@ -6,6 +6,7 @@
   import { duration } from "../motion";
   import {
     ChevronLeft,
+    ChevronRight,
     Cloud,
     FolderOpen,
     HardDrive,
@@ -21,6 +22,7 @@
   import { api, listen, openUrl } from "../api";
   import { ago, app, type SettingsSection } from "../app.svelte";
   import { ACCENTS, FONTS, WIDTHS, prefs, type NoteFont, type Theme, type Width } from "../prefs.svelte";
+  import { isIOS } from "../platform";
   import type { AppleAccess } from "../types";
   import GitHubSignIn from "./GitHubSignIn.svelte";
   import RepoPicker from "./RepoPicker.svelte";
@@ -175,7 +177,9 @@
   const appleText: Record<AppleAccess, string> = {
     granted: "Allowed on this device",
     not_asked: "Not connected",
-    denied: "Turned off. Allow it in System Settings, under Privacy & Security",
+    denied: isIOS
+      ? "Turned off. Allow it in Settings, under Privacy & Security"
+      : "Turned off. Allow it in System Settings, under Privacy & Security",
     unsupported: "Only on iPhone and Mac",
   };
 
@@ -403,6 +407,7 @@
                 <span>{sec.label}</span>
                 {#if phone}<span class="sec-detail">{detail(sec.id)}</span>{/if}
               </span>
+              {#if phone && isIOS}<span class="chev" aria-hidden="true"><ChevronRight size={18} /></span>{/if}
             </button>
           </li>
         {/each}
@@ -602,7 +607,8 @@
           <!-- Only what this build can connect (or is connected, so it can be disconnected): no dead rows. -->
           {@const showGoogle = !!s?.configured.google || !!c?.google}
           {@const showOutlook = !!s?.configured.microsoft || !!c?.microsoft}
-          {@const googleLater = s?.configured.gmail === false && !s?.configured.google}
+          {@const mail = showOutlook || (showGoogle && s?.configured.gmail !== false)}
+          <div class="conn">
           {#if showGoogle || showOutlook}
           <h4>Mail and calendars</h4>
           <div class="group">
@@ -628,13 +634,17 @@
           {/if}
           {#if !showGoogle && !showOutlook && !s?.configured.apple}
             <p class="note">There's nothing to connect in this version yet.</p>
+          {:else}
+            <!-- What connecting means, kept last and quiet: the rows above are the page. -->
+            <footer class="about">
+              <Info size={20} aria-hidden="true" />
+              <p>
+                {mail ? "Mail, calendars and tasks" : "Calendars and tasks"} you connect appear in Today. Wandika only
+                reads them, except when you tick off a task.
+              </p>
+            </footer>
           {/if}
-          {#if googleLater}
-            <p class="note">Google Calendar and Tasks come once Google has reviewed Wandika.</p>
-          {/if}
-          {#if showGoogle || showOutlook || s?.configured.apple}
-            <p class="note">Connected sources appear in Today. Wandika reads mail and calendars and never sends or changes them; it only ticks off the tasks you tick.</p>
-          {/if}
+          </div>
         {:else if section === "account"}
           <div class="group">
             {#if s?.user}
@@ -983,6 +993,26 @@
   }
   .footer-actions {
     margin-top: 24px;
+  }
+  /* Connections: the rows first, what they mean at the foot of the page. */
+  .conn {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+  }
+  .about {
+    display: grid;
+    justify-items: center;
+    gap: var(--space-2);
+    margin-top: auto;
+    padding: var(--space-7) var(--space-4) 0;
+    color: var(--graphite);
+    text-align: center;
+  }
+  .about p {
+    margin: 0;
+    max-width: 34ch;
+    font-size: var(--small);
   }
   .small {
     font-size: var(--small);

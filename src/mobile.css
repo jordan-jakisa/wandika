@@ -242,4 +242,133 @@
       height: 18px;
     }
   }
+  /* iPhone: Settings and form sheets follow iOS. Inset grouped lists on the paper colour (grouped
+     background), rows on the sheet colour, headers and footers in small grey text, a centred title
+     with Back or Cancel leading and Done or Save trailing (HIG, Lists and tables; Sheets). */
+  html[data-platform="ios"] {
+    .settings.sheet,
+    .settings .sections,
+    .settings .pane {
+      background: var(--paper);
+    }
+    .settings .nav-head,
+    .settings .pane-head {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      min-height: var(--target);
+      padding: 2px 8px 6px;
+    }
+    .settings .nav-head h2,
+    .settings .pane-head h3 {
+      grid-column: 2;
+      font-size: var(--text-md);
+      font-weight: 600;
+      text-align: center;
+    }
+    .settings .pane-head .back {
+      grid-column: 1;
+      justify-self: start;
+    }
+    .settings .nav-head .done,
+    .settings .pane-head .done {
+      grid-column: 3;
+      justify-self: end;
+    }
+
+    /* The section list: one inset group, icon, label and detail, a disclosure chevron. */
+    .settings .sections ul {
+      margin: 8px 16px 24px;
+      padding: 0;
+      border-radius: var(--radius-xl);
+      background: var(--sheet);
+      overflow: hidden;
+    }
+    .settings .sections li button {
+      min-height: 56px;
+      padding: 0 12px 0 16px;
+      gap: 14px;
+    }
+    .settings .sections li button > svg {
+      display: block;
+      width: 22px;
+      height: 22px;
+      color: var(--papyrus);
+    }
+    /* Separators start at the text, past the icon, as in iOS Settings. */
+    .settings .sections li + li button {
+      box-shadow: inset 52px 0 0 var(--sheet), inset 0 1px 0 var(--hairline);
+    }
+    .settings .chev {
+      display: grid;
+      place-items: center;
+      color: var(--graphite);
+      opacity: 0.6;
+    }
+
+    /* Panes: inset groups with separators inset to the text, small headers and footers. */
+    .settings .pane-body {
+      padding-left: 16px;
+      padding-right: 16px;
+    }
+    .settings h4 {
+      margin: 24px 16px 6px;
+      font-size: var(--text-sm);
+      font-weight: 400;
+      color: var(--graphite);
+    }
+    .settings .pane-body > .group:first-child,
+    .settings .conn > .group:first-child {
+      margin-top: 16px;
+    }
+    .settings .group {
+      border-radius: var(--radius-xl);
+      background: var(--sheet);
+      overflow: hidden;
+    }
+    .settings .row {
+      min-height: var(--target);
+      padding: 11px 16px;
+    }
+    .settings .row + .row {
+      border-top: 0;
+      box-shadow: inset 16px 0 0 var(--sheet), inset 0 1px 0 var(--hairline);
+    }
+    .settings .row-label {
+      font-weight: 400;
+    }
+    /* A button inside a row is tinted text, as in iOS Settings. */
+    .settings .row > .btn:not(.primary) {
+      min-height: var(--target);
+      padding: 0 4px;
+      background: none;
+      color: var(--papyrus);
+      font-weight: 400;
+    }
+    .settings .row > .btn:not(.primary):active {
+      background: none;
+      opacity: 0.5;
+    }
+    .settings .note {
+      margin: 8px 16px 0;
+      font-size: var(--text-sm);
+    }
+    .settings .footer-actions {
+      margin: 24px 0 0;
+    }
+    /* A standalone action is a row of its own in a group: full width, tinted text. */
+    .settings .footer-actions .btn {
+      width: 100%;
+      justify-content: flex-start;
+      padding: 0 16px;
+      border-radius: var(--radius-xl);
+      background: var(--sheet);
+      color: var(--papyrus);
+      font-weight: 400;
+    }
+    .settings .footer-actions .btn.danger {
+      color: var(--alarm);
+    }
+  }
+
 }

@@ -402,11 +402,18 @@ describe("Encryption", () => {
 });
 
 describe("Connections", () => {
-  test("a public build waits for Google's review before offering Google", async () => {
+  test("a public build waits for Google's review without a row or a line about Google", async () => {
     app.status = { ...app.status!, configured: { ...app.status!.configured, google: false, gmail: false } };
     await open("connections");
-    expect(pane().getByText("Google Calendar and Tasks come once Google has reviewed Wandika.")).toBeInTheDocument();
-    expect(pane().queryByText("Google")).not.toBeInTheDocument();
+    expect(pane().queryByText(/Google/)).not.toBeInTheDocument();
+    expect(pane().getByText(/you connect appear in Today/)).toBeInTheDocument();
+  });
+
+  test("the note on what connecting means sits last, and names mail only when mail can connect", async () => {
+    await open("connections");
+    const about = pane().getByRole("contentinfo");
+    expect(about).toHaveTextContent("Mail, calendars and tasks you connect appear in Today. Wandika only reads them, except when you tick off a task.");
+    expect(about.parentElement!.lastElementChild).toBe(about);
   });
 
   test("a public build's Google is Calendar and Tasks, no Gmail", async () => {
@@ -633,13 +640,13 @@ describe("Connections", () => {
     expect(pane().queryByText("Outlook")).not.toBeInTheDocument();
   });
 
-  test("an Android public build has nothing to connect yet, and says why for Google", async () => {
+  test("an Android public build has nothing to connect yet, and says only that", async () => {
     app.status = status({ configured: { github: true, google: false, microsoft: false, apple: false, gmail: false } });
     await open("connections");
     expect(pane().getByText("There's nothing to connect in this version yet.")).toBeInTheDocument();
-    expect(pane().getByText("Google Calendar and Tasks come once Google has reviewed Wandika.")).toBeInTheDocument();
+    expect(pane().queryByText(/Google/)).not.toBeInTheDocument();
     expect(pane().queryByRole("button", { name: "Connect" })).not.toBeInTheDocument();
-    expect(pane().queryByText(/Connected sources appear in Today/)).not.toBeInTheDocument();
+    expect(pane().queryByText(/appear in Today/)).not.toBeInTheDocument();
   });
 });
 
