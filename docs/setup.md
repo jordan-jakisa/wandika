@@ -63,6 +63,7 @@ Nothing to register. Wandika asks for access the first time you connect them in 
 ```bash
 npm install
 npm run tauri dev            # Mac
+scripts/install-mac.sh       # Mac: signed build in /Applications (the keychain asks only once)
 npm run tauri ios init       # once, then: npm run tauri ios dev
 npm run tauri android init   # once, then: npm run tauri android dev
 ```
