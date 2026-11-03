@@ -260,6 +260,8 @@ class AppState {
       const first = this.lastSync === null;
       this.apply(report);
       this.syncError = null;
+      this.#failures = 0;
+      this.#retryAt = 0;
       if (first) this.say("Your notes are on GitHub. Every device you sign in on gets them.");
       else if (manual) this.say(syncSummary(report));
     } catch (e) {
