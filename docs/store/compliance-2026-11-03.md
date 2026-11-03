@@ -18,9 +18,30 @@ Releases: Mac (Developer ID .dmg from the website), Android (signed APK from the
 | 2.5.2 no downloaded code. | Notes are data. Rendered notes can't run script: HTML is escaped, and diagrams are tested (diagrams.safety.test.ts). | Yes |
 | 2.5.19 no hidden or dormant features. | No remote flags. The MCP server is compiled into the Mac app only. Public builds have no Gmail code path offered. | Yes |
 | 2.3.1(a) Notes for Review describe every feature; 2.1 demo account info for logins. | To write; reviewer needs test GitHub (and Outlook) accounts with sample notes. | Open |
-| Export compliance. | Uses standard encryption not provided by iOS (age, OpenSSL TLS). Answer in App Store Connect; the French declaration applies only if France is on (it stays off under Jordan's EU rule). BIS self-classification duty not verified. | Open (Jordan) |
+| Export compliance. | Uses standard encryption not provided by iOS (age, OpenSSL TLS). Answer App Store Connect's questions on the build; the French declaration applies only if France is on (it stays off). If it says no documents are needed, set ITSAppUsesNonExemptEncryption to NO. | Open (on the first build) |
 | App Privacy label: "collect" means transmitting data off the device so that "you and/or your third-party partners" can access it. | No server, no analytics, no SDKs. "Data Not Collected" is defensible. | Open (Jordan, in ASC) |
 | Developer ID and notarization (Mac): "Notarization of macOS software is not App Review." | Hardened runtime, secure timestamp, Developer ID certificate. | Open (certificate) |
+
+## US export rules for encryption (15 CFR, current to 2026-10-30)
+
+| Rule | Wandika | Status |
+|---|---|---|
+| 742.15(b)(1): "publicly available ... encryption source code classified under ECCN 5D002 is not subject to the EAR". Since 2021, notifying BIS and NSA is needed only for "non-standard cryptography". | age (X25519, ChaCha20-Poly1305, scrypt) and TLS are published standards; the source is public on GitHub. | Yes |
+| 734.3 note: "Publicly available encryption object code 'software' classified under ECCN 5D002 is not subject to the EAR when the corresponding source code meets the criteria specified in § 742.15(b)." | Released binaries are built only from pushed code (the release scripts refuse anything else). | Yes |
+| Apple's agreement 5.3: no uploads for notarization of apps needing export authorization. | Not subject to the EAR, so notarization is fine. | Yes |
+| Sanctions: Uganda is only in EAR Country Group B; OFAC has no Uganda program. | Jordan keeps the agreement's 14.8 statement true. | Yes |
+
+Note: a BIS guidance page still mentions an email notification and a self-classification report;
+it predates the 2021 rule (86 FR 16482), and the regulation governs. A one-time email to
+crypt@bis.doc.gov and enc@nsa.gov with the repository link is optional.
+
+## Apple Developer Program License Agreement (Developer ID, Mac)
+
+| Rule | Wandika | Status |
+|---|---|---|
+| Mac apps "can additionally be separately distributed"; iPhone apps only through the App Store, TestFlight or Ad Hoc. | Mac .dmg from the website; iPhone through TestFlight only. | Yes |
+| 5.1: keep the signing keys safe; never sign a third party's app. | The certificate lives only in Jordan's keychain; forks and contributors' builds are never signed. | Yes |
+| 5.3: don't say Apple checked, reviewed or approved the app. | Release notes and the site never say "Apple-approved" or "verified by Apple". | Yes |
 
 ## Google (OAuth policies; API Services User Data Policy)
 

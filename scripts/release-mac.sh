@@ -7,6 +7,18 @@
 set -e
 cd "$(dirname "$0")/.."
 
+# Released binaries must be built from source that is public on GitHub: that's what keeps them
+# outside the US export rules for encryption (15 CFR 734.3(b)(3) and 742.15(b)).
+if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+  echo "Commit your changes first: a release is built only from code that's on GitHub."
+  exit 1
+fi
+git fetch -q origin
+if [ -n "$(git log --oneline origin/main..HEAD)" ]; then
+  echo "Push first: a release is built only from code that's on GitHub."
+  exit 1
+fi
+
 identity=$(security find-identity -v -p codesigning | sed -n 's/.*"\(Developer ID Application: .*\)"/\1/p' | head -1)
 if [ -z "$identity" ]; then
   echo "No Developer ID Application certificate in the keychain. See the top of this script."
