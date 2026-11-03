@@ -1,13 +1,16 @@
 <script lang="ts">
-  import { app } from "../app.svelte";
+  import { app, type Ask } from "../app.svelte";
 
   let dialogEl: HTMLDialogElement;
   let value = $state("");
+  /** The question the field was filled for; a new one replacing it while open starts afresh. */
+  let filledFor: Ask | null = null;
 
   $effect(() => {
     const d = app.dialog;
+    if (d && d !== filledFor) value = d.input?.value ?? "";
+    filledFor = d;
     if (d && !dialogEl.open) {
-      value = d.input?.value ?? "";
       dialogEl.showModal();
     } else if (!d && dialogEl.open) {
       dialogEl.close();
