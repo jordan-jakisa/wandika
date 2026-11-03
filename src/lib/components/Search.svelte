@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { plainText } from "../plain";
   import { ArrowLeft, FilePlus, FileText, Lock, Search, X } from "@lucide/svelte";
   import { isIOS } from "../platform";
   import { api } from "../api";
@@ -155,7 +156,7 @@
         {#if hit.encrypted}<Lock size={15} />{:else}<FileText size={15} />{/if}
         <span class="text">
           <span class="title">{hit.title}</span>
-          {#if hit.snippet}<span class="snippet">{hit.snippet}</span>{/if}
+          {#if hit.snippet}<span class="snippet">{plainText(hit.snippet)}</span>{/if}
           {#if hit.path.includes("/")}<span class="folder">{hit.path.slice(0, hit.path.lastIndexOf("/"))}</span>{/if}
         </span>
       </li>

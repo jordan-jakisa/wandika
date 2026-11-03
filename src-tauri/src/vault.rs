@@ -2,7 +2,7 @@
 //! search, links, backlinks and tasks.
 
 use crate::crypto::{self, Crypto};
-use crate::error::{msg, Result};
+use crate::error::{msg, Error, Result};
 use chrono::{Datelike, Local, NaiveDate, NaiveDateTime};
 use regex::Regex;
 use serde::Serialize;
@@ -745,10 +745,10 @@ impl Index {
 pub fn toggle_task(root: &Path, rel: &str, line: usize, expected: &str, crypto: &Crypto) -> Result<bool> {
     let text = read_note(root, rel, crypto)?;
     let mut lines: Vec<String> = text.split('\n').map(str::to_string).collect();
-    let current = lines.get(line).ok_or_else(|| msg("That task moved. Refresh and try again."))?;
-    let caps = TASK.captures(current).ok_or_else(|| msg("That task moved. Refresh and try again."))?;
+    let current = lines.get(line).ok_or_else(|| Error::StaleTask)?;
+    let caps = TASK.captures(current).ok_or_else(|| Error::StaleTask)?;
     if caps[4].trim() != expected.trim() {
-        return Err(msg("That task changed. Refresh and try again."));
+        return Err(Error::StaleTask);
     }
     let done = &caps[2] == " ";
     let mark = if done { "x" } else { " " };
@@ -778,10 +778,10 @@ pub fn edit_task(root: &Path, rel: &str, line: usize, expected: &str, text: &str
     }
     let note = read_note(root, rel, crypto)?;
     let mut lines: Vec<String> = note.split('\n').map(str::to_string).collect();
-    let current = lines.get(line).ok_or_else(|| msg("That task moved. Refresh and try again."))?.clone();
-    let caps = TASK.captures(&current).ok_or_else(|| msg("That task moved. Refresh and try again."))?;
+    let current = lines.get(line).ok_or_else(|| Error::StaleTask)?.clone();
+    let caps = TASK.captures(&current).ok_or_else(|| Error::StaleTask)?;
     if caps[4].trim() != expected.trim() {
-        return Err(msg("That task changed. Refresh and try again."));
+        return Err(Error::StaleTask);
     }
     let cr = if current.ends_with('\r') { "\r" } else { "" };
     let indent = indent_of(&caps[1]);
@@ -810,10 +810,10 @@ fn is_archive(path_lower: &str) -> bool {
 pub fn take_task(root: &Path, rel: &str, line: usize, expected: &str, crypto: &Crypto) -> Result<Vec<String>> {
     let note = read_note(root, rel, crypto)?;
     let mut lines: Vec<String> = note.split('\n').map(str::to_string).collect();
-    let current = lines.get(line).ok_or_else(|| msg("That task moved. Refresh and try again."))?.clone();
-    let caps = TASK.captures(&current).ok_or_else(|| msg("That task moved. Refresh and try again."))?;
+    let current = lines.get(line).ok_or_else(|| Error::StaleTask)?.clone();
+    let caps = TASK.captures(&current).ok_or_else(|| Error::StaleTask)?;
     if caps[4].trim() != expected.trim() {
-        return Err(msg("That task changed. Refresh and try again."));
+        return Err(Error::StaleTask);
     }
     let below: Vec<&str> = lines[line + 1..].iter().map(String::as_str).collect();
     let n = 1 + detail_block(&below, indent_of(&caps[1])).len();
@@ -1643,10 +1643,10 @@ mod tests {
         assert!(!toggle_task(&root, "T.md", 1, "Done ✅ 2026-01-01", &crypto).unwrap());
         assert!(toggle_task(&root, "T.md", 2, " Open ", &crypto).unwrap());
         assert_eq!(get(&root, "T.md"), format!("# T\n  * [ ] Done\n- [x] Open ✅ {today}\nplain"));
-        let moved = "That task moved. Refresh and try again.";
+        let moved = "That task changed in its note, so the list is updated. Try again.";
         assert_eq!(toggle_task(&root, "T.md", 9, "Open", &crypto).unwrap_err().to_string(), moved);
         assert_eq!(toggle_task(&root, "T.md", 3, "plain", &crypto).unwrap_err().to_string(), moved);
-        assert_eq!(toggle_task(&root, "T.md", 1, "Something else", &crypto).unwrap_err().to_string(), "That task changed. Refresh and try again.");
+        assert_eq!(toggle_task(&root, "T.md", 1, "Something else", &crypto).unwrap_err().to_string(), "That task changed in its note, so the list is updated. Try again.");
         assert!(toggle_task(&root, "Missing.md", 0, "x", &crypto).is_err());
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -1669,8 +1669,8 @@ mod tests {
         edit_task(&root, "T.md", 1, "Call Amina #home 📌 ⏫ 📅 2026-11-05", "Call Amina", "", &crypto).unwrap();
         assert_eq!(get(&root, "T.md"), "# T\n  * [x] Call Amina\n  * [ ] Next\nend", "clearing the notes removes their lines");
         let said = |r: Result<()>| r.unwrap_err().to_string();
-        assert_eq!(said(edit_task(&root, "T.md", 1, "Something else", "x", "", &crypto)), "That task changed. Refresh and try again.");
-        assert_eq!(said(edit_task(&root, "T.md", 3, "end", "x", "", &crypto)), "That task moved. Refresh and try again.");
+        assert_eq!(said(edit_task(&root, "T.md", 1, "Something else", "x", "", &crypto)), "That task changed in its note, so the list is updated. Try again.");
+        assert_eq!(said(edit_task(&root, "T.md", 3, "end", "x", "", &crypto)), "That task changed in its note, so the list is updated. Try again.");
         assert_eq!(said(edit_task(&root, "T.md", 1, "Call Amina", "  ", "", &crypto)), "Give the task a name.");
         assert_eq!(said(edit_task(&root, "T.md", 1, "Call Amina", "a\nb", "", &crypto)), "A task is one line. Put the rest in its notes.");
         let _ = std::fs::remove_dir_all(&root);
@@ -1688,8 +1688,8 @@ mod tests {
         put_back(&root, "T.md", 99, &taken, &crypto).unwrap();
         assert!(get(&root, "T.md").ends_with("- [ ] Next\n- [ ] Call Amina\n  ask about the lease\n"), "a shorter note gets it at the end, before the last newline");
         let said = |r: Result<Vec<String>>| r.unwrap_err().to_string();
-        assert_eq!(said(take_task(&root, "T.md", 1, "Something else", &crypto)), "That task changed. Refresh and try again.");
-        assert_eq!(said(take_task(&root, "T.md", 0, "T", &crypto)), "That task moved. Refresh and try again.");
+        assert_eq!(said(take_task(&root, "T.md", 1, "Something else", &crypto)), "That task changed in its note, so the list is updated. Try again.");
+        assert_eq!(said(take_task(&root, "T.md", 0, "T", &crypto)), "That task changed in its note, so the list is updated. Try again.");
         assert_eq!(put_back(&root, "T.md", 0, &["not a task".into()], &crypto).unwrap_err().to_string(), "There's no task to put back.");
         let _ = std::fs::remove_dir_all(&root);
     }

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Eraser, Trash2, Undo2 } from "@lucide/svelte";
   import { api } from "../api";
+  import { sheetOpened } from "../backstack";
   import { app } from "../app.svelte";
   import { forgetImages } from "../attachments";
   import { forgetNoteEmbeds } from "../editor/embeds";
@@ -8,6 +9,8 @@
 
   /** The drawing pad: a pen, a finger or a mouse draws; Done saves the drawing as an SVG file. */
   let dialogEl: HTMLDialogElement;
+  /** Gives back the pad's place in history when it closes (phones). */
+  let release = () => {};
   let padEl = $state<SVGSVGElement>();
   let strokes = $state<Stroke[]>([]);
   /** Earlier states of the drawing, for Undo. */
@@ -35,9 +38,12 @@
       error = null;
       penSeen = false;
       dialogEl.showModal();
+      release = sheetOpened(() => void cancel());
       if (d.edit) void load(d.edit.target, d.edit.from);
     } else if (!d && dialogEl.open) {
       dialogEl.close();
+      release();
+      release = () => {};
     }
   });
 
@@ -118,7 +124,13 @@
 
   async function cancel() {
     if (changed) {
-      const sure = await app.ask({ title: "Discard this drawing?", confirm: "Discard", danger: true });
+      const sure = await app.ask({
+        title: "Discard this drawing?",
+        message: "Your strokes will be lost.",
+        confirm: "Discard",
+        cancel: "Keep drawing",
+        danger: true,
+      });
       if (sure === null) return;
     }
     app.drawing = null;
@@ -208,7 +220,7 @@
             class="ink"
             aria-label={i.label}
             aria-checked={!erasing && ink === i.color}
-            style:--ink={i.color}
+            style:--swatch={i.color}
             onclick={() => {
               ink = i.color;
               erasing = false;
@@ -319,7 +331,7 @@
     height: 30px;
     border: 2px solid var(--paper);
     border-radius: 50%;
-    background: var(--ink);
+    background: var(--swatch);
     /* A ring, so the black ink still shows on the dark theme's page. */
     box-shadow: 0 0 0 1.5px var(--graphite);
   }

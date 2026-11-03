@@ -6,6 +6,7 @@
   import { api, codeOf } from "../api";
   import { app, titleOf } from "../app.svelte";
   import { pastedName } from "../attachments";
+  import { plainText } from "../plain";
   import { positions, remember } from "../positions";
   import { extensions } from "../editor/setup";
   import { isBoard } from "../kanban";
@@ -39,6 +40,9 @@
   let cursorPlaced = false;
   const insertAt = (v: EditorView) => (cursorPlaced ? v.state.selection.main.head : v.state.doc.length);
   let pickAt = 0;
+
+  /** The first sentence of an error: its cause, without advice the banner already gives. */
+  const saveCause = (e: string) => e.match(/^[^.]*\./)?.[0] ?? e;
 
   /** Saves files as attachments and embeds them, each on its own line, at `pos`. */
   async function addFiles(files: File[], v: EditorView, pos: number) {
@@ -430,7 +434,8 @@
     {/if}
     {#if saveError}
       <div class="save-error" role="alert">
-        <p>Couldn't save. {saveError} Your text is safe here, and Wandika keeps trying.</p>
+        <!-- Only the cause, without its "try again": Wandika retries by itself, and the button is here. -->
+        <p>Couldn't save. {saveCause(saveError)} Your text is safe here, and Wandika keeps trying.</p>
         <button class="btn" onclick={save}>Try again</button>
       </div>
     {/if}
@@ -465,7 +470,7 @@
             <li>
               <button onclick={() => app.open(b.path)}>
                 <span class="bl-title">{b.title}</span>
-                <span class="bl-snippet">{b.snippet}</span>
+                <span class="bl-snippet">{plainText(b.snippet)}</span>
               </button>
             </li>
           {/each}

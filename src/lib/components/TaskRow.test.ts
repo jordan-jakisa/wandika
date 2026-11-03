@@ -154,7 +154,7 @@ describe("ticking", () => {
     await user.click(box);
     await vi.waitFor(() => expect(box).not.toBeChecked());
     expect(box).toBeEnabled();
-    expect(app.toast).toBe("Couldn't update that task. The note changed on disk.");
+    expect(app.toast).toBe("Couldn't tick that task. The note changed on disk.");
   });
 
   test("follows the list once it reloads with the new state", async () => {
@@ -191,7 +191,7 @@ describe("in a list that hides done tasks", () => {
     await vi.advanceTimersByTimeAsync(1000);
     expect(box.closest("li")).not.toHaveClass("leaving");
     expect(box).not.toBeChecked();
-    expect(app.toast).toBe("Couldn't update that task. Locked.");
+    expect(app.toast).toBe("Couldn't tick that task. Locked.");
   });
 
   test("unticking saves straight away, without the pause", async () => {

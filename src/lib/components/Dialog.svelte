@@ -1,7 +1,10 @@
 <script lang="ts">
   import { app, type Ask } from "../app.svelte";
+  import { sheetOpened } from "../backstack";
 
   let dialogEl: HTMLDialogElement;
+  /** Gives back the sheet's place in history when it closes (phones). */
+  let release = () => {};
   let value = $state("");
   /** The question the field was filled for; a new one replacing it while open starts afresh. */
   let filledFor: Ask | null = null;
@@ -12,8 +15,11 @@
     filledFor = d;
     if (d && !dialogEl.open) {
       dialogEl.showModal();
+      release = sheetOpened(() => app.dialog?.resolve(null));
     } else if (!d && dialogEl.open) {
       dialogEl.close();
+      release();
+      release = () => {};
     }
   });
 
@@ -44,7 +50,7 @@
         </ul>
       {/if}
       <div class="buttons" class:single={!!app.dialog.choices}>
-        <button type="button" class="btn" onclick={() => app.dialog?.resolve(null)}>Cancel</button>
+        <button type="button" class="btn" onclick={() => app.dialog?.resolve(null)}>{app.dialog.cancel ?? "Cancel"}</button>
         {#if !app.dialog.choices}
           <button class="btn" class:primary={!app.dialog.danger} class:danger-fill={app.dialog.danger}>
             {app.dialog.confirm}

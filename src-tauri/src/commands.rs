@@ -596,7 +596,7 @@ async fn finish_google(handle: &AppHandle, code: &str, verifier: &str, redirect:
     .await;
     let _ = handle.emit(
         "connectors-changed",
-        json!({ "provider": "google", "error": result.err().map(|e| e.to_string()) }),
+        json!({ "provider": "google", "error": result.err().map(|e| e.friendly().1) }),
     );
 }
 

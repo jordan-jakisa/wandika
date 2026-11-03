@@ -1,15 +1,18 @@
 <script lang="ts">
   import { Pin, Timer } from "@lucide/svelte";
-  import { api } from "../api";
+  import { api, codeOf } from "../api";
   import { app } from "../app.svelte";
   import { clock } from "../clock.svelte";
   import { focus } from "../focus.svelte";
   import { isIOS } from "../platform";
+  import { sheetOpened } from "../backstack";
   import { PRIORITIES, composeTask, parseTask, type Priority } from "../taskText";
 
   /** Edits one task from the vault: its name and tags, due date, priority, pin and notes.
    *  Everything is written back into the note, in the Obsidian Tasks format. */
   let dialogEl: HTMLDialogElement;
+  /** Gives back the sheet's place in history when it closes (phones). */
+  let release = () => {};
   let name = $state("");
   let due = $state("");
   let priority = $state<Priority | "">("");
@@ -39,8 +42,11 @@
       dragY = 0;
       error = null;
       dialogEl.showModal();
+      release = sheetOpened(() => void dismiss());
     } else if (!t && dialogEl.open) {
       dialogEl.close();
+      release();
+      release = () => {};
     }
   });
 
@@ -55,7 +61,16 @@
     const text = composeTask(t.text, { name, due: due || null, priority: priority || null, pinned });
     saving = true;
     try {
-      await api.taskEdit(t.path, t.line, t.text, text, details);
+      try {
+        await api.taskEdit(t.path, t.line, t.text, text, details);
+      } catch (err) {
+        if (codeOf(err) !== "stale_task") throw err;
+        // The note changed meanwhile. If the task only moved, save it where it is now.
+        const now = (await api.tasksVault()).find((v) => v.path === t.path && v.text === t.text);
+        app.changed = { paths: [t.path], at: Date.now() };
+        if (!now) throw new Error("This task changed in its note. Close this and open it again to edit what it says now.");
+        await api.taskEdit(now.path, now.line, now.text, text, details);
+      }
       app.edited();
       app.changed = { paths: [t.path], at: Date.now() };
       app.editingTask = null;
@@ -64,6 +79,28 @@
     } finally {
       saving = false;
     }
+  }
+
+  /** Closes without saving; unsaved changes are only thrown away once you say so. */
+  async function dismiss() {
+    if (dirty) {
+      const sure = await app.ask({
+        title: "Discard your changes to this task?",
+        confirm: "Discard",
+        cancel: "Keep editing",
+        danger: true,
+      });
+      if (sure === null) return;
+    }
+    app.editingTask = null;
+  }
+
+  /** Only a tap on the dimmed backdrop closes, not one on the sheet's own padding. */
+  function backdropTap(e: MouseEvent) {
+    if (e.target !== dialogEl) return;
+    const r = dialogEl.getBoundingClientRect();
+    const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+    if (!inside) void dismiss();
   }
 
   // The sheet follows a drag down from its top bar and closes past a point, unless there are
@@ -80,7 +117,8 @@
   function sheetUp() {
     if (dragFrom === null) return;
     dragFrom = null;
-    if (dragY > 120 && !dirty) app.editingTask = null;
+    // A drag well down asks first when there are changes, as the system's sheets do.
+    if (dragY > 120) void dismiss();
     dragY = 0;
   }
 
@@ -143,14 +181,18 @@
   style={dragY ? `--drag: ${dragY}px` : undefined}
   aria-labelledby="task-editor-h"
   onclose={() => (app.editingTask = null)}
-  onclick={(e) => e.target === dialogEl && (app.editingTask = null)}
+  oncancel={(e) => {
+    e.preventDefault();
+    void dismiss();
+  }}
+  onclick={backdropTap}
 >
   {#if task && ios}
     <form onsubmit={save}>
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <header class="bar" onpointerdown={sheetDown} onpointermove={sheetMove} onpointerup={sheetUp} onpointercancel={sheetUp}>
         <span class="grabber" aria-hidden="true"></span>
-        <button type="button" class="bar-btn" onclick={() => (app.editingTask = null)}>Cancel</button>
+        <button type="button" class="bar-btn" onclick={dismiss}>Cancel</button>
         <h2 id="task-editor-h">Edit task</h2>
         <button class="bar-btn save" disabled={saving}>Save</button>
       </header>
@@ -190,7 +232,7 @@
           <button type="button" class="btn quiet" onclick={startFocus}><Timer size={16} /> Focus</button>
         {/if}
         <span class="spacer"></span>
-        <button type="button" class="btn" onclick={() => (app.editingTask = null)}>Cancel</button>
+        <button type="button" class="btn" onclick={dismiss}>Cancel</button>
         <button class="btn primary" disabled={saving}>Save</button>
       </div>
     </form>

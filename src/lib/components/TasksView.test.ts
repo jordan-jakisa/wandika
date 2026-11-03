@@ -182,7 +182,7 @@ describe("ticking a task in a note", () => {
     await user.click(await screen.findByRole("button", { name: "Show done" }));
     const box = screen.getByRole("checkbox", { name: "Set up OAuth apps" });
     await user.click(box);
-    await vi.waitFor(() => expect(app.toast).toBe("Couldn't update that task. That note no longer exists."));
+    await vi.waitFor(() => expect(app.toast).toBe("Couldn't tick that task. That note no longer exists."));
     expect(box).not.toBeChecked();
   });
 });

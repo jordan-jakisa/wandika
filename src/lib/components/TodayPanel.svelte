@@ -106,7 +106,7 @@
   </ul>
 {/snippet}
 
-<section class="today" class:full aria-labelledby="today-h" aria-busy={!data}>
+<section class="today" class:full aria-labelledby="today-h" aria-busy={!data && !app.todayError}>
   <header>
     <div class="title-row">
       <h2 id="today-h">{heading}</h2>
@@ -123,6 +123,13 @@
         void app.openDaily();
       }}><NotebookPen size={16} /> Open today's note</button>
   </header>
+
+  {#if !data && app.todayError}
+    <div class="load-failed" role="alert">
+      <p>Today didn't load. {app.todayError}</p>
+      <button class="btn" onclick={() => app.loadToday(true)}>Try again</button>
+    </div>
+  {/if}
 
   {#if !calendarConnected && !mailConnected && data && canConnect}
     <p class="connect muted">
@@ -155,7 +162,7 @@
       {/if}
     </div>
     {#if !data}
-      {@render skeleton(3)}
+      {#if !app.todayError}{@render skeleton(3)}{/if}
     {:else if !data.events.length}
       <p class="muted">Nothing on your calendar today.</p>
     {:else}
@@ -238,7 +245,7 @@
         {/each}
       </ul>
     {:else if !data}
-      {@render skeleton(2)}
+      {#if !app.todayError}{@render skeleton(2)}{/if}
     {:else if clearedToday}
       <p class="all-done" role="status"><CircleCheck size={20} /> All done for today.</p>
     {:else}
@@ -252,7 +259,7 @@
       <h3 id="mail-h">Inbox</h3>
     </div>
     {#if !data}
-      {@render skeleton(3)}
+      {#if !app.todayError}{@render skeleton(3)}{/if}
     {:else if !data.mail.length}
       <p class="muted">Your inbox is empty.</p>
     {:else}
@@ -499,6 +506,15 @@
     flex-wrap: wrap;
     align-items: baseline;
     gap: 4px 8px;
+  }
+  .load-failed {
+    display: grid;
+    justify-items: start;
+    gap: var(--space-3);
+  }
+  .load-failed p {
+    margin: 0;
+    color: var(--graphite);
   }
   .skeleton {
     display: grid;

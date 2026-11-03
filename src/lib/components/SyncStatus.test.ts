@@ -133,7 +133,8 @@ describe("a failed sync", () => {
   test.each([
     ["github_rate_limit", "GitHub is busy. Tap to retry"],
     ["github_down", "GitHub is down. Tap to retry"],
-    ["github_not_found", "Repository not found"],
+    ["github_not_found", "Repository not found. Tap to choose"],
+    ["github_auth", "GitHub sign-in expired. Tap to sign in"],
     ["no_access", "No access to the folder"],
     ["disk_full", "Device is out of space"],
     ["something_new", "Couldn't sync. Tap to retry"],
@@ -144,6 +145,19 @@ describe("a failed sync", () => {
     expect(button).toHaveTextContent(text);
     expect(button).toHaveClass("fail");
     expect(button).toHaveAttribute("title", "The full sentence.");
+  });
+
+  test.each([
+    ["github_not_found", "vault"],
+    ["github_auth", "account"],
+  ])("a %s failure opens the Settings page that fixes it instead of retrying", async (code, page) => {
+    const user = userEvent.setup();
+    const open = vi.spyOn(app, "openSettings").mockImplementation(() => {});
+    app.syncError = { code, message: "The full sentence." };
+    render(SyncStatus);
+    await user.click(screen.getByRole("button"));
+    expect(open).toHaveBeenCalledWith(page);
+    expect(app.sync).not.toHaveBeenCalled();
   });
 
   test("a tap shows the full sentence and tries again", async () => {

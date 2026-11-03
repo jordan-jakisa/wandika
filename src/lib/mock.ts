@@ -119,6 +119,8 @@ export function changeOutside(path: string, content: string) {
 /** The mock inbox's first email, the flight booking. */
 const FLIGHT = "18c2f0a1b2c3d4e5";
 
+/** A task's line no longer holds the task shown, as the core says it. */
+const STALE = { code: "stale_task", message: "That task changed in its note, so the list is updated. Try again." };
 const LOCKED = {
   code: "locked",
   message: "Encrypted notes are locked. Unlock them with your passphrase.",
@@ -190,8 +192,8 @@ function takeTask(path: string, line: number, expected: string): string[] {
   if (locked(path)) throw LOCKED;
   const lines = (notes.get(path) ?? "").split("\n");
   const m = lines[line]?.match(/^(\s*)[-*+] \[[ xX]\] (.*)$/);
-  if (!m) throw "That task moved. Refresh and try again.";
-  if (m[2].trim() !== expected.trim()) throw "That task changed. Refresh and try again.";
+  if (!m) throw STALE;
+  if (m[2].trim() !== expected.trim()) throw STALE;
   let n = 1;
   for (const next of lines.slice(line + 1)) {
     if (!next.trim() || next.length - next.trimStart().length <= m[1].length || /^\s*[-*+] \[[ xX]\] /.test(next)) break;
@@ -480,8 +482,8 @@ const handlers: Record<string, (a: Args) => unknown> = {
     if (locked(path)) throw LOCKED;
     const lines = (notes.get(path) ?? "").split("\n");
     const m = lines[line]?.match(/^(\s*[-*+] \[)([ xX])(\] )(.*)$/);
-    if (!m) throw "That task moved. Refresh and try again.";
-    if (m[4].trim() !== String(text).trim()) throw "That task changed. Refresh and try again.";
+    if (!m) throw STALE;
+    if (m[4].trim() !== String(text).trim()) throw STALE;
     const done = m[2] === " ";
     const rest = m[4].replace(/\s*✅ \d{4}-\d{2}-\d{2}/g, "") + (done ? ` ✅ ${iso(new Date())}` : "");
     lines[line] = `${m[1]}${done ? "x" : " "}${m[3]}${rest}`;
@@ -492,8 +494,8 @@ const handlers: Record<string, (a: Args) => unknown> = {
     if (locked(path)) throw LOCKED;
     const lines = (notes.get(path) ?? "").split("\n");
     const m = lines[line]?.match(/^(\s*)([-*+] \[[ xX]\] )(.*)$/);
-    if (!m) throw "That task moved. Refresh and try again.";
-    if (m[3].trim() !== String(expected).trim()) throw "That task changed. Refresh and try again.";
+    if (!m) throw STALE;
+    if (m[3].trim() !== String(expected).trim()) throw STALE;
     if (!String(text).trim()) throw "Give the task a name.";
     let old = 0;
     for (const next of lines.slice(line + 1)) {

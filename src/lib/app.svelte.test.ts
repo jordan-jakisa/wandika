@@ -416,6 +416,16 @@ describe("sync", () => {
     expect(calls("sync_now")).toBe(now);
   });
 
+  test("a sync you asked for says why it failed, with Try again; an automatic one stays quiet", async () => {
+    const { app } = await started();
+    faults.set("sync_now", { code: "offline", message: "You're offline." });
+    await settle(app.sync());
+    expect(app.toast).not.toBe("You're offline.");
+    await settle(app.sync(true));
+    expect(app.toast).toBe("You're offline.");
+    expect(app.toastAction?.label).toBe("Try again");
+  });
+
   test("a failure is kept in plain words, and automatic syncs back off", async () => {
     const { app } = await started();
     faults.set("sync_now", { code: "offline", message: "You're offline." });
@@ -972,14 +982,16 @@ describe("Today", () => {
     hangs.add("today");
     const stuck = app.loadToday();
     await vi.advanceTimersByTimeAsync(29_000);
-    expect(app.toast).not.toBe("Today is taking too long to load. Try again in a moment.");
+    expect(app.todayError).toBeNull();
     await vi.advanceTimersByTimeAsync(1_000);
     await stuck;
-    expect(app.toast).toBe("Today is taking too long to load. Try again in a moment.");
+    // Nothing to show yet, so the failure stays on Today's screen instead of a passing toast.
+    expect(app.todayError).toBe("Today is taking too long to load. Try again in a moment.");
     expect(app.today).toBeNull();
     hangs.clear();
     await settle(app.loadToday());
     expect(app.today?.events).toHaveLength(4);
+    expect(app.todayError).toBeNull();
   });
 
   test("a stuck tasks-only refresh doesn't hold the next refresh", async () => {
@@ -1071,13 +1083,14 @@ describe("deleting and archiving tasks", () => {
     const task = { path: "Plan.md", title: "Plan", line: 1, text: "Call Amina", done: false, due: null, details: "about the lease" };
     await settle(app.deleteTask(task));
     expect(await settle(api.noteRead("Plan.md"))).toBe("# Plan\n- [ ] Next\n");
-    expect(app.toast).toBe("Task deleted.");
+    expect(app.toast).toBe("Deleted “Call Amina”.");
     expect(app.changed.paths).toEqual(["Plan.md"]);
     app.toastAction!.run();
     await vi.advanceTimersByTimeAsync(0);
     expect(await settle(api.noteRead("Plan.md"))).toBe("# Plan\n- [ ] Call Amina\n  about the lease\n- [ ] Next\n");
     await settle(app.deleteTask({ ...task, text: "Something else" }));
-    expect(app.toast).toBe("That task changed. Refresh and try again.");
+    expect(app.toast).toBe("That task changed in its note, so the list is updated. Try again.");
+    expect(app.changed.paths).toEqual(["Plan.md"]);
   });
 
   test("archiving moves a task to Archive and out of the lists; Undo brings it back", async () => {
@@ -1085,7 +1098,7 @@ describe("deleting and archiving tasks", () => {
     await settle(api.noteWrite("Plan.md", "# Plan\n- [ ] Call Amina\n- [ ] Next\n"));
     const task = { path: "Plan.md", title: "Plan", line: 1, text: "Call Amina", done: false, due: null, details: "" };
     await settle(app.archiveTask(task));
-    expect(app.toast).toBe("Moved to Archive.");
+    expect(app.toast).toBe("Archived “Call Amina”.");
     expect(app.changed.paths).toEqual(["Plan.md", "Archive.md"]);
     expect(await settle(api.noteRead("Archive.md"))).toMatch(/^# Archive\n- \[ \] Call Amina\n  From \[\[Plan\]\], archived \d{4}-\d{2}-\d{2}\n$/);
     const listed = (await settle(api.tasksVault())) as { text: string }[];

@@ -2,11 +2,14 @@
   import { PenLine, X } from "@lucide/svelte";
   import { api } from "../api";
   import { app } from "../app.svelte";
+  import { sheetOpened } from "../backstack";
   import { imageUrl } from "../attachments";
   import { MARK } from "../sketch";
 
   /** An image from the vault, shown full size over everything else. */
   let dialogEl: HTMLDialogElement;
+  /** Gives back the sheet's place in history when it closes (phones). */
+  let release = () => {};
   let src = $state<string | null>(null);
   let failed = $state(false);
   let loaded = $state(false);
@@ -31,8 +34,11 @@
         () => app.viewing === path && (failed = true),
       );
       dialogEl.showModal();
+      release = sheetOpened(() => (app.viewing = null));
     } else if (!path && dialogEl.open) {
       dialogEl.close();
+      release();
+      release = () => {};
     }
   });
 </script>

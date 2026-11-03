@@ -7,6 +7,7 @@
   import { Archive, Mail, Pencil, Pin, PinOff, Timer, Trash2 } from "@lucide/svelte";
   import { app } from "../app.svelte";
   import { mailRef } from "../mailLinks";
+  import { plainText } from "../plain";
   import { parseTask, PRIORITIES } from "../taskText";
   import Menu from "./Menu.svelte";
   import { clock } from "../clock.svelte";
@@ -63,13 +64,7 @@
   const email = $derived([...text.matchAll(/\]\((https?:[^)\s]+)\)/g)].map((m) => m[1]).find((u) => mailRef(u)));
   // Plain words for the list: markers move to the meta line, the email link to "Open email", Markdown marks go.
   const label = $derived(
-    parts.name
-      .replace(/\s*\[[^\]]*\]\((https?:[^)\s]+)\)/g, (all, url: string) => (mailRef(url) ? "" : all))
-      .replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, "$2")
-      .replace(/\[\[([^\]]+)\]\]/g, "$1")
-      .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-      .replace(/(\*\*|__|\*|_|~~|`)(.+?)\1/g, "$2")
-      .trim(),
+    plainText(parts.name.replace(/\s*\[[^\]]*\]\((https?:[^)\s]+)\)/g, (all, url: string) => (mailRef(url) ? "" : all))),
   );
 
   const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -89,7 +84,7 @@
     } catch (e) {
       shown = null;
       leaving = false;
-      app.say(`Couldn't update that task. ${(e as Error).message}`);
+      app.taskFailed(e, undefined, "Couldn't tick that task.");
     } finally {
       busy = false;
     }
@@ -161,7 +156,7 @@
     close();
     action();
   }
-  const pinIt = () => void onPin?.().catch((e) => app.say((e as Error).message));
+  const pinIt = () => void onPin?.().catch((e) => app.taskFailed(e));
 
   // Once the list reloads with the new state, the row follows it again.
   $effect(() => {

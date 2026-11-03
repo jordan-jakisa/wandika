@@ -32,6 +32,7 @@
   import ProjectsView from "./ProjectsView.svelte";
   import Search from "./Search.svelte";
   import Settings from "./Settings.svelte";
+  import { sheetBack } from "../backstack";
   import StatusBar from "./StatusBar.svelte";
   import SyncStatus from "./SyncStatus.svelte";
   import TasksView from "./TasksView.svelte";
@@ -109,7 +110,7 @@
   // Phones: system back (Android) and swipe back (iOS) leave the note, as in native apps. Opening
   // a note, or the Search tab, adds one history entry so the system back gesture has somewhere to go.
   // One entry, replaced when a search opens a note, so a back never races a new entry.
-  let layer: "note" | "search" | "settings" | null = null;
+  let layer: "note" | "search" | "settings" | "sub" | null = null;
   /** The tab to return to when Search is left. */
   let beforeSearch: Tab = "notes";
   $effect(() => {
@@ -117,7 +118,15 @@
   });
   $effect(() => {
     if (wide) return;
-    const want = app.current ? "note" : app.tab === "search" ? "search" : app.tab === "settings" && app.settingsPage ? "settings" : null;
+    const want = app.current
+      ? "note"
+      : app.tab === "search"
+        ? "search"
+        : app.tab === "settings" && app.settingsPage
+          ? "settings"
+          : PARENT[app.tab]
+            ? "sub"
+            : null;
     untrack(() => {
       if (want === layer) return;
       if (want && !layer) history.pushState({ wandika: want }, "");
@@ -127,6 +136,8 @@
     });
   });
   function onPopState() {
+    // A sheet over the app (an email, a drawing, the task editor) closes first.
+    if (sheetBack()) return;
     // Settings keeps its own screens in history and handles back itself.
     if (app.settingsOpen) return;
     const was = layer;
@@ -134,6 +145,7 @@
     if (was === "note") app.current = null;
     else if (was === "search") leaveSearch();
     else if (was === "settings") app.settingsPage = null;
+    else if (was === "sub") app.tab = PARENT[app.tab] ?? app.tab;
   }
   function leaveSearch() {
     app.tab = beforeSearch === "search" ? "notes" : beforeSearch;

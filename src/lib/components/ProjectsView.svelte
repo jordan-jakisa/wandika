@@ -72,6 +72,13 @@
 </section>
 
 <style>
+  /* The same page as Tasks: its margins and the space between sections. */
+  .projects {
+    display: grid;
+    gap: var(--space-6);
+    padding: 20px 20px calc(32px + var(--safe-bottom));
+    max-width: 72ch;
+  }
   header {
     display: flex;
     align-items: center;

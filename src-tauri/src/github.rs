@@ -201,7 +201,7 @@ impl GitHub {
             remaining_zero.then(|| header("x-ratelimit-reset").map(|reset| reset.saturating_sub(chrono::Utc::now().timestamp() as u64))).flatten()
         });
         if status == 401 {
-            return Err(msg("Your GitHub sign-in expired or was revoked. Sign out in Settings and sign in again."));
+            return Err(crate::error::Error::GitHubSignIn);
         }
         let body = res.text().await.unwrap_or_default();
         let message = serde_json::from_str::<Value>(&body)
@@ -361,7 +361,7 @@ mod tests {
         ]);
         let g = gh(&s.url);
         let e = block_on(g.user()).unwrap_err();
-        assert_eq!(e.to_string(), "Your GitHub sign-in expired or was revoked. Sign out in Settings and sign in again.");
+        assert_eq!(e.friendly().0, "github_auth");
         let e = block_on(g.repo("a", "gone")).unwrap_err();
         assert!(matches!(&e, Error::GitHub { status: 404, message } if message == "Not Found"));
         let e = block_on(g.create_repo("taken")).unwrap_err();

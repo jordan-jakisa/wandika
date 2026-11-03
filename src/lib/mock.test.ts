@@ -507,10 +507,11 @@ describe("tasks", () => {
     const { run } = await fresh();
     const task = (await run<VaultTask[]>("tasks_vault")).find((t) => t.text === "Write your first note")!;
     const before = await run("note_read", { path: task.path });
-    await expect(run("task_toggle", { path: task.path, line: task.line, text: "Something else" })).rejects.toMatch(/changed/);
-    await expect(run("task_toggle", { path: task.path, line: 0, text: task.text })).rejects.toMatch(/moved/);
-    await expect(run("task_toggle", { path: task.path, line: 999, text: task.text })).rejects.toMatch(/moved/);
-    await expect(run("task_toggle", { path: "Gone.md", line: 0, text: "x" })).rejects.toMatch(/moved/);
+    const stale = { code: "stale_task" };
+    await expect(run("task_toggle", { path: task.path, line: task.line, text: "Something else" })).rejects.toMatchObject(stale);
+    await expect(run("task_toggle", { path: task.path, line: 0, text: task.text })).rejects.toMatchObject(stale);
+    await expect(run("task_toggle", { path: task.path, line: 999, text: task.text })).rejects.toMatchObject(stale);
+    await expect(run("task_toggle", { path: "Gone.md", line: 0, text: "x" })).rejects.toMatchObject(stale);
     expect(await run("note_read", { path: task.path })).toBe(before);
   });
 });

@@ -4,6 +4,7 @@ import { forgetImages } from "./attachments";
 import { forgetNoteEmbeds } from "./editor/embeds";
 import { tip, touch } from "./tips";
 import { TEMPLATE } from "./kanban";
+import { parseTask } from "./taskText";
 import type { Entry, NoteMeta, Snippet, Status, SyncReport, Today, VaultTask } from "./types";
 
 export type Tab = "notes" | "today" | "tasks" | "projects" | "graph" | "search" | "settings";
@@ -16,6 +17,8 @@ export interface Ask {
   title: string;
   message?: string;
   confirm: string;
+  /** The button that keeps things as they are; "Cancel" unless that would mean the opposite. */
+  cancel?: string;
   danger?: boolean;
   input?: { label: string; value: string };
   /** A list to pick from instead of a confirm button; resolves with the picked value. */
@@ -24,6 +27,11 @@ export interface Ask {
 }
 
 const SYNC_AFTER_EDIT_MS = 20_000;
+/** A task's name as people read it in a message, without its markers; long ones are cut. */
+const taskName = (text: string) => {
+  const name = parseTask(text).name;
+  return name.length > 40 ? `${name.slice(0, 39).trimEnd()}…` : name;
+};
 const SESSION_KEY = "wandika.session";
 const SYNC_EVERY_MS = 3 * 60_000;
 /** How often the app looks for notes changed by Claude Code. */
@@ -89,6 +97,8 @@ class AppState {
   /** The note "Around this note" centres on: the last note opened. */
   graphFocus = $state<string | null>(null);
   today = $state<Today | null>(null);
+  /** Why Today couldn't load, while there's nothing loaded to show instead. */
+  todayError = $state<string | null>(null);
   snippets = $state<Snippet[]>([]);
   /** Counts for the open note, shown in the status bar. `cards` is set for boards. */
   noteStats = $state({ words: 0, chars: 0, cards: null as number | null, backlinks: 0, encrypted: false });
@@ -322,6 +332,8 @@ class AppState {
         this.syncError = { code, message: (e as Error).message };
         this.#failures++;
         this.#retryAt = Date.now() + Math.min(16, 2 ** (this.#failures - 1)) * SYNC_EVERY_MS;
+        // A sync you asked for says why it failed, wherever you asked from.
+        if (manual) this.say((e as Error).message, { label: "Try again", run: () => void this.sync(true) });
       }
     } finally {
       this.syncing = false;
@@ -375,6 +387,8 @@ class AppState {
     try {
       await api.folderCreate(path);
       await this.newNote(path);
+      // An empty folder has nothing to sync, so say what makes it travel.
+      this.say(this.synced ? `Made “${name.trim()}”. It reaches your other devices once a note is in it.` : `Made “${name.trim()}”.`);
       return path;
     } catch (e) {
       this.say((e as Error).message);
@@ -533,6 +547,7 @@ class AppState {
     if (this.#todayLoading) return force && !this.#todayFull ? this.#todayLoading.then(() => this.loadToday(true)) : this.#todayLoading;
     const fresh = Date.now() - this.#todayAt < TODAY_TTL_MS;
     this.#todayFull = force || !fresh || !this.today;
+    this.todayError = null;
     this.#todayLoading = (async () => {
       try {
         const slow = "Today is taking too long to load. Try again in a moment.";
@@ -545,7 +560,9 @@ class AppState {
           this.#todayAt = Date.now();
         }
       } catch (e) {
-        this.say((e as Error).message);
+        // With nothing to show, Today keeps the failure on screen with a way to try again.
+        if (this.today) this.say((e as Error).message);
+        else this.todayError = (e as Error).message;
       } finally {
         this.#todayLoading = null;
       }
@@ -611,12 +628,12 @@ class AppState {
     try {
       const taken = await api.taskDelete(t.path, t.line, t.text);
       this.#taskChanged(t.path);
-      this.say("Task deleted.", {
+      this.say(`Deleted “${taskName(t.text)}”.`, {
         label: "Undo",
         run: () => void this.#undoTask(t.path, () => api.taskRestore(t.path, t.line, taken)),
       });
     } catch (e) {
-      this.say((e as Error).message);
+      this.taskFailed(e, t.path);
     }
   }
 
@@ -625,13 +642,23 @@ class AppState {
     try {
       const done = await api.taskArchive(t.path, t.line, t.text);
       this.#taskChanged(t.path, done.archive);
-      this.say(`Moved to ${done.archive.replace(/\.md(\.age)?$/, "")}.`, {
+      this.say(`Archived “${taskName(t.text)}”.`, {
         label: "Undo",
         run: () => void this.#undoTask(t.path, () => api.taskUnarchive(done, t.path, t.line), done.archive),
       });
     } catch (e) {
-      this.say((e as Error).message);
+      this.taskFailed(e, t.path);
     }
+  }
+
+  /** Says why a task action failed; a task that changed in its note reloads the lists first, so
+   *  the next try works on what the note now says. */
+  taskFailed(e: unknown, path?: string, what?: string) {
+    if (codeOf(e) === "stale_task") {
+      this.changed = { paths: path ? [path] : [], at: Date.now() };
+      return this.say((e as Error).message);
+    }
+    this.say(what ? `${what} ${(e as Error).message}` : (e as Error).message);
   }
 
   #taskChanged(...paths: string[]) {

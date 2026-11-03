@@ -127,7 +127,7 @@ impl From<git2::Error> for Error {
             return Error::Cancelled;
         }
         if e.code() == git2::ErrorCode::Auth || m.contains("401") || m.contains("authentication") {
-            return msg("Your GitHub sign-in expired or was revoked. Sign out in Settings and sign in again.");
+            return crate::error::Error::GitHubSignIn;
         }
         if m.contains("403") || m.contains("permission") {
             return msg("GitHub didn't let this account write to the repository. Check you can push to it.");

@@ -9,6 +9,7 @@ import { api } from "../api";
 import { app } from "../app.svelte";
 import type { NoteMeta } from "../types";
 import Dialog from "./Dialog.svelte";
+import ImageViewer from "./ImageViewer.svelte";
 import Workspace from "./Workspace.svelte";
 
 const synced = () => status({ vault: githubVault, known: [githubVault] });
@@ -554,6 +555,23 @@ describe("on a phone", () => {
     await user.click(within(document.querySelector<HTMLElement>(".phone-head")!).getByRole("button", { name: "New folder" }));
     await user.type(screen.getByRole("textbox", { name: "Folder name" }), "Trips{Enter}");
     await waitFor(() => expect(app.current).toBe("Trips/Untitled.md"));
+    expect(app.toast).toBe("Made “Trips”.");
+  });
+
+  test("back steps out of Tasks to Today, and closes a sheet before the screen under it", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(tabs().getByRole("button", { name: "Today" }));
+    app.tab = "tasks";
+    await waitFor(() => expect(history.state?.wandika).toBe("sub"));
+    app.viewing = "attachments/Sync sketch.svg";
+    render(ImageViewer);
+    await waitFor(() => expect(history.state?.wandika).toBe("sheet"));
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await waitFor(() => expect(app.viewing).toBeNull());
+    expect(app.tab).toBe("tasks");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await waitFor(() => expect(app.tab).toBe("today"));
   });
 
   test("the Settings tab shows Settings in place; a page in it steps back with system back", async () => {

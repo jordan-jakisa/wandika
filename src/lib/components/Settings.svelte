@@ -155,10 +155,14 @@
       confirm: "Disconnect",
     });
     if (ok === null) return;
-    await app.flush();
-    await api.vaultDisconnectRemote();
-    await app.enterVault();
-    app.say("This vault is now only on this device.");
+    try {
+      await app.flush();
+      await api.vaultDisconnectRemote();
+      await app.enterVault();
+      app.say("This vault is now only on this device.");
+    } catch (e) {
+      app.say((e as Error).message);
+    }
   }
 
   async function signOut() {
@@ -171,7 +175,7 @@
       confirm: "Sign out",
     });
     if (ok === null) return;
-    await app.signOut();
+    await app.signOut().catch((e) => app.say((e as Error).message));
   }
 
   async function connect(provider: string) {
@@ -694,9 +698,10 @@
     overflow: visible;
   }
   /* The tab's page scrolls with the phone body, like the other tabs. */
+  /* The phone body already leaves room for the bar below. */
   .settings.embedded .pane-body {
     overflow: visible;
-    padding-bottom: calc(96px + var(--safe-bottom));
+    padding-bottom: var(--space-6);
   }
   .settings.embedded .nav-head {
     padding: 12px 20px 6px;
@@ -717,7 +722,7 @@
   .phone .sections {
     flex: 1;
     border: 0;
-    background: var(--sheet);
+    background: none;
   }
   .nav-head {
     display: flex;

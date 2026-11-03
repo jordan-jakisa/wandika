@@ -415,10 +415,15 @@ describe("refreshing", () => {
     expect(vi.mocked(api.today).mock.calls.length).toBe(calls);
   });
 
-  test("when Today fails, says why", async () => {
+  test("when Today fails, it says why on the screen and offers Try again", async () => {
     vi.mocked(api.today).mockRejectedValue(new Error("No connection."));
     render(TodayPanel);
-    await vi.waitFor(() => expect(app.toast).toBe("No connection."));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Today didn't load. No connection.");
+    expect(document.querySelector(".skeleton")).toBeNull();
+    vi.mocked(api.today).mockResolvedValue(todayFixture());
+    await userEvent.click(within(alert).getByRole("button", { name: "Try again" }));
+    await vi.waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
   });
 });
 

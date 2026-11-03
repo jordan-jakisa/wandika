@@ -20,10 +20,13 @@
   const SHORT: Record<string, string> = {
     github_rate_limit: "GitHub is busy. Tap to retry",
     github_down: "GitHub is down. Tap to retry",
-    github_not_found: "Repository not found",
+    github_not_found: "Repository not found. Tap to choose",
+    github_auth: "GitHub sign-in expired. Tap to sign in",
     no_access: "No access to the folder",
     disk_full: "Device is out of space",
   };
+  /** Failures a retry can't fix open the Settings page that can. */
+  const FIX: Record<string, "vault" | "account"> = { github_not_found: "vault", github_auth: "account" };
   const text = $derived(
     slow
       ? "Syncing…"
@@ -37,6 +40,8 @@
   );
 
   function tap() {
+    const fix = app.syncError && FIX[app.syncError.code];
+    if (fix) return app.openSettings(fix);
     if (app.syncError && !offline) app.say(app.syncError.message);
     void app.sync(true);
   }

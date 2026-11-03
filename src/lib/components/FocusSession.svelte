@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { sheetOpened } from "../backstack";
   import { Pause, Play } from "@lucide/svelte";
   import { api } from "../api";
   import { app } from "../app.svelte";
@@ -6,6 +7,8 @@
 
   /** A quiet room for one task: the time left, a slow breathing ring, and nothing else. */
   let dialogEl: HTMLDialogElement;
+  /** Gives back the session's place in history when it ends (phones). */
+  let release = () => {};
   let marking = $state(false);
 
   const R = 46;
@@ -16,8 +19,15 @@
   const title = $derived((focus.active?.text ?? "").replace(/(^|\s)#[\p{L}\p{N}_\-/]+/gu, "").replace(/\s+/g, " ").trim() || focus.active?.text || "");
 
   $effect(() => {
-    if (focus.active && !dialogEl.open) dialogEl.showModal();
-    else if (!focus.active && dialogEl.open) dialogEl.close();
+    if (focus.active && !dialogEl.open) {
+      dialogEl.showModal();
+      // Back ends the session, as Escape does.
+      release = sheetOpened(() => focus.stop());
+    } else if (!focus.active && dialogEl.open) {
+      dialogEl.close();
+      release();
+      release = () => {};
+    }
   });
 
   // A soft two-note bell when a round ends; nothing when sound isn't available.

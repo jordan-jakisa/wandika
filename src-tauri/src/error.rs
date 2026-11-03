@@ -1,6 +1,12 @@
 use serde::{Serialize, Serializer};
 use std::io::ErrorKind;
 
+/// What the device calls its settings app.
+#[cfg(target_os = "ios")]
+const SYSTEM_SETTINGS: &str = "Settings";
+#[cfg(not(target_os = "ios"))]
+const SYSTEM_SETTINGS: &str = "System Settings";
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("{0}")]
@@ -19,6 +25,11 @@ pub enum Error {
     Locked,
     #[error("A sync is already running.")]
     SyncBusy,
+    /// A task's line no longer holds the task the interface showed: the note changed meanwhile.
+    #[error("That task changed in its note, so the list is updated. Try again.")]
+    StaleTask,
+    #[error("Your GitHub sign-in expired or was revoked. Sign out in Settings, under Account, and sign in again.")]
+    GitHubSignIn,
     #[error("Sync stopped.")]
     Cancelled,
     #[error("Git: {0}")]
@@ -50,6 +61,8 @@ impl Error {
             Error::Offline => ("offline", self.to_string()),
             Error::Locked => ("locked", self.to_string()),
             Error::SyncBusy => ("sync_busy", self.to_string()),
+            Error::StaleTask => ("stale_task", self.to_string()),
+            Error::GitHubSignIn => ("github_auth", self.to_string()),
             Error::Cancelled => (
                 "cancelled",
                 "Sync stopped. Nothing changed on GitHub; the next sync picks up from here.".into(),
@@ -87,7 +100,7 @@ impl Error {
                 ErrorKind::StorageFull => ("disk_full", "This device is out of space. Free up some space and try again.".into()),
                 ErrorKind::PermissionDenied | ErrorKind::ReadOnlyFilesystem => (
                     "no_access",
-                    "Wandika isn't allowed to change that folder. Allow access in System Settings, or choose the folder again.".into(),
+                    format!("Wandika isn't allowed to change that folder. Allow access in {SYSTEM_SETTINGS}, or choose the folder again."),
                 ),
                 ErrorKind::NotFound => (
                     "not_found",
@@ -127,6 +140,13 @@ pub fn msg(s: impl Into<String>) -> Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stale_tasks_and_expired_sign_ins_have_codes_to_act_on() {
+        assert_eq!(Error::StaleTask.friendly(), ("stale_task", "That task changed in its note, so the list is updated. Try again.".into()));
+        assert_eq!(Error::GitHubSignIn.friendly().0, "github_auth");
+        assert!(Error::GitHubSignIn.friendly().1.contains("under Account"));
+    }
 
     #[test]
     fn raw_service_text_never_reaches_the_message() {

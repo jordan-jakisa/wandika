@@ -1,12 +1,13 @@
 import "@testing-library/jest-dom/vitest";
 import { isModal, resetApp, task } from "../../test/components-views";
-import { render, screen } from "@testing-library/svelte";
+import { render, screen, within } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import { flushSync } from "svelte";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { api } from "../api";
+import { api, AppError } from "../api";
 import { app } from "../app.svelte";
 import { focus } from "../focus.svelte";
+import Dialog from "./Dialog.svelte";
 import TaskEditor from "./TaskEditor.svelte";
 
 beforeEach(resetApp);
@@ -102,4 +103,39 @@ test("a done task offers no focus session", () => {
   app.editingTask = task("A.md", 0, "Done", { done: true });
   flushSync();
   expect(screen.queryByRole("button", { name: "Focus" })).not.toBeInTheDocument();
+});
+
+test("with unsaved changes, Cancel and Escape ask before throwing them away", async () => {
+  const user = open("Call Amina");
+  render(Dialog);
+  await user.type(screen.getByLabelText("Notes"), "Bring the keys");
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  const ask = await screen.findByRole("dialog", { name: "Discard your changes to this task?" });
+  await user.click(within(ask).getByRole("button", { name: "Keep editing" }));
+  expect(app.editingTask).not.toBeNull();
+  await user.keyboard("{Escape}");
+  await user.click(await screen.findByRole("button", { name: "Discard" }));
+  await vi.waitFor(() => expect(app.editingTask).toBeNull());
+});
+
+test("a task that only moved in its note is saved where it is now", async () => {
+  const moved = { ...task("Projects/Launch.md", 9, "Call Amina"), details: "" };
+  const edit = vi
+    .spyOn(api, "taskEdit")
+    .mockRejectedValueOnce(new AppError("That task changed in its note, so the list is updated. Try again.", "stale_task"))
+    .mockResolvedValueOnce();
+  vi.spyOn(api, "tasksVault").mockResolvedValue([moved]);
+  const user = open("Call Amina");
+  await user.click(screen.getByRole("button", { name: "Tomorrow" }));
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  await vi.waitFor(() => expect(app.editingTask).toBeNull());
+  expect(edit.mock.calls[1].slice(0, 2)).toEqual(["Projects/Launch.md", 9]);
+});
+
+test("a task whose words changed in its note says to open it again", async () => {
+  vi.spyOn(api, "taskEdit").mockRejectedValue(new AppError("That task changed in its note, so the list is updated. Try again.", "stale_task"));
+  vi.spyOn(api, "tasksVault").mockResolvedValue([]);
+  const user = open("Call Amina");
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("This task changed in its note. Close this and open it again to edit what it says now.");
 });

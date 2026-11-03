@@ -2,6 +2,7 @@
   import { ExternalLink, FileText, ListPlus, X } from "@lucide/svelte";
   import { api, openUrl } from "../api";
   import { app } from "../app.svelte";
+  import { sheetOpened } from "../backstack";
   import { mailUrl } from "../mailLinks";
   import { emailTask } from "../taskText";
   import type { MailBody } from "../types";
@@ -9,6 +10,8 @@
   /** One email, read in Wandika. Its HTML shows in a frame that runs no scripts and loads nothing
    *  from the web until you ask for images, so opening it tells no one you read it. */
   let dialogEl: HTMLDialogElement;
+  /** Gives back the sheet's place in history when it closes (phones). */
+  let release = () => {};
   let frame = $state<HTMLIFrameElement | null>(null);
   let mail = $state<MailBody | null>(null);
   let failed = $state<string | null>(null);
@@ -42,8 +45,11 @@
         (e) => app.reading === r && (failed = (e as Error).message),
       );
       dialogEl.showModal();
+      release = sheetOpened(() => (app.reading = null));
     } else if (!r && dialogEl.open) {
       dialogEl.close();
+      release();
+      release = () => {};
     }
   });
 
