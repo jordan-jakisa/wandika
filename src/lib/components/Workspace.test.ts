@@ -168,6 +168,46 @@ describe("on a desktop", () => {
     expect(screen.getByRole("complementary", { name: "Today" })).toBeInTheDocument();
   });
 
+  test("Today can fill the window, in columns, and Escape or the button brings the notes back", async () => {
+    const user = userEvent.setup();
+    setWidth(1600);
+    renderWorkspace();
+    await user.click(within(screen.getByRole("complementary", { name: "Today" })).getByRole("button", { name: "Full screen" }));
+    expect(app.todayFull).toBe(true);
+    expect(screen.queryByRole("complementary", { name: "Vault" })).not.toBeInTheDocument();
+    expect(document.querySelector(".today.full")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Full screen" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Exit full screen" }));
+    expect(app.todayFull).toBe(false);
+    expect(sidebar()).toBeInTheDocument();
+    app.todayFull = true;
+    await user.keyboard("{Escape}");
+    expect(app.todayFull).toBe(false);
+  });
+
+  test("in full-screen Today, Escape closes an open dialog first", async () => {
+    setWidth(1600);
+    renderWorkspace();
+    app.todayFull = true;
+    const d = document.createElement("dialog");
+    document.body.append(d);
+    d.setAttribute("open", "");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(app.todayFull).toBe(true);
+    d.remove();
+  });
+
+  test("Open today's note leaves full screen for the note", async () => {
+    const user = userEvent.setup();
+    const daily = vi.spyOn(app, "openDaily").mockResolvedValue();
+    setWidth(1600);
+    app.todayFull = true;
+    renderWorkspace();
+    await user.click(await screen.findByRole("button", { name: "Open today's note" }));
+    expect(app.todayFull).toBe(false);
+    expect(daily).toHaveBeenCalled();
+  });
+
   test("without room, Today is a view in the sidebar instead of a column", async () => {
     const user = userEvent.setup();
     setWidth(1000);

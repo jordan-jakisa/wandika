@@ -1,15 +1,18 @@
 <script lang="ts">
-  import { CalendarPlus, CircleCheck, ExternalLink, FileText, ListPlus, MailOpen, NotebookPen } from "@lucide/svelte";
+  import { CalendarPlus, CircleCheck, ExternalLink, FileText, ListPlus, MailOpen, Maximize2, NotebookPen } from "@lucide/svelte";
   import { untrack } from "svelte";
   import { api, openUrl } from "../api";
   import { app } from "../app.svelte";
   import { clock } from "../clock.svelte";
   import { mailUrl } from "../mailLinks";
-  import { emailTask } from "../taskText";
+  import { composeTask, emailTask, parseTask } from "../taskText";
+  import { focus } from "../focus.svelte";
   import type { CalEvent, MailItem } from "../types";
   import Menu from "./Menu.svelte";
   import TaskRow from "./TaskRow.svelte";
 
+  /** `full`: Today fills the window, in columns. `expandable`: the column offers that. */
+  let { full = false, expandable = false }: { full?: boolean; expandable?: boolean } = $props();
   const data = $derived(app.today);
   let busy = $state<string | null>(null);
 
@@ -99,10 +102,22 @@
   </ul>
 {/snippet}
 
-<section class="today" aria-labelledby="today-h" aria-busy={!data}>
+<section class="today" class:full aria-labelledby="today-h" aria-busy={!data}>
   <header>
-    <h2 id="today-h">{heading}</h2>
-    <button class="btn primary" onclick={() => app.openDaily()}><NotebookPen size={16} /> Open today's note</button>
+    <div class="title-row">
+      <h2 id="today-h">{heading}</h2>
+      {#if expandable}
+        <button class="icon-btn" onclick={() => (app.todayFull = true)} aria-label="Full screen" title="Full screen">
+          <Maximize2 size={16} />
+        </button>
+      {/if}
+    </div>
+    <button
+      class="btn primary"
+      onclick={() => {
+        app.todayFull = false;
+        void app.openDaily();
+      }}><NotebookPen size={16} /> Open today's note</button>
   </header>
 
   {#if !calendarConnected && !mailConnected && data}
@@ -126,7 +141,7 @@
   {/if}
 
   {#if calendarConnected}
-  <section aria-labelledby="cal-h">
+  <section class="cal" aria-labelledby="cal-h">
     <div class="section-head">
       <h3 id="cal-h">Calendar</h3>
       {#if data?.events.length}
@@ -171,7 +186,7 @@
   </section>
   {/if}
 
-  <section aria-labelledby="tasks-h">
+  <section class="due" aria-labelledby="tasks-h">
     <div class="section-head">
       <h3 id="tasks-h">{hasOverdue ? "Due and overdue" : "Due today"}</h3>
       <button class="link-btn" onclick={() => (app.tab = "tasks")}>All tasks</button>
@@ -184,8 +199,16 @@
             text={t.text}
             done={t.done}
             due={t.due}
+            details={t.details}
             where={t.title}
             onOpen={() => app.open(t.path)}
+            onEdit={() => (app.editingTask = t)}
+            onPin={async () => {
+              await api.taskEdit(t.path, t.line, t.text, composeTask(t.text, { pinned: !parseTask(t.text).pinned }), t.details);
+              app.edited();
+              await load();
+            }}
+            onFocus={() => focus.start({ text: parseTask(t.text).name, task: t })}
             onToggle={async () => {
               await api.taskToggle(t.path, t.line, t.text);
               app.edited();
@@ -200,6 +223,7 @@
             done={t.done}
             due={t.due}
             where={t.source === "apple" ? `Reminders, ${t.list}` : `Google Tasks, ${t.list}`}
+            onFocus={() => focus.start({ text: t.title, remote: t })}
             onToggle={async () => {
               await api.remoteTaskToggle(t.source, t.list_id, t.id, !t.done);
               await load(true);
@@ -217,7 +241,7 @@
   </section>
 
   {#if mailConnected}
-  <section aria-labelledby="mail-h">
+  <section class="inbox" aria-labelledby="mail-h">
     <div class="section-head">
       <h3 id="mail-h">Inbox</h3>
     </div>
@@ -275,6 +299,37 @@
   header {
     display: grid;
     gap: 12px;
+  }
+  .title-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-2);
+  }
+  /* Full screen: the day on the left, the inbox beside it, the whole thing centred. */
+  .today.full {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: var(--space-4) var(--space-8) var(--space-8);
+    column-gap: var(--space-8);
+  }
+  @media (min-width: 960px) {
+    .today.full {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+      grid-auto-flow: dense;
+    }
+    .today.full > :not(.cal, .due, .inbox) {
+      grid-column: 1 / -1;
+    }
+    .today.full > .cal,
+    .today.full > .due {
+      grid-column: 1;
+    }
+    .today.full > .inbox {
+      grid-column: 2;
+      grid-row: span 3;
+      align-self: start;
+    }
   }
   h2 {
     margin: 0;

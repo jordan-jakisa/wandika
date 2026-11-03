@@ -17,6 +17,7 @@
     ChevronLeft,
     FolderPlus,
     RefreshCw,
+    Minimize2,
   } from "@lucide/svelte";
   import { api } from "../api";
   import Menu from "./Menu.svelte";
@@ -74,6 +75,11 @@
   const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform) && !("ontouchend" in document);
 
   function onKey(e: KeyboardEvent) {
+    // Escape leaves full-screen Today, unless a dialog over it takes the key first.
+    if (e.key === "Escape" && app.todayFull && !document.querySelector("dialog[open]")) {
+      app.todayFull = false;
+      return;
+    }
     const mod = e.metaKey || e.ctrlKey;
     if (!mod) return;
     const k = e.key.toLowerCase();
@@ -300,7 +306,16 @@
   </div>
 {/snippet}
 
-{#if wide}
+{#if wide && app.todayFull}
+  <div class="today-full" class:mac={isMac}>
+    <header class="full-head" data-tauri-drag-region>
+      <button class="icon-btn" onclick={() => (app.todayFull = false)} aria-label="Exit full screen" title="Exit full screen (Esc)">
+        <Minimize2 size={18} />
+      </button>
+    </header>
+    <div class="full-scroll"><TodayPanel full /></div>
+  </div>
+{:else if wide}
   <div
     class="shell"
     class:mac={isMac}
@@ -398,7 +413,7 @@
           label="Resize the Today column"
           onchange={(w) => setCols({ today: w })}
         />
-        <div class="today-scroll"><TodayPanel /></div>
+        <div class="today-scroll"><TodayPanel expandable /></div>
       </aside>
     {/if}
     <StatusBar />
@@ -505,6 +520,25 @@
 {/if}
 
 <style>
+  .today-full {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    height: 100dvh;
+    background: var(--paper);
+  }
+  .full-head {
+    display: flex;
+    justify-content: flex-end;
+    padding: 10px 12px 0;
+  }
+  .today-full.mac .full-head {
+    min-height: var(--titlebar);
+    align-items: center;
+    padding-top: 0;
+  }
+  .full-scroll {
+    overflow-y: auto;
+  }
   .shell {
     display: grid;
     transition: grid-template-columns var(--dur-base) var(--ease-out);

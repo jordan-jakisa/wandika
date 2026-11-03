@@ -421,3 +421,41 @@ describe("refreshing", () => {
     await vi.waitFor(() => expect(app.toast).toBe("No connection."));
   });
 });
+
+describe("due tasks can be edited, pinned and focused on", () => {
+  test("the row's menu opens the editor, pins it and starts a focus session", async () => {
+    const { focus } = await import("../focus.svelte");
+    const start = vi.spyOn(focus, "start").mockImplementation(() => {});
+    const edit = vi.spyOn(api, "taskEdit").mockResolvedValue();
+    const day = clock.today;
+    const due = task("Projects/Launch.md", 4, `Call Amina 📅 ${day}`, { due: day, details: "the lease" });
+    vi.mocked(api.tasksVault).mockResolvedValue([due]);
+    const { user } = await setup(todayFixture({ tasks: [due] }));
+    const actions = () => screen.getByRole("button", { name: "Actions for Call Amina" });
+    await user.click(actions());
+    await user.click(screen.getByRole("menuitem", { name: "Edit" }));
+    expect(app.editingTask).toEqual(due);
+    await user.click(actions());
+    await user.click(screen.getByRole("menuitem", { name: "Pin to top" }));
+    expect(edit).toHaveBeenCalledWith("Projects/Launch.md", 4, `Call Amina 📅 ${day}`, `Call Amina 📌 📅 ${day}`, "the lease");
+    await user.click(actions());
+    await user.click(screen.getByRole("menuitem", { name: "Focus on this" }));
+    expect(start).toHaveBeenCalledWith(expect.objectContaining({ text: "Call Amina", task: due }));
+  });
+
+  test("a Google task can be focused on too", async () => {
+    const { focus } = await import("../focus.svelte");
+    const start = vi.spyOn(focus, "start").mockImplementation(() => {});
+    const r = remote({ due: clock.today });
+    const { user } = await setup(todayFixture({ remote_tasks: [r] }));
+    await user.click(screen.getByRole("button", { name: `Actions for ${r.title}` }));
+    await user.click(screen.getByRole("menuitem", { name: "Focus on this" }));
+    expect(start).toHaveBeenCalledWith({ text: r.title, remote: r });
+    expect(screen.queryByRole("menuitem", { name: "Edit" })).not.toBeInTheDocument();
+  });
+
+  test("only the Today column offers full screen", async () => {
+    await setup();
+    expect(screen.queryByRole("button", { name: "Full screen" })).not.toBeInTheDocument();
+  });
+});

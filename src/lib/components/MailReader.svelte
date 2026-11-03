@@ -173,6 +173,29 @@
   .reader::backdrop {
     background: var(--scrim);
   }
+  @media (max-width: 600px) {
+    .reader[open] {
+      width: 100vw;
+      max-width: 100vw;
+      height: 100dvh;
+      max-height: 100dvh;
+      margin: 0;
+      border: 0;
+      border-radius: 0;
+      padding: var(--safe-top) 0 0;
+    }
+    header,
+    .from,
+    .actions,
+    .body {
+      padding-left: var(--space-4);
+      padding-right: var(--space-4);
+    }
+    .actions .btn {
+      width: auto;
+      flex: 1 1 auto;
+    }
+  }
   :global(html[data-platform="ios"]) .reader[open],
   :global(html[data-platform="android"]) .reader[open] {
     width: 100vw;
