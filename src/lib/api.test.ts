@@ -210,13 +210,23 @@ describe("errors from the core become AppError", () => {
     await expect(api.status()).rejects.toMatchObject({ message: "Failed to fetch", code: "message" });
   });
 
+  test("a browser exception with a number code is a plain message", async () => {
+    const { api, codeOf } = await load();
+    mock.invoke.mockRejectedValue(new DOMException("The operation was aborted.", "AbortError"));
+    const e = await api.status().catch((x) => x);
+    expect(e.message).toBe("The operation was aborted.");
+    expect(codeOf(e)).toBe("message");
+  });
+
   test("anything else is turned into text", async () => {
     const { api } = await load();
     mock.invoke.mockRejectedValueOnce(42);
     await expect(api.status()).rejects.toMatchObject({ message: "42", code: "message" });
     mock.invoke.mockRejectedValueOnce(null);
     await expect(api.status()).rejects.toMatchObject({ message: "null", code: "message" });
-    mock.invoke.mockRejectedValueOnce({ message: "no code" });
+    mock.invoke.mockRejectedValueOnce({ message: "No code." });
+    await expect(api.status()).rejects.toMatchObject({ message: "No code.", code: "message" });
+    mock.invoke.mockRejectedValueOnce({ reason: "?" });
     await expect(api.status()).rejects.toMatchObject({ message: "[object Object]", code: "message" });
   });
 
