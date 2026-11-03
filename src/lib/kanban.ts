@@ -74,16 +74,18 @@ export function isBoard(text: string) {
 }
 
 export function parse(text: string): Board {
-  const lines = text.split("\n");
+  // Files saved on Windows end lines with \r\n; read them the same, write them back with \n.
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
   let i = 0;
-  let frontmatter = "";
+  let yaml: string[] = [];
   if (lines[0] === "---") {
     const end = lines.indexOf("---", 1);
     if (end > 0) {
-      frontmatter = lines.slice(0, end + 1).join("\n");
+      yaml = lines.slice(0, end + 1);
       i = end + 1;
     }
   }
+  const above: string[] = [];
   const lanes: Lane[] = [];
   let lane: Lane | null = null;
   let card: Card | null = null;
@@ -97,7 +99,10 @@ export function parse(text: string): Board {
       card = null;
       continue;
     }
-    if (!lane) continue;
+    if (!lane) {
+      above.push(line);
+      continue;
+    }
     if (line.trim() === "**Complete**") {
       lane.complete = true;
       continue;
@@ -116,6 +121,10 @@ export function parse(text: string): Board {
     if (line.trim()) card = null;
   }
   const tail = lines.slice(i).join("\n");
+  // Text above the first lane is kept with the frontmatter, so saving the board doesn't lose it.
+  while (above.length && !above[0].trim()) above.shift();
+  while (above.length && !above[above.length - 1].trim()) above.pop();
+  const frontmatter = [...yaml, ...(yaml.length && above.length ? [""] : []), ...above].join("\n");
   return { frontmatter, lanes, tail };
 }
 
