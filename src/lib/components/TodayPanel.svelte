@@ -9,7 +9,6 @@
   import TaskRow from "./TaskRow.svelte";
 
   const data = $derived(app.today);
-  let loading = $state(!app.today);
   let busy = $state<string | null>(null);
 
   const c = $derived(app.status?.connectors);
@@ -37,9 +36,7 @@
   });
 
   async function load(force = false) {
-    loading = true;
     await app.loadToday(force);
-    loading = false;
   }
 
   // A new connection always fetches; otherwise the shared two-minute cache applies.
