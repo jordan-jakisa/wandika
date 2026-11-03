@@ -85,6 +85,12 @@ Save in its top bar and Pin as a switch. Task rows swipe on both phones: right f
 Archive and Delete. Back gestures follow the platform (iOS edge swipe, Android system back), and
 text follows the phone's text size setting.
 
+Sheets (2026-11-03): on phones, the task sheet and the drawing pad rise from the bottom and go back
+down, an email pushes in from the right and back out, and questions and pictures fade; each keeps its
+content while it leaves. Android's back closes the sheet on top first. Haptics come from Tauri's
+haptics plugin, one kind per meaning: a selection tick when a swipe, pull or long-press reaches its
+point, a light tap when a task is ticked, success when a focus round or the day's tasks finish.
+
 Drawings (Jordan, 2026-11-03): a full-screen pad with Cancel, Undo and Done on top, the drawing on
 its own light paper, and three inks, two widths, an eraser and Clear below. A pen draws with
 pressure and, once used, makes a resting palm draw nothing. The drawing is saved as an SVG in the

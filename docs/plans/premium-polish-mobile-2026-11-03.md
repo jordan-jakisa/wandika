@@ -107,3 +107,32 @@
 - Notes is a plain list, as in Files. Apple's grouped style is for settings-like screens.
 - The drawing paper stays light in dark mode, as the saved file does everywhere else.
 - Android keeps its flat Material rows and its bar. The earlier pass checked them on the Pixel.
+
+## Result (2026-11-03, after all four tiers)
+
+| # | Criterion | iPhone | Android | What changed |
+|---|---|---|---|---|
+| 1 | Anticipates needs | 2 | 2 | Back closes the sheet on top and steps out of sub-screens. Unsaved task edits are kept until you say to discard them. Tasks keeps its last list, and Settings pages open at their top. |
+| 2 | Intentional transitions | 2 | 2 | Settings pages push in. Sheets enter and leave the same way. Rows fold over their real height. The pull row eases away, and toasts fade with their words. |
+| 3 | Delight | 2 | 2 | Haptics on both phones through Tauri's plugin, one kind per meaning. "All done for today" and the end of a focus round get a success haptic. |
+| 4 | Knows when not to animate | 2 | 2 | Unchanged: every new motion reads the tokens, so reduced motion makes it instant. |
+| 5 | Invisible consistency | 2 | 2 | One title style and page top. Round checkboxes and a tinted back on iPhone. Filled search fields. 44 px targets. Shared separators, skeletons and radii. |
+| 6 | Empty states | 2 | 2 | Today and Tasks keep a failure on screen with Try again. Empty states say what to tap. |
+| 7 | Rewards discovery | 2 | 2 | Swiping a task is taught once. The long-press tip shows where the list is. |
+| 8 | Prescriptive errors | 2 | 2 | A stale task reloads itself. Sync failures that a retry can't fix open the right Settings page. Manual syncs say why they failed, and the Google sign-in and save banner errors are plain. |
+| 9 | Performance | 2 | 2 | Tasks and Search no longer flash empty. |
+
+Checked:
+- 1,331 interface tests and 181 Rust tests pass.
+- The type-check is clean.
+- The iPhone Rust core compiles.
+- Screenshots at 390 × 844, iOS and Android, light and dark.
+
+Not yet on a phone:
+- The Android build with the haptics plugin is only checked when the Pixel build runs.
+- Haptics can only be felt on the phones themselves.
+
+Decided against, with reasons:
+- **One shared iOS top bar class.** The task sheet's bar carries a grabber and the drawing pad's carries Undo, and both now match in look. A shared class would only move code around.
+- **One style for section labels.** The headings in Today and Tasks title content, while the labels in Settings title groups of options. iOS styles these two differently too.
+- **The parent screen staying mounted under Tasks, Projects and Graph.** Those screens push in. Back is the system gesture, which returns at once, as the Notes back row does.
