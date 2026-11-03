@@ -264,7 +264,7 @@
   {/if}
   {#if app.tooBig.length}
     <div class="banner" role="status">
-      <p>{app.tooBig.length === 1 ? "One file is" : `${app.tooBig.length} files are`} over 50 MB and stay on this device only: {app.tooBig.map(titleOf).join(", ")}.</p>
+      <p>{app.tooBig.length === 1 ? "One file is over 50 MB and stays" : `${app.tooBig.length} files are over 50 MB and stay`} on this device only: {app.tooBig.map(titleOf).join(", ")}.</p>
       <button class="btn" onclick={() => (app.tooBig = [])}>Dismiss</button>
     </div>
   {/if}
