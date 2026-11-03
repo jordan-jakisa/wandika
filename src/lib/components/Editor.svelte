@@ -198,14 +198,18 @@
     boardText = null;
     const state = EditorState.create({
       doc: text,
-      extensions: extensions({
-        getTitles: () => app.titles,
-        onOpenLink: (target) => void app.follow(target),
-        onTag: (tag) => app.showTag(tag),
-        onChange,
-        getPath: () => loadedPath ?? path,
-        onFiles: addFiles,
-      }),
+      extensions: [
+        extensions({
+          getTitles: () => app.titles,
+          onOpenLink: (target) => void app.follow(target),
+          onTag: (tag) => app.showTag(tag),
+          onChange,
+          getPath: () => loadedPath ?? path,
+          onFiles: addFiles,
+        }),
+        // Screen readers name the field, as they do the title above it.
+        EditorView.contentAttributes.of({ "aria-label": "Note text" }),
+      ],
     });
     if (view) view.setState(state);
     else view = new EditorView({ state, parent: host });
