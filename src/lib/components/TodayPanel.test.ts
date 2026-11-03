@@ -459,3 +459,14 @@ describe("due tasks can be edited, pinned and focused on", () => {
     expect(screen.queryByRole("button", { name: "Full screen" })).not.toBeInTheDocument();
   });
 });
+
+describe("public builds", () => {
+  test("without Gmail, Google brings no inbox; Outlook still does", async () => {
+    app.status = { ...connected(), configured: { ...connected().configured, gmail: false } };
+    await setup(todayFixture({ mail: [] }));
+    expect(screen.queryByRole("heading", { name: "Inbox" })).not.toBeInTheDocument();
+    app.status = { ...connected({ google: "jordan@example.com", microsoft: "j@outlook.com" }), configured: { ...connected().configured, gmail: false } };
+    flushSync();
+    expect(screen.getByRole("heading", { name: "Inbox" })).toBeInTheDocument();
+  });
+});

@@ -15,7 +15,15 @@ use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
 
 pub const KEY: &str = "google";
-const SCOPES: &str = "openid email https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/tasks";
+/// Calendar and Tasks always; Gmail only in Jordan's own builds (see `config::gmail`).
+fn scopes(gmail: bool) -> String {
+    let mut s = String::from("openid email");
+    if gmail {
+        s.push_str(" https://www.googleapis.com/auth/gmail.readonly");
+    }
+    s.push_str(" https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/tasks");
+    s
+}
 const TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 
 fn client() -> Result<(&'static str, Option<&'static str>)> {
@@ -42,7 +50,7 @@ pub fn auth_url(redirect_uri: &str, pkce: &Pkce, state: &str) -> Result<String> 
         .append_pair("client_id", client_id)
         .append_pair("redirect_uri", redirect_uri)
         .append_pair("response_type", "code")
-        .append_pair("scope", SCOPES)
+        .append_pair("scope", &scopes(crate::config::gmail()))
         .append_pair("code_challenge", &pkce.challenge)
         .append_pair("code_challenge_method", "S256")
         .append_pair("state", state)
@@ -414,6 +422,15 @@ mod tests {
     }
 
     #[test]
+    fn public_builds_ask_google_for_calendar_and_tasks_only() {
+        let own = scopes(true);
+        assert!(own.contains("gmail.readonly") && own.contains("calendar.readonly") && own.contains("/auth/tasks"));
+        let public = scopes(false);
+        assert!(!public.contains("gmail") && public.contains("calendar.readonly") && public.contains("/auth/tasks"));
+        assert!(public.starts_with("openid email "));
+    }
+
+    #[test]
     fn unescapes_gmail_entities_once() {
         assert_eq!(html_unescape("It&#39;s &quot;fine&quot; &lt;ok&gt;&nbsp;now"), "It's \"fine\" <ok> now");
         assert_eq!(html_unescape("&amp;lt; stays literal"), "&lt; stays literal", "never unescaped twice");
@@ -541,8 +558,7 @@ mod tests {
                 assert_eq!(q["redirect_uri"], "http://127.0.0.1:5555");
                 assert_eq!((q["code_challenge"].as_str(), q["code_challenge_method"].as_str()), ("c", "S256"));
                 assert_eq!((q["state"].as_str(), q["access_type"].as_str(), q["prompt"].as_str()), ("st", "offline", "consent"));
-                assert_eq!(q["scope"], SCOPES);
-                assert!(SCOPES.contains("gmail.readonly") && SCOPES.contains("calendar.readonly") && SCOPES.contains("/auth/tasks"));
+                assert_eq!(q["scope"], scopes(crate::config::gmail()));
             }
             Err(e) => assert!(e.to_string().starts_with("Google isn't set up in this build yet."), "{e}"),
         }

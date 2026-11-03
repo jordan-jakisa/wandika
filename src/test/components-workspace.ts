@@ -69,7 +69,7 @@ export const localVault: VaultConfig = { id: "local/1", name: "Notes", folder: n
 /** A status as the Rust core reports it; `patch` changes what a test needs. */
 export function status(patch: Partial<Status> = {}): Status {
   return {
-    configured: { github: true, google: true, microsoft: true, apple: true },
+    configured: { github: true, google: true, microsoft: true, apple: true, gmail: true },
     user: { login: "jordan-jakisa", name: "Jordan", avatar_url: "" },
     vault: localVault,
     known: [localVault],

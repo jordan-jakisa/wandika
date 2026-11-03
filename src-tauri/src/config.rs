@@ -31,6 +31,16 @@ pub fn google_mobile_client_id() -> Result<&'static str> {
     need(option_env!("WANDIKA_GOOGLE_IOS_CLIENT_ID"), "Google")
 }
 
+/// Public builds (the downloads on the website, TestFlight) leave Gmail out: reading mail is a
+/// restricted Google scope, so only Jordan's own builds ask for it. Set WANDIKA_PUBLIC=1 to build one.
+pub fn gmail() -> bool {
+    !public(option_env!("WANDIKA_PUBLIC"))
+}
+
+fn public(flag: Option<&str>) -> bool {
+    flag.is_some_and(|v| !matches!(v.trim(), "" | "0" | "false"))
+}
+
 pub fn microsoft_client_id() -> Result<&'static str> {
     need(option_env!("WANDIKA_MICROSOFT_CLIENT_ID"), "Outlook")
 }
@@ -41,12 +51,21 @@ pub fn configured() -> serde_json::Value {
         "google": if cfg!(mobile) { google_mobile_client_id().is_ok() } else { google_desktop().is_ok() },
         "microsoft": microsoft_client_id().is_ok(),
         "apple": cfg!(any(target_os = "macos", target_os = "ios")),
+        "gmail": gmail(),
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_public_build_is_marked_by_a_set_flag() {
+        for (flag, is) in [(None, false), (Some(""), false), (Some("0"), false), (Some("false"), false), (Some("1"), true), (Some("yes"), true)] {
+            assert_eq!(public(flag), is, "{flag:?}");
+        }
+        assert_eq!(configured()["gmail"], gmail());
+    }
 
     #[test]
     fn a_missing_or_blank_client_id_says_how_to_set_it_up() {
@@ -66,7 +85,8 @@ mod tests {
         assert_eq!(v["microsoft"], microsoft_client_id().is_ok());
         assert_eq!(v["google"], google_desktop().is_ok(), "the Mac uses the desktop client");
         assert_eq!(v["apple"], cfg!(any(target_os = "macos", target_os = "ios")));
-        assert_eq!(v.as_object().unwrap().len(), 4);
+        assert_eq!(v["gmail"], gmail());
+        assert_eq!(v.as_object().unwrap().len(), 5);
     }
 
     #[test]

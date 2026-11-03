@@ -219,7 +219,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const handlers: Record<string, (a: Args) => unknown> = {
   status: () => ({
-    configured: { github: true, google: true, microsoft: true, apple: true },
+    configured: { github: true, google: true, microsoft: true, apple: true, gmail: true },
     user: signedIn ? { login: "jordan-jakisa", name: "Jordan", avatar_url: "" } : null,
     vault,
     known,

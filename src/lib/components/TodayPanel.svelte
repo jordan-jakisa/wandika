@@ -18,7 +18,9 @@
 
   const c = $derived(app.status?.connectors);
   const calendarConnected = $derived(!!c && (!!c.google || !!c.microsoft || c.apple_calendar === "granted"));
-  const mailConnected = $derived(!!c && (!!c.google || !!c.microsoft));
+  // Public builds have no Gmail; Google there is Calendar and Tasks.
+  const gmail = $derived(app.status?.configured.gmail !== false);
+  const mailConnected = $derived(!!c && ((gmail && !!c.google) || !!c.microsoft));
   const isDue = (t: { due: string | null }) => !!t.due && t.due <= clock.today;
   const dueTasks = $derived((data?.tasks ?? []).filter(isDue));
   const remoteDue = $derived((data?.remote_tasks ?? []).filter(isDue));

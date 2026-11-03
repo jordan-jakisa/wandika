@@ -675,9 +675,12 @@ pub async fn today(app: S<'_>, date: Option<String>) -> Result<Today> {
     let has = |key: &str| app.secrets.get(key).is_some();
 
     if has(google::KEY) {
+        let gmail = async {
+            if crate::config::gmail() { google::mail(&app.http, &app.secrets).await } else { Ok(Vec::new()) }
+        };
         let (ev, ml, tk) = futures::join!(
             google::events(&app.http, &app.secrets, from, to),
-            google::mail(&app.http, &app.secrets),
+            gmail,
             google::tasks(&app.http, &app.secrets)
         );
         collect(&mut out, "Google Calendar", ev, |o, v| o.events.extend(v));
@@ -751,6 +754,7 @@ pub async fn external_changes(app: S<'_>) -> Result<Vec<crate::mcp::Change>> {
 #[tauri::command]
 pub async fn mail_read(app: S<'_>, source: String, id: String) -> Result<MailBody> {
     match source.as_str() {
+        "google" if !crate::config::gmail() => Err(msg("Gmail isn't part of this version of Wandika.")),
         "google" => google::mail_body(&app.http, &app.secrets, &id).await,
         "microsoft" => microsoft::mail_body(&app.http, &app.secrets, &id, true).await,
         _ => Err(msg("Unknown mailbox.")),
@@ -760,6 +764,7 @@ pub async fn mail_read(app: S<'_>, source: String, id: String) -> Result<MailBod
 #[tauri::command]
 pub async fn mail_to_note(app: S<'_>, source: String, id: String) -> Result<String> {
     let m = match source.as_str() {
+        "google" if !crate::config::gmail() => return Err(msg("Gmail isn't part of this version of Wandika.")),
         "google" => google::mail_body(&app.http, &app.secrets, &id).await?,
         "microsoft" => microsoft::mail_body(&app.http, &app.secrets, &id, false).await?,
         _ => return Err(msg("Unknown mailbox.")),

@@ -28,7 +28,8 @@ export interface VaultConfig {
 }
 
 export interface Status {
-  configured: { github: boolean; google: boolean; microsoft: boolean; apple: boolean };
+  /** `gmail`: false in public builds, which ask Google for Calendar and Tasks only. */
+  configured: { github: boolean; google: boolean; microsoft: boolean; apple: boolean; gmail: boolean };
   user: User | null;
   vault: VaultConfig | null;
   known: VaultConfig[];
