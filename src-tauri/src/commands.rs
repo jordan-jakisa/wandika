@@ -857,4 +857,425 @@ mod tests {
         assert!(text.contains("- All day Standup\n") && text.contains("- All day Standup review\n"), "{text}");
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    /// A vault in the app's own storage, open, with its files folder.
+    fn open_vault(a: &tauri::App<MockRuntime>) -> std::path::PathBuf {
+        block_on(vault_create_local(a.state(), "Notes".into(), None)).unwrap();
+        a.state::<App>().root().unwrap()
+    }
+
+    fn put(root: &std::path::Path, rel: &str, text: &str) {
+        let path = root.join(rel);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    }
+
+    #[test]
+    fn status_shows_the_vault_sign_in_and_connections() {
+        let (a, dir) = app("status");
+        let s = serde_json::to_value(block_on(status(a.state())).unwrap()).unwrap();
+        assert_eq!(s["vault"], Value::Null);
+        assert_eq!(s["encryption"], Value::Null);
+        assert_eq!(s["last_sync"], Value::Null);
+        assert_eq!(s["connectors"]["google"], Value::Null);
+        assert!(s["configured"].is_object());
+        assert!(s["connectors"]["apple_calendar"].is_string());
+
+        // A user saved without a token in the keychain is not signed in.
+        a.state::<App>().update_settings(|s| s.user = Some(User { login: "amina".into(), name: None, avatar_url: "u".into() })).unwrap();
+        assert_eq!(serde_json::to_value(block_on(status(a.state())).unwrap()).unwrap()["user"], Value::Null);
+        a.state::<App>().secrets.set(GITHUB_KEY, "gho").unwrap();
+        a.state::<App>().secrets.set_json(google::KEY, &oauth::TokenSet { access_token: "a".into(), refresh_token: None, expires_at: 0, account: Some("amina@gmail.com".into()) }).unwrap();
+        a.state::<App>().secrets.set_json(microsoft::KEY, &oauth::TokenSet { access_token: "a".into(), refresh_token: None, expires_at: 0, account: None }).unwrap();
+        open_vault(&a);
+        let s = serde_json::to_value(block_on(status(a.state())).unwrap()).unwrap();
+        assert_eq!(s["user"]["login"], "amina");
+        assert_eq!(s["vault"]["name"], "Notes");
+        assert_eq!(s["known"].as_array().unwrap().len(), 1);
+        assert_eq!(s["encryption"], json!({ "set_up": false, "unlocked": false, "folders": [] }));
+        assert_eq!(s["connectors"]["google"], "amina@gmail.com");
+        assert_eq!(s["connectors"]["microsoft"], "Connected", "an account without an address still shows as connected");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn local_vaults_are_named_switched_forgotten_and_closed() {
+        let (a, dir) = app("vaults");
+        assert_eq!(block_on(vault_create_local(a.state(), "  ".into(), None)).unwrap_err().to_string(), "Give the vault a name.");
+        let gone = dir.join("nowhere").to_string_lossy().into_owned();
+        assert_eq!(block_on(vault_create_local(a.state(), "X".into(), Some(gone))).unwrap_err().to_string(), "That folder doesn't exist any more. Choose it again.");
+
+        block_on(vault_create_local(a.state(), "My Notes! 2026".into(), None)).unwrap();
+        let first = a.state::<App>().vault().unwrap();
+        assert_eq!(first.name, "My Notes! 2026");
+        let (prefix, suffix) = first.id.rsplit_once('-').unwrap();
+        assert_eq!(prefix, "local/my-notes--2026");
+        assert!(suffix.len() == 6 && suffix.chars().all(|c| c.is_ascii_alphanumeric() && !c.is_ascii_uppercase()), "{suffix}");
+        assert!(a.state::<App>().root().unwrap().is_dir());
+
+        let folder = dir.join("Obsidian Vault");
+        std::fs::create_dir_all(&folder).unwrap();
+        block_on(vault_create_local(a.state(), "".into(), Some(folder.to_string_lossy().into()))).unwrap();
+        let second = a.state::<App>().vault().unwrap();
+        assert_eq!((second.name.as_str(), second.folder.as_deref()), ("Obsidian Vault", Some(folder.as_path())));
+        assert_ne!(second.id, first.id);
+
+        block_on(vault_switch(a.state(), first.id.clone())).unwrap();
+        assert_eq!(a.state::<App>().vault().unwrap().id, first.id);
+        assert_eq!(block_on(vault_switch(a.state(), "local/none".into())).unwrap_err().to_string(), "That vault is gone.");
+        std::fs::remove_dir_all(&folder).unwrap();
+        assert_eq!(block_on(vault_switch(a.state(), second.id.clone())).unwrap_err().to_string(), "That vault's folder was moved or deleted.");
+
+        block_on(vault_forget(a.state(), second.id.clone())).unwrap();
+        assert_eq!(a.state::<App>().settings().known.len(), 1);
+        assert_eq!(a.state::<App>().vault().unwrap().id, first.id, "forgetting another vault leaves this one open");
+        block_on(vault_close(a.state())).unwrap();
+        assert!(a.state::<App>().vault().is_err());
+        assert_eq!(a.state::<App>().settings().known.len(), 1, "closing keeps it in the list");
+        block_on(vault_switch(a.state(), first.id.clone())).unwrap();
+        block_on(vault_forget(a.state(), first.id)).unwrap();
+        assert!(a.state::<App>().vault().is_err() && a.state::<App>().settings().known.is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn signing_out_closes_a_synced_vault_and_keeps_a_local_one() {
+        let (a, dir) = app("sign-out");
+        let st = a.state::<App>();
+        st.secrets.set(GITHUB_KEY, "gho").unwrap();
+        let local = VaultConfig { id: "local/a".into(), name: "A".into(), folder: None, remote: None };
+        st.update_settings(|s| {
+            s.user = Some(User { login: "amina".into(), name: None, avatar_url: String::new() });
+            s.vault = Some(local.clone());
+        })
+        .unwrap();
+        block_on(github_sign_out(a.state())).unwrap();
+        assert!(st.secrets.get(GITHUB_KEY).is_none() && st.settings().user.is_none());
+        assert_eq!(st.vault().unwrap().id, "local/a");
+
+        let synced = VaultConfig { remote: Some(Target { owner: "amina".into(), repo: "notes".into(), branch: "main".into() }), ..local };
+        st.update_settings(|s| s.vault = Some(synced)).unwrap();
+        block_on(github_sign_out(a.state())).unwrap();
+        assert!(st.vault().is_err());
+        assert_eq!(st.settings().known.len(), 1, "it can be opened again after signing in");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn repository_names_are_checked_before_github_is_asked() {
+        let (a, dir) = app("repo-name");
+        for bad in ["", "  ", "my notes", "notes/2026", "nötes", "a:b"] {
+            assert_eq!(
+                block_on(repo_create(a.state(), bad.into())).unwrap_err().to_string(),
+                "Use letters, numbers, dashes, dots or underscores for the repository name.",
+                "{bad:?}"
+            );
+        }
+        assert_eq!(block_on(repo_create(a.state(), " my-notes_2026.v2 ".into())).unwrap_err().to_string(), "Sign in with GitHub first.");
+        assert_eq!(block_on(repos_list(a.state())).unwrap_err().to_string(), "Sign in with GitHub first.");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn notes_are_written_found_renamed_trashed_and_restored() {
+        let (a, dir) = app("notes");
+        assert_eq!(block_on(tree(a.state())).err().unwrap().to_string(), "Open or create a vault first.");
+        let root = open_vault(&a);
+        let path = block_on(note_create(a.state(), "Projects".into(), "Plan".into(), Some("Ship it\n- [ ] Call Amina 📅 2026-11-05\n".into()))).unwrap();
+        assert_eq!(path, "Projects/Plan.md");
+        assert_eq!(block_on(note_create(a.state(), "".into(), "Blank".into(), None)).unwrap(), "Blank.md");
+        block_on(note_write(a.state(), "Daily.md".into(), "Talked about [[Plan]]".into())).unwrap();
+        assert_eq!(block_on(note_read(a.state(), "Daily.md".into())).unwrap(), "Talked about [[Plan]]");
+        block_on(folder_create(a.state(), "Archive/2026".into())).unwrap();
+        assert!(root.join("Archive/2026").is_dir());
+
+        // Every write is seen by the next lookup, without waiting for a rescan.
+        assert_eq!(block_on(note_titles(a.state())).unwrap().len(), 3);
+        assert_eq!(block_on(search(a.state(), "ship".into())).unwrap()[0].path, "Projects/Plan.md");
+        assert_eq!(block_on(backlinks(a.state(), "Projects/Plan.md".into())).unwrap()[0].path, "Daily.md");
+        assert_eq!(block_on(resolve_link(a.state(), "plan".into())).unwrap().as_deref(), Some("Projects/Plan.md"));
+        let tasks = block_on(tasks_vault(a.state())).unwrap();
+        assert_eq!((tasks.len(), tasks[0].line), (1, 1));
+        assert!(block_on(task_toggle(a.state(), "Projects/Plan.md".into(), 1, tasks[0].text.clone())).unwrap());
+        assert!(block_on(tasks_vault(a.state())).unwrap()[0].done);
+
+        assert_eq!(block_on(entry_rename(a.state(), "Projects/Plan.md".into(), "Roadmap".into())).unwrap(), "Projects/Roadmap.md");
+        assert_eq!(block_on(note_read(a.state(), "Daily.md".into())).unwrap(), "Talked about [[Roadmap]]");
+        assert_eq!(block_on(resolve_link(a.state(), "Roadmap".into())).unwrap().as_deref(), Some("Projects/Roadmap.md"));
+
+        block_on(entry_trash(a.state(), "Projects/Roadmap.md".into())).unwrap();
+        assert_eq!(block_on(resolve_link(a.state(), "Roadmap".into())).unwrap(), None);
+        block_on(entry_restore(a.state(), "Projects/Roadmap.md".into())).unwrap();
+        assert!(block_on(resolve_link(a.state(), "Roadmap".into())).unwrap().is_some());
+
+        put(&root, "Untitled.md", "");
+        assert!(block_on(note_discard_if_empty(a.state(), "Untitled.md".into())).unwrap());
+        assert!(!block_on(note_discard_if_empty(a.state(), "Blank.md".into())).unwrap());
+        assert!(block_on(tree(a.state())).unwrap().iter().any(|e| e.path == "Archive/2026" && e.kind == "folder"));
+        assert!(block_on(note_read(a.state(), "../escape.md".into())).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn templates_and_daily_notes_follow_the_vault_settings() {
+        let (a, dir) = app("templates");
+        let root = open_vault(&a);
+        put(&root, ".obsidian/app.json", r#"{"newFileLocation":"folder","newFileFolderPath":"Inbox"}"#);
+        assert_eq!(block_on(new_note_folder(a.state(), Some("Projects/Plan.md".into()))).unwrap(), "Inbox");
+        put(&root, "Templates/Meeting.md", "# {{title}}\n{{date:YYYY}}");
+        assert_eq!(block_on(templates_list(a.state())).unwrap(), ["Templates/Meeting.md"]);
+        let text = block_on(template_render(a.state(), "Templates/Meeting.md".into(), "Board".into())).unwrap();
+        assert_eq!(text, format!("# Board\n{}", Local::now().format("%Y")));
+        assert!(block_on(template_render(a.state(), "Templates/Gone.md".into(), "x".into())).is_err());
+
+        assert_eq!(block_on(daily_note(a.state(), Some("2026-11-03".into()))).unwrap(), "Daily/2026-11-03.md");
+        assert_eq!(block_on(note_titles(a.state())).unwrap().len(), 2, "the new daily note is indexed at once");
+        let today = block_on(daily_note(a.state(), None)).unwrap();
+        assert_eq!(today, format!("Daily/{}.md", Local::now().format("%Y-%m-%d")));
+        for bad in ["03/11/2026", "2026-13-01", "tomorrow"] {
+            assert_eq!(block_on(daily_note(a.state(), Some(bad.into()))).unwrap_err().to_string(), "Dates look like 2026-11-02.");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn css_snippets_are_listed_and_toggled_the_obsidian_way() {
+        let (a, dir) = app("snippets");
+        let root = open_vault(&a);
+        assert!(block_on(snippets_list(a.state())).unwrap().is_empty());
+        put(&root, ".obsidian/snippets/wide.css", ".x{}");
+        put(&root, ".obsidian/snippets/Accent.css", ":root{}");
+        put(&root, ".obsidian/snippets/notes.txt", "not css");
+        put(&root, ".obsidian/snippets/huge.css", &"a".repeat(256 * 1024 + 1));
+        put(&root, ".obsidian/appearance.json", r#"{"theme":"obsidian","enabledCssSnippets":["wide","gone"]}"#);
+        let list = block_on(snippets_list(a.state())).unwrap();
+        let shown: Vec<(&str, bool)> = list.iter().map(|s| (s.name.as_str(), s.enabled)).collect();
+        assert_eq!(shown, [("Accent", false), ("wide", true)], "sorted, CSS only, nothing over 256 KB");
+        assert_eq!(list[0].css, ":root{}");
+
+        block_on(snippet_toggle(a.state(), "Accent".into(), true)).unwrap();
+        block_on(snippet_toggle(a.state(), "wide".into(), false)).unwrap();
+        block_on(snippet_toggle(a.state(), "Accent".into(), true)).unwrap();
+        let v: Value = serde_json::from_str(&std::fs::read_to_string(root.join(".obsidian/appearance.json")).unwrap()).unwrap();
+        assert_eq!(v, json!({ "theme": "obsidian", "enabledCssSnippets": ["gone", "Accent"] }), "Obsidian's other settings stay");
+
+        put(&root, ".obsidian/appearance.json", "[1,2]");
+        block_on(snippet_toggle(a.state(), "wide".into(), true)).unwrap();
+        let v: Value = serde_json::from_str(&std::fs::read_to_string(root.join(".obsidian/appearance.json")).unwrap()).unwrap();
+        assert_eq!(v, json!({ "enabledCssSnippets": ["wide"] }), "a damaged file is replaced");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn encryption_is_set_up_used_locked_and_unlocked() {
+        let (a, dir) = app("encryption");
+        open_vault(&a);
+        assert!(block_on(encryption_setup(a.state(), "short".into())).is_err());
+        let st = block_on(encryption_setup(a.state(), "long passphrase".into())).unwrap();
+        assert!(st.set_up && st.unlocked);
+        block_on(note_write(a.state(), "Diary.md".into(), "dear diary".into())).unwrap();
+        assert_eq!(block_on(set_encrypted(a.state(), "Diary.md".into(), true)).unwrap(), "Diary.md.age");
+        assert_eq!(block_on(note_read(a.state(), "Diary.md.age".into())).unwrap(), "dear diary");
+
+        let st = block_on(encryption_lock(a.state())).unwrap();
+        assert!(st.set_up && !st.unlocked);
+        assert_eq!(block_on(note_read(a.state(), "Diary.md.age".into())).unwrap_err().friendly().0, "locked");
+        let titles = block_on(note_titles(a.state())).unwrap();
+        assert!(titles[0].locked, "the index notices the lock");
+        assert!(block_on(encryption_unlock(a.state(), "wrong passphrase".into())).is_err());
+        assert!(block_on(encryption_unlock(a.state(), "long passphrase".into())).unwrap().unlocked);
+        assert_eq!(block_on(note_read(a.state(), "Diary.md.age".into())).unwrap(), "dear diary");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn held_deletions_are_brought_back_or_confirmed_and_disconnecting_keeps_the_files() {
+        let (a, dir) = app("held");
+        let st = a.state::<App>();
+        let target = Target { owner: "amina".into(), repo: "notes".into(), branch: "main".into() };
+        st.update_settings(|s| s.vault = Some(VaultConfig { id: "github/amina/notes".into(), name: "notes".into(), folder: None, remote: Some(target) })).unwrap();
+        let paths = st.paths().unwrap();
+        let hub = dir.join("hub.git");
+        git2::Repository::init_bare(&hub).unwrap();
+        let remote = sync::Remote {
+            url: format!("file://{}", hub.display()), token: String::new(), branch: "main".into(),
+            author: "Test".into(), email: "t@example.com".into(), device: "test".into(),
+        };
+        let ctl = || sync::Ctl { cancel: Default::default(), progress: Box::new(|_, _, _| {}) };
+        for i in 0..30 {
+            put(&paths.files, &format!("n/{i}.md"), "x");
+        }
+        sync::sync(&paths, &remote, &ctl()).unwrap();
+        std::fs::remove_dir_all(paths.files.join("n")).unwrap();
+        let held = sync::sync(&paths, &remote, &ctl()).unwrap().held_deletions;
+        assert_eq!(held.len(), 30);
+
+        block_on(sync_held_deletions(a.state(), false, held[..2].to_vec())).unwrap();
+        assert!(paths.files.join(&held[0]).exists() && paths.files.join(&held[1]).exists());
+        assert!(!paths.files.join(&held[2]).exists(), "only the ones asked for");
+        block_on(sync_held_deletions(a.state(), true, vec![])).unwrap();
+        assert!(sync::load_state(&paths).confirm_deletions);
+
+        block_on(sync_cancel(a.state())).unwrap();
+        assert!(st.sync_cancel.load(std::sync::atomic::Ordering::Relaxed));
+
+        block_on(vault_disconnect_remote(a.state())).unwrap();
+        assert!(st.vault().unwrap().remote.is_none());
+        assert!(!paths.state.exists(), "sync state goes with the remote");
+        assert!(paths.files.join(&held[0]).exists(), "the files stay");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn connections_that_cannot_be_turned_off_here_say_where() {
+        let (a, dir) = app("disconnect");
+        let st = a.state::<App>();
+        st.secrets.set(google::KEY, "{}").unwrap();
+        st.secrets.set(microsoft::KEY, "{}").unwrap();
+        block_on(connector_disconnect(a.state(), "google".into())).unwrap();
+        block_on(connector_disconnect(a.state(), "microsoft".into())).unwrap();
+        assert!(st.secrets.get(google::KEY).is_none() && st.secrets.get(microsoft::KEY).is_none());
+        assert_eq!(
+            block_on(connector_disconnect(a.state(), "apple_calendar".into())).unwrap_err().to_string(),
+            "Turn this off in Settings, under Privacy, on this device."
+        );
+        assert_eq!(block_on(remote_task_toggle(a.state(), "jira".into(), "l".into(), "i".into(), true)).unwrap_err().to_string(), "Unknown task list.");
+        assert_eq!(block_on(mail_to_note(a.state(), "yahoo".into(), "i".into())).unwrap_err().to_string(), "Unknown mailbox.");
+        assert_eq!(
+            block_on(remote_task_toggle(a.state(), "google".into(), "l".into(), "i".into(), true)).unwrap_err().to_string(),
+            "Connect Google in Settings first.",
+            "nothing is sent without a connection"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_meeting_note_holds_its_details_and_people() {
+        let (a, dir) = app("event-note");
+        open_vault(&a);
+        let mut e = ev("Board \"Q4\" review", "2026-11-03T09:00:00+03:00", false);
+        e.url = Some("https://meet.google.com/abc".into());
+        e.location = Some("Room 4".into());
+        e.attendees = vec!["Amina".into(), "Bob".into()];
+        let local = chrono::DateTime::parse_from_rfc3339(&e.start).unwrap().with_timezone(&Local);
+        let day = local.format("%Y-%m-%d").to_string();
+        let path = block_on(event_to_note(a.state(), e)).unwrap();
+        assert_eq!(path, format!("Meetings/{day} Board -Q4- review.md"));
+        let text = block_on(note_read(a.state(), path)).unwrap();
+        assert_eq!(
+            text,
+            format!(
+                "---\nevent: \"Board \\\"Q4\\\" review\"\ndate: {day}\ncalendar: \"Work\"\nlink: \"https://meet.google.com/abc\"\n---\n\n# Board \"Q4\" review\n\n{}, Room 4\n\n## People\n\n- Amina\n- Bob\n\n## Notes\n\n\n## Actions\n\n- [ ] \n",
+                local.format("%A %-d %B %Y, %H:%M")
+            )
+        );
+        let all_day = block_on(event_to_note(a.state(), ev("Holiday", "2026-12-25T00:00:00", true))).unwrap();
+        assert_eq!(all_day, "Meetings/2026-12-25 Holiday.md", "a date without a zone keeps its day");
+        let text = block_on(note_read(a.state(), all_day)).unwrap();
+        assert!(text.contains("# Holiday\n\n2026-12-25\n\n## Notes") && !text.contains("## People"), "{text}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_agenda_goes_under_its_heading_once() {
+        let (a, dir) = app("agenda");
+        let root = open_vault(&a);
+        let day = Some("2026-11-03".to_string());
+        let timed = ev("Standup", "2026-11-03T09:00:00+03:00", false);
+        let time = chrono::DateTime::parse_from_rfc3339(&timed.start).unwrap().with_timezone(&Local).format("%H:%M").to_string();
+        let path = block_on(agenda_to_daily(a.state(), day.clone(), vec![ev("Holiday", "2026-11-03", true), timed.clone()])).unwrap();
+        assert_eq!(path, "Daily/2026-11-03.md");
+        let expected = format!("# Tuesday 3 November 2026\n\n## Agenda\n\n- All day Holiday\n- {time} Standup\n\n## Notes\n\n## Tasks\n\n");
+        assert_eq!(std::fs::read_to_string(root.join(&path)).unwrap(), expected);
+        block_on(agenda_to_daily(a.state(), day.clone(), vec![timed])).unwrap();
+        assert_eq!(std::fs::read_to_string(root.join(&path)).unwrap(), expected, "nothing added twice");
+        assert_eq!(block_on(agenda_to_daily(a.state(), day.clone(), vec![])).unwrap(), path);
+
+        // A daily note without an agenda heading gets one at the end; one with an empty agenda at the end fills it.
+        put(&root, "Daily/2026-11-04.md", "My own layout\n\n");
+        block_on(agenda_to_daily(a.state(), Some("2026-11-04".into()), vec![ev("Trip", "2026-11-04", true)])).unwrap();
+        assert_eq!(std::fs::read_to_string(root.join("Daily/2026-11-04.md")).unwrap(), "My own layout\n\n## Agenda\n\n- All day Trip\n");
+        put(&root, "Daily/2026-11-05.md", "# Day\n\n## Agenda\n");
+        block_on(agenda_to_daily(a.state(), Some("2026-11-05".into()), vec![ev("Trip", "2026-11-05", true)])).unwrap();
+        assert_eq!(std::fs::read_to_string(root.join("Daily/2026-11-05.md")).unwrap(), "# Day\n\n## Agenda\n\n- All day Trip\n");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn dates_yaml_and_per_source_errors() {
+        assert_eq!(parse_date(Some("2026-02-28".into())).unwrap(), NaiveDate::from_ymd_opt(2026, 2, 28).unwrap());
+        assert!(parse_date(Some("2026-02-30".into())).is_err());
+        assert_eq!(parse_date(None).unwrap(), Local::now().date_naive());
+        assert_eq!(yaml(r#"He said "hi" \ bye"#), r#""He said \"hi\" \\ bye""#);
+        assert_eq!(yaml(""), r#""""#);
+
+        let mut out = Today::default();
+        let task = RemoteTask {
+            id: "t".into(), source: "google".into(), list_id: "l".into(), list: "Tasks".into(), title: "Pay".into(), done: false, due: None,
+        };
+        collect(&mut out, "Google Tasks", Ok(vec![task]), |o, v| o.remote_tasks.extend(v));
+        let failed: Result<Vec<MailItem>> = Err(crate::error::Error::Provider { provider: "Outlook", status: 401, message: "raw".into() });
+        collect(&mut out, "Outlook Mail", failed, |o, v| o.mail.extend(v));
+        let v = serde_json::to_value(&out).unwrap();
+        assert_eq!(v["remote_tasks"][0]["title"], "Pay", "a source that works is shown");
+        assert_eq!(v["errors"]["Outlook Mail"]["code"], "provider_auth", "one that fails says so beside it");
+        assert!(v["errors"]["Outlook Mail"]["message"].as_str().unwrap().contains("Reconnect"));
+        assert!(!v["errors"].as_object().unwrap().contains_key("Google Tasks"));
+        assert_eq!((v["events"].clone(), v["mail"].clone(), v["tasks"].clone()), (json!([]), json!([]), json!([])));
+    }
+
+    fn ipc_app(tag: &str) -> (tauri::App<MockRuntime>, tauri::WebviewWindow<MockRuntime>, std::path::PathBuf) {
+        let dir = std::env::temp_dir().join(format!("wandika-cmd-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let a = tauri::test::mock_builder()
+            .invoke_handler(tauri::generate_handler![attachment_save, attachment_read])
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap();
+        a.manage(App::new(dir.clone()));
+        let w = tauri::WebviewWindowBuilder::new(&a, "main", Default::default()).build().unwrap();
+        (a, w, dir)
+    }
+
+    fn invoke(w: &tauri::WebviewWindow<MockRuntime>, cmd: &str, body: tauri::ipc::InvokeBody, headers: &[(&'static str, &str)]) -> std::result::Result<tauri::ipc::InvokeResponseBody, Value> {
+        let mut map = tauri::http::HeaderMap::new();
+        for (k, v) in headers {
+            map.insert(*k, v.parse().unwrap());
+        }
+        tauri::test::get_ipc_response(
+            w,
+            tauri::webview::InvokeRequest {
+                cmd: cmd.into(),
+                callback: tauri::ipc::CallbackFn(0),
+                error: tauri::ipc::CallbackFn(1),
+                url: "tauri://localhost".parse().unwrap(),
+                body,
+                headers: map,
+                invoke_key: tauri::test::INVOKE_KEY.to_string(),
+            },
+        )
+    }
+
+    #[test]
+    fn attachments_arrive_as_raw_bytes_and_go_back_the_same_way() {
+        let (a, w, dir) = ipc_app("attachments");
+        open_vault(&a);
+        let png = vec![0x89, b'P', b'N', b'G', 0, 1, 2, 255];
+        let saved = invoke(&w, "attachment_save", tauri::ipc::InvokeBody::Raw(png.clone()), &[("x-meta", "note=Projects%2FPlan.md&name=Picha%20ya%20Caf%C3%A9.png")]).unwrap();
+        assert_eq!(saved.deserialize::<String>().unwrap(), "Picha ya Café.png");
+
+        let body = |args: Value| tauri::ipc::InvokeBody::Json(args);
+        match invoke(&w, "attachment_read", body(json!({ "target": "Picha ya Café.png", "from": "Projects/Plan.md" })), &[]).unwrap() {
+            tauri::ipc::InvokeResponseBody::Raw(bytes) => assert_eq!(bytes, png),
+            other => panic!("expected raw bytes, got {other:?}"),
+        }
+        let missing = invoke(&w, "attachment_read", body(json!({ "target": "nope.png", "from": "Plan.md" })), &[]).unwrap_err();
+        assert_eq!(missing["message"], "nope.png isn't in this vault.");
+
+        let no_name = invoke(&w, "attachment_save", tauri::ipc::InvokeBody::Raw(png.clone()), &[("x-meta", "note=Plan.md")]).unwrap_err();
+        assert_eq!(no_name["message"], "The file has no name.");
+        let not_raw = invoke(&w, "attachment_save", body(json!({})), &[("x-meta", "name=a.png")]).unwrap_err();
+        assert_eq!(not_raw["message"], "No file data arrived.");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
