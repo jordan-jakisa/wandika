@@ -2,19 +2,33 @@
 
 const KEY = "wandika.views";
 
-export function readView<T extends object>(name: string, defaults: T): T {
+/** Everything saved, or nothing when storage is unreadable or holds something else. */
+function all(): Record<string, unknown> {
   try {
-    return { ...defaults, ...(JSON.parse(localStorage.getItem(KEY) ?? "{}")[name] ?? {}) };
+    const saved: unknown = JSON.parse(localStorage.getItem(KEY) ?? "{}");
+    return saved && typeof saved === "object" && !Array.isArray(saved) ? (saved as Record<string, unknown>) : {};
   } catch {
-    return defaults;
+    return {};
   }
 }
 
+/** The saved choices for `name`; each one missing, or of the wrong type, falls back to its default. */
+export function readView<T extends object>(name: string, defaults: T): T {
+  const saved = all()[name];
+  const out = { ...defaults } as Record<string, unknown>;
+  if (!saved || typeof saved !== "object") return out as T;
+  for (const [k, v] of Object.entries(defaults)) {
+    const s = (saved as Record<string, unknown>)[k];
+    if (typeof s === typeof v && s !== null) out[k] = s;
+  }
+  return out as T;
+}
+
 export function saveView(name: string, value: object) {
+  const views = all();
+  views[name] = value;
   try {
-    const all = JSON.parse(localStorage.getItem(KEY) ?? "{}");
-    all[name] = value;
-    localStorage.setItem(KEY, JSON.stringify(all));
+    localStorage.setItem(KEY, JSON.stringify(views));
   } catch {
     // Not remembered this time; nothing else depends on it.
   }
