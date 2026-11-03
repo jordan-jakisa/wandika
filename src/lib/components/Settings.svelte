@@ -3,7 +3,6 @@
   const FEEDBACK = "mailto:jordan.timutic@gmail.com?subject=Wandika%20beta%20feedback";
   /** The store rules want the privacy policy reachable inside the app. */
   const PRIVACY = "https://github.com/jordan-jakisa/wandika/blob/main/PRIVACY.md";
-  import { duration } from "../motion";
   import {
     ChevronLeft,
     ChevronRight,
@@ -28,6 +27,9 @@
   import RepoPicker from "./RepoPicker.svelte";
   import Unlock from "./Unlock.svelte";
 
+  /** `embedded`: the phone's Settings tab, a page in place instead of a sheet over the app. */
+  let { embedded = false }: { embedded?: boolean } = $props();
+
   const SECTIONS: { id: SettingsSection; label: string; icon: typeof Cloud }[] = [
     { id: "vault", label: "Vault", icon: HardDrive },
     { id: "appearance", label: "Appearance", icon: Paintbrush },
@@ -38,12 +40,11 @@
     { id: "about", label: "About", icon: Info },
   ];
 
-  let dialogEl: HTMLDialogElement;
-  let width = $state(typeof window === "undefined" ? 1200 : window.innerWidth);
-  const phone = $derived(width < 900);
-  /** On phones the category list is its own screen; `null` shows it. */
-  let phoneSection = $state<SettingsSection | null>(null);
-  const section = $derived(phone ? phoneSection : app.settingsSection);
+  let dialogEl = $state<HTMLDialogElement>()!;
+  /** Phones show Settings as a tab (`embedded`): the list of sections, then one page at a time.
+   *  The desktop shows a dialog with the list beside the page. */
+  const phone = $derived(embedded);
+  const section = $derived(embedded ? app.settingsPage : app.settingsSection);
 
   let device = $state<{ user_code: string; verification_uri: string } | null>(null);
   let waiting = $state<string | null>(null);
@@ -51,99 +52,29 @@
   let connecting = $state(false);
   const defaultSize = typeof window !== "undefined" && window.innerWidth < 900 ? 17 : 18;
 
-  // Phones: each screen inside Settings is a history entry, so system back (Android) steps from a
-  // page to the list and then closes, like a native settings screen.
-  let depth = 0;
-  function pushScreen() {
-    if (!phone) return;
-    history.pushState({ wandika: "settings" }, "");
-    depth++;
-  }
-
   $effect(() => {
-    if (app.settingsOpen && !dialogEl.open) {
-      phoneSection = app.settingsDirect ? app.settingsSection : null;
-      dialogEl.showModal();
-      pushScreen();
-    }
+    if (embedded) return;
+    if (app.settingsOpen && !dialogEl.open) dialogEl.showModal();
     if (!app.settingsOpen && dialogEl.open) dialogEl.close();
   });
 
   function go(id: SettingsSection) {
+    if (embedded) app.settingsPage = id;
     app.settingsSection = id;
-    phoneSection = id;
     connecting = false;
-    pushScreen();
   }
 
-  /** The page's back button: same as system back. */
+  /** The page's back button. The workspace keeps the history entry, so system back does the same. */
   function back() {
-    if (phone && depth > 1) history.back();
-    else phoneSection = null;
+    app.settingsPage = null;
   }
 
-  /**
-   * Phones: Settings is a bottom sheet that slides up, drags down to dismiss, and slides away on
-   * close. The same sheet on every phone.
-   */
-  const sheet = $derived(phone);
-  let closing = $state(false);
-  let dragY = $state(0);
-  let dragFrom = $state<number | null>(null);
-  let dragAt = 0;
-
-  function sheetDown(e: PointerEvent) {
-    if (!sheet || (e.target as HTMLElement).closest("button, input, select, a, textarea")) return;
-    dragFrom = e.clientY;
-    dragAt = performance.now();
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-  }
-  function sheetMove(e: PointerEvent) {
-    if (dragFrom === null) return;
-    dragY = Math.max(0, e.clientY - dragFrom);
-  }
-  function sheetUp() {
-    if (dragFrom === null) return;
-    const speed = dragY / Math.max(1, performance.now() - dragAt);
-    dragFrom = null;
-    // A long drag or a quick flick dismisses; anything less springs back.
-    if (dragY > 140 || speed > 0.6) close();
-    else dragY = 0;
-  }
-
-  function closeNow() {
+  function close() {
     clearTimeout(pollTimer);
     connecting = false;
     device = null;
     waiting = null;
-    const ms = duration("--dur-base");
-    if (sheet && ms && app.settingsOpen) {
-      closing = true;
-      setTimeout(() => {
-        closing = false;
-        dragY = 0;
-        app.settingsOpen = false;
-      }, ms);
-      return;
-    }
-    dragY = 0;
     app.settingsOpen = false;
-  }
-
-  function close() {
-    if (depth > 0) {
-      const d = depth;
-      depth = 0;
-      history.go(-d);
-    }
-    closeNow();
-  }
-
-  function onPopState() {
-    if (!app.settingsOpen || depth === 0) return;
-    depth--;
-    if (depth === 0) closeNow();
-    else phoneSection = null;
   }
 
   /** One line under each section in the phone list, so you know what's inside before tapping. */
@@ -322,7 +253,6 @@
   const label = (id: SettingsSection | null) => SECTIONS.find((x) => x.id === id)?.label ?? "Settings";
 </script>
 
-<svelte:window bind:innerWidth={width} onpopstate={onPopState} />
 
 {#snippet google()}
   {@render connRow("Google", s?.configured.gmail === false ? "Calendar and Tasks" : "Gmail, Calendar and Tasks", c?.google ?? null, "google", !!s?.configured.google, true)}
@@ -365,38 +295,11 @@
   </div>
 {/snippet}
 
-<dialog
-  bind:this={dialogEl}
-  oncancel={(e) => {
-    e.preventDefault();
-    close();
-  }}
-  onclick={(e) => {
-    // A tap on the dimmed area outside a sheet dismisses it.
-    if (sheet && e.target === dialogEl) close();
-  }}
-  aria-labelledby="settings-title"
-  class="settings"
-  class:phone
-  class:sheet
-  class:closing
-  class:dragging={dragY > 0 && dragFrom !== null}
-  style={dragY ? `--drag: ${dragY}px` : undefined}
->
-  {#if sheet}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="grabber-zone" onpointerdown={sheetDown} onpointermove={sheetMove} onpointerup={sheetUp} onpointercancel={sheetUp}>
-      <span class="grabber"></span>
-    </div>
-  {/if}
+{#snippet body()}
   {#if !phone || section === null}
     <nav class="sections" aria-label="Settings sections">
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <header class="nav-head" onpointerdown={sheetDown} onpointermove={sheetMove} onpointerup={sheetUp} onpointercancel={sheetUp}>
-        <h2 id="settings-title">Settings</h2>
-        {#if phone}
-          <button class="done" onclick={close}>Done</button>
-        {/if}
+      <header class="nav-head">
+        <h2 id="settings-title" class:large={embedded}>Settings</h2>
       </header>
       <ul>
         {#each SECTIONS as sec (sec.id)}
@@ -417,14 +320,13 @@
 
   {#if section}
     <div class="pane">
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <header class="pane-head" onpointerdown={sheetDown} onpointermove={sheetMove} onpointerup={sheetUp} onpointercancel={sheetUp}>
+      <header class="pane-head">
         {#if phone}
           <button class="back" onclick={back}><ChevronLeft size={22} />Settings</button>
         {/if}
         <h3>{label(section)}</h3>
         {#if phone}
-          <button class="done" onclick={close}>Done</button>
+          <span></span>
         {:else}
           <button class="icon-btn" onclick={close} aria-label="Close settings"><X size={20} /></button>
         {/if}
@@ -700,7 +602,25 @@
       </div>
     </div>
   {/if}
+{/snippet}
+
+{#if embedded}
+  <section class="settings phone embedded" aria-labelledby="settings-title">
+    {@render body()}
+  </section>
+{:else}
+<dialog
+  bind:this={dialogEl}
+  oncancel={(e) => {
+    e.preventDefault();
+    close();
+  }}
+  aria-labelledby="settings-title"
+  class="settings"
+>
+  {@render body()}
 </dialog>
+{/if}
 
 <style>
   .settings {
@@ -717,83 +637,38 @@
   .settings[open] {
     display: grid;
     grid-template-columns: 200px minmax(0, 1fr);
-  }
-  .settings.phone[open] {
-    display: flex;
-    flex-direction: column;
-    width: 100vw;
-    max-width: 100vw;
-    height: 100dvh;
-    max-height: 100dvh;
-    margin: 0;
-    border: 0;
-    border-radius: 0;
-  }
-  .settings[open]:not(.sheet) {
     animation: pop-in var(--dur-quick) var(--ease-out);
   }
   .settings::backdrop {
     background: var(--scrim);
   }
-
-  /* Phone sheet: rounded top, grabber, slides up from the bottom, follows a drag down. */
-  .settings.sheet[open] {
-    top: auto;
-    bottom: 0;
-    height: calc(100dvh - var(--safe-top) - 10px);
-    max-height: none;
-    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-    background: var(--sheet);
-    transform: translateY(var(--drag, 0px));
-    transition: transform var(--dur-base) var(--ease-sheet);
-    animation: sheet-in var(--dur-slow) var(--ease-sheet);
+  /* The phone's Settings tab: a page like Notes, with the tab's large title. */
+  .settings.embedded {
+    display: flex;
+    flex-direction: column;
+    width: auto;
+    height: auto;
+    min-height: 100%;
+    border: 0;
+    border-radius: 0;
+    background: var(--paper);
+    box-shadow: none;
+    overflow: visible;
   }
-  .settings.sheet.dragging {
-    transition: none;
+  /* The tab's page scrolls with the phone body, like the other tabs. */
+  .settings.embedded .pane-body {
+    overflow: visible;
+    padding-bottom: calc(96px + var(--safe-bottom));
   }
-  .settings.sheet.closing {
-    transform: translateY(100%);
-    transition: transform var(--dur-base) var(--ease-sheet);
+  .settings.embedded .nav-head {
+    padding: calc(14px + var(--safe-top)) 20px 6px;
   }
-  .settings.sheet.closing::backdrop {
-    opacity: 0;
-    transition: opacity var(--dur-base) var(--ease-out);
+  .settings.embedded .pane-head {
+    padding-top: calc(10px + var(--safe-top));
   }
-  .settings.sheet::backdrop {
-    background: var(--scrim);
-  }
-  @keyframes sheet-in {
-    from {
-      transform: translateY(100%);
-    }
-  }
-  .grabber-zone {
-    display: grid;
-    place-items: center;
-    height: 18px;
-    flex: none;
-    touch-action: none;
-  }
-  .grabber {
-    width: 36px;
-    height: 5px;
-    border-radius: var(--radius-xs);
-    background: color-mix(in srgb, var(--graphite) 45%, transparent);
-  }
-  .sheet .nav-head,
-  .sheet .pane-head {
-    touch-action: none;
-  }
-  .sheet .nav-head {
-    padding-top: 6px;
-  }
-  .sheet .pane-head {
-    padding-top: 2px;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .settings.sheet[open] {
-      animation: none;
-    }
+  h2.large {
+    font-size: var(--text-2xl);
+    font-weight: 700;
   }
 
   .sections {
@@ -814,9 +689,6 @@
   }
   .phone .nav-head {
     padding: calc(14px + var(--safe-top)) 12px 10px 20px;
-  }
-  .sheet .nav-head {
-    padding: 6px 12px 10px 20px;
   }
   h2 {
     margin: 0;
@@ -840,21 +712,6 @@
     background: none;
     color: var(--ink);
     text-align: left;
-  }
-  /* Phone sheet: "Done" closes it; the back row is the shared .back. */
-  .done {
-    display: inline-flex;
-    align-items: center;
-    min-height: var(--target);
-    padding: 0 var(--space-3);
-    border: 0;
-    background: none;
-    color: var(--papyrus);
-    font-size: var(--text-md);
-    font-weight: 600;
-  }
-  .done:active {
-    opacity: 0.5;
   }
   .sec-text {
     flex: 1;
@@ -903,9 +760,6 @@
   }
   .phone .pane-head {
     padding: calc(10px + var(--safe-top)) 8px 4px 4px;
-  }
-  .sheet .pane-head {
-    padding: 2px 8px 4px 4px;
   }
   .pane-head h3 {
     flex: 1;

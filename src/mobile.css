@@ -102,7 +102,7 @@
       background: var(--press);
     }
 
-    /* Settings sheet: flat rows, small section labels, no icons or chevrons. */
+    /* Settings tab: flat rows, small section labels, no icons or chevrons (iOS below differs). */
     .settings .sections li button {
       min-height: 60px;
       padding: 0 20px;
@@ -149,6 +149,16 @@
     }
     .settings .footer-actions {
       margin: 24px 20px 0;
+    }
+    /* The Settings tab opens with the tab's large title, as Notes does. */
+    .settings.embedded .nav-head {
+      display: flex;
+      padding: calc(14px + var(--safe-top)) 20px 6px;
+    }
+    .settings.embedded .nav-head h2 {
+      font-size: var(--text-2xl);
+      font-weight: 700;
+      text-align: left;
     }
 
     /* Segmented control: one quiet track, the chosen option on the sheet colour. */
@@ -242,11 +252,11 @@
       height: 18px;
     }
   }
-  /* iPhone: Settings and form sheets follow iOS. Inset grouped lists on the paper colour (grouped
-     background), rows on the sheet colour, headers and footers in small grey text, a centred title
-     with Back or Cancel leading and Done or Save trailing (HIG, Lists and tables; Sheets). */
+  /* iPhone: Settings follows iOS. Inset grouped lists on the paper colour (grouped background),
+     rows on the sheet colour, headers and footers in small grey text, a centred page title with
+     Back leading (HIG, Lists and tables). */
   html[data-platform="ios"] {
-    .settings.sheet,
+    .settings.embedded,
     .settings .sections,
     .settings .pane {
       background: var(--paper);
@@ -270,10 +280,17 @@
       grid-column: 1;
       justify-self: start;
     }
-    .settings .nav-head .done,
-    .settings .pane-head .done {
-      grid-column: 3;
-      justify-self: end;
+    .settings.embedded .nav-head {
+      display: flex;
+      padding: calc(14px + var(--safe-top)) 20px 6px;
+    }
+    .settings.embedded .nav-head h2 {
+      font-size: var(--text-2xl);
+      font-weight: 700;
+      text-align: left;
+    }
+    .settings.embedded .pane-head {
+      padding-top: calc(6px + var(--safe-top));
     }
 
     /* The section list: one inset group, icon, label and detail, a disclosure chevron. */

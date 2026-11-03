@@ -6,7 +6,7 @@ import { tip, touch } from "./tips";
 import { TEMPLATE } from "./kanban";
 import type { Entry, NoteMeta, Snippet, Status, SyncReport, Today, VaultTask } from "./types";
 
-export type Tab = "notes" | "today" | "tasks" | "projects" | "graph" | "search";
+export type Tab = "notes" | "today" | "tasks" | "projects" | "graph" | "search" | "settings";
 const TABS: Tab[] = ["notes", "today", "tasks", "projects", "graph", "search"];
 
 export type SettingsSection = "vault" | "appearance" | "editor" | "encryption" | "connections" | "account" | "about";
@@ -60,6 +60,8 @@ class AppState {
   /** Mac: Today fills the window, for a while of working only from it. */
   todayFull = $state(false);
   settingsOpen = $state(false);
+  /** The page open in the phone's Settings tab; `null` shows the list of sections. */
+  settingsPage = $state<SettingsSection | null>(null);
   settingsSection = $state<SettingsSection>("vault");
   /** True when Settings was opened for one section, so phones skip the section list. */
   settingsDirect = $state(false);
@@ -532,6 +534,14 @@ class AppState {
 
   /** Opens Settings, optionally at one section (e.g. Connections from Today). */
   openSettings(section?: SettingsSection) {
+    // Phones keep Settings as a tab; a link to a section opens that page in it.
+    if (typeof window !== "undefined" && window.innerWidth < 900) {
+      this.current = null;
+      this.tab = "settings";
+      this.settingsPage = section ?? null;
+      if (section) this.settingsSection = section;
+      return;
+    }
     if (section) this.settingsSection = section;
     this.settingsDirect = !!section;
     this.settingsOpen = true;

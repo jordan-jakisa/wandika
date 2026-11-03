@@ -70,15 +70,20 @@ Phone (< 900px), same on iPhone and Android     Note open, typing
 │ Synced 2m          │               │ Title              │
 │ list of notes      │               │ Body               │
 ├────────────────────┤               ├────────────────────┤
-│ Notes Today ⌕   [+]│               │ 🔗 # ☐ H • ⇥ ↶   ⌨ │  writing toolbar
+│ Notes Today ⌕ ⚙ [+]│               │ 🔗 # ☐ H • ⇥ ↶   ⌨ │  writing toolbar
 └────────────────────┘               └────────────────────┘
 ```
 
-Phones share one calm design: a bar with three places and the new-note button (on iOS a floating
-Liquid Glass capsule with the button as tinted glass beside it, Jordan's ask; flat on Android), a single ⋯ menu
-for everything else (Graph, Projects, New folder, Sync, Settings), Tasks reached from Today, plain
-"‹ Notes" back rows, and Settings as one bottom sheet. The platform decides behaviour only (iOS edge
-swipe back, Android system back, safe areas). Text follows the phone's text size setting.
+Phones share one calm layout: a bar with four places (Notes, Today, Search, Settings) and the
+new-note button (on iOS a floating Liquid Glass capsule with the button as tinted glass beside it,
+Jordan's ask; flat on Android), New folder as a button in the Notes header, a ⋯ menu for Graph,
+Projects and Sync, Tasks reached from Today, and plain "‹ Notes" back rows. Settings is a tab: the
+list of sections, then one page at a time. On iPhone, Settings and the task editor follow iOS
+(Jordan, 2026-11-03): inset grouped lists on the paper colour with rows on the sheet colour, small
+grey headers and footers, a centred page title, and the task editor as a form sheet with Cancel and
+Save in its top bar and Pin as a switch. Task rows swipe on both phones: right for Pin, left for
+Archive and Delete. Back gestures follow the platform (iOS edge swipe, Android system back), and
+text follows the phone's text size setting.
 
 Left aligned throughout. The one memorable element is the page itself: Literata at a generous size on
 a quiet sheet. Everything else is restrained.

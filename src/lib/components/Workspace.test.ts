@@ -479,12 +479,13 @@ describe("on a phone", () => {
   // jsdom has no inert attribute support, so Svelte sets it as a property.
   const inert = (el: Element) => !!(el as HTMLElement).inert || el.hasAttribute("inert");
 
-  test("three tabs and a new note button, starting on Notes", () => {
+  test("four tabs and a new note button, starting on Notes", () => {
     renderWorkspace();
     expect(tabs().getAllByRole("button").map((b) => b.textContent?.trim() || b.getAttribute("aria-label"))).toEqual([
       "Notes",
       "Today",
       "Search",
+      "Settings",
       "New note",
     ]);
     expect(tabs().getByRole("button", { name: "Notes" })).toHaveAttribute("aria-current", "page");
@@ -506,11 +507,12 @@ describe("on a phone", () => {
     expect(screen.getByRole("tree", { name: "Notes" })).toBeInTheDocument();
   });
 
-  test("the More menu offers the graph, projects, a new folder and Settings", async () => {
+  test("the More menu offers the graph and projects; New folder is a button beside it", async () => {
     const user = userEvent.setup();
     renderWorkspace();
+    expect(within(document.querySelector<HTMLElement>(".phone-head")!).getByRole("button", { name: "New folder" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "More" }));
-    expect(screen.getAllByRole("menuitem").map((m) => m.textContent?.trim())).toEqual(["Graph", "Projects", "New folder", "Settings"]);
+    expect(screen.getAllByRole("menuitem").map((m) => m.textContent?.trim())).toEqual(["Graph", "Projects"]);
   });
 
   test("a synced vault's More menu also syncs now", async () => {
@@ -549,18 +551,31 @@ describe("on a phone", () => {
     const user = userEvent.setup();
     vi.spyOn(api, "folderCreate").mockResolvedValue();
     renderWorkspace();
-    await user.click(screen.getByRole("button", { name: "More" }));
-    await user.click(screen.getByRole("menuitem", { name: "New folder" }));
+    await user.click(within(document.querySelector<HTMLElement>(".phone-head")!).getByRole("button", { name: "New folder" }));
     await user.type(screen.getByRole("textbox", { name: "Folder name" }), "Trips{Enter}");
     await waitFor(() => expect(app.current).toBe("Trips/Untitled.md"));
   });
 
-  test("Settings in the More menu opens Settings", async () => {
+  test("the Settings tab shows Settings in place; a page in it steps back with system back", async () => {
     const user = userEvent.setup();
     renderWorkspace();
-    await user.click(screen.getByRole("button", { name: "More" }));
-    await user.click(screen.getByRole("menuitem", { name: "Settings" }));
-    expect(app.settingsOpen).toBe(true);
+    await user.click(tabs().getByRole("button", { name: "Settings" }));
+    expect(tabs().getByRole("button", { name: "Settings" })).toHaveAttribute("aria-current", "page");
+    expect(app.settingsOpen).toBe(false);
+    await user.click(screen.getByRole("button", { name: /^Connections/ }));
+    expect(document.querySelector(".pane h3")).toHaveTextContent("Connections");
+    expect(history.state?.wandika).toBe("settings");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await waitFor(() => expect(app.settingsPage).toBeNull());
+    expect(screen.getByRole("navigation", { name: "Settings sections" })).toBeInTheDocument();
+  });
+
+  test("a link to Settings opens its page in the tab", async () => {
+    renderWorkspace();
+    app.openSettings("connections");
+    await waitFor(() => expect(document.querySelector(".pane h3")).toHaveTextContent("Connections"));
+    expect(app.tab).toBe("settings");
+    expect(app.settingsOpen).toBe(false);
   });
 
   test("Tasks shows inside Today, with a back button to Today", async () => {

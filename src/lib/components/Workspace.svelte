@@ -30,6 +30,7 @@
   import GraphView from "./GraphView.svelte";
   import ProjectsView from "./ProjectsView.svelte";
   import Search from "./Search.svelte";
+  import Settings from "./Settings.svelte";
   import StatusBar from "./StatusBar.svelte";
   import SyncStatus from "./SyncStatus.svelte";
   import TasksView from "./TasksView.svelte";
@@ -107,7 +108,7 @@
   // Phones: system back (Android) and swipe back (iOS) leave the note, as in native apps. Opening
   // a note, or the Search tab, adds one history entry so the system back gesture has somewhere to go.
   // One entry, replaced when a search opens a note, so a back never races a new entry.
-  let layer: "note" | "search" | null = null;
+  let layer: "note" | "search" | "settings" | null = null;
   /** The tab to return to when Search is left. */
   let beforeSearch: Tab = "notes";
   $effect(() => {
@@ -115,7 +116,7 @@
   });
   $effect(() => {
     if (wide) return;
-    const want = app.current ? "note" : app.tab === "search" ? "search" : null;
+    const want = app.current ? "note" : app.tab === "search" ? "search" : app.tab === "settings" && app.settingsPage ? "settings" : null;
     untrack(() => {
       if (want === layer) return;
       if (want && !layer) history.pushState({ wandika: want }, "");
@@ -131,6 +132,7 @@
     layer = null;
     if (was === "note") app.current = null;
     else if (was === "search") leaveSearch();
+    else if (was === "settings") app.settingsPage = null;
   }
   function leaveSearch() {
     app.tab = beforeSearch === "search" ? "notes" : beforeSearch;
@@ -178,6 +180,7 @@
     { id: "notes", label: "Notes", icon: FolderClosed },
     { id: "today", label: "Today", icon: CalendarDays },
     { id: "search", label: "Search", icon: SearchIcon },
+    { id: "settings", label: "Settings", icon: SettingsIcon },
   ];
   const PARENT: Partial<Record<Tab, Tab>> = { tasks: "today", projects: "notes", graph: "notes" };
   const parentTab = $derived(PARENT[app.tab] ?? app.tab);
@@ -471,14 +474,14 @@
             {#if app.tab === "notes"}
               <header class="phone-head">
                 <h1 class="vault-name">{app.vault?.name}</h1>
+                <!-- Making a folder belongs with the list it adds to, beside the menu, not inside it. -->
+                <button class="icon-btn head-btn" onclick={() => app.newFolder()} aria-label="New folder"><FolderPlus size={22} /></button>
                 <Menu label="More" size={22}>
                   <button role="menuitem" onclick={() => app.showGraph()}><Network size={18} /> Graph</button>
                   <button role="menuitem" onclick={() => (app.tab = "projects")}><Columns3 size={18} /> Projects</button>
-                  <button role="menuitem" onclick={() => app.newFolder()}><FolderPlus size={18} /> New folder</button>
                   {#if app.synced}
                     <button role="menuitem" onclick={() => app.sync(true)}><RefreshCw size={18} /> Sync now</button>
                   {/if}
-                  <button role="menuitem" onclick={() => app.openSettings()}><SettingsIcon size={18} /> Settings</button>
                 </Menu>
               </header>
               <div class="phone-status"><SyncStatus /></div>
@@ -491,6 +494,8 @@
               <ProjectsView />
             {:else if app.tab === "graph"}
               <div class="graph-host phone-graph"><GraphView /></div>
+            {:else if app.tab === "settings"}
+              <Settings embedded />
             {:else}
               <Search mode="page" onExit={leaveSearch} />
             {/if}
@@ -498,7 +503,7 @@
         {/key}
       </div>
 
-      <!-- Three places and one action. Tasks live in Today; boards, tags and the graph in Notes. -->
+      <!-- Four places and one action. Tasks live in Today; boards, tags and the graph in Notes. -->
       <!-- iOS: the bar floats on Liquid Glass over the content. Android: a flat bar. -->
       <nav class="bar" class:glassbar={isIOS} aria-label="Sections">
         <div class="tabs" class:glass={isIOS}>
@@ -929,7 +934,7 @@
   .tabs {
     flex: 1;
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     align-items: center;
   }
   .bar button {

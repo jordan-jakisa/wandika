@@ -742,17 +742,26 @@ describe("About", () => {
   });
 });
 
-describe("on a phone", () => {
+describe("on a phone, as the Settings tab", () => {
   beforeEach(() => setWidth(400));
+  async function openTab(section?: Parameters<typeof app.openSettings>[0]) {
+    render(Dialog);
+    const view = render(Settings, { embedded: true });
+    app.openSettings(section);
+    await tick();
+    return view;
+  }
 
   test("the section list says when there's nothing to connect", async () => {
     app.status = status({ configured: { github: true, google: false, microsoft: false, apple: false, gmail: false } });
-    await open();
+    await openTab();
     expect(screen.getByText("Nothing to connect yet")).toBeInTheDocument();
   });
 
-  test("opens on the list of sections, each with what is inside", async () => {
-    await open();
+  test("opens on the list of sections, each with what is inside, as a page and not a dialog", async () => {
+    await openTab();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Settings" })).toBeInTheDocument();
     expect(document.querySelector(".pane")).toBeNull();
     const details = [...screen.getByRole("navigation", { name: "Settings sections" }).querySelectorAll("li button")]
       .map((b) => [b.querySelector(".sec-text > span")!.textContent, b.querySelector(".sec-detail")!.textContent]);
@@ -766,6 +775,7 @@ describe("on a phone", () => {
       ["About", "Version 0.1.0 beta, feedback, keyboard shortcuts"],
     ]);
     expect(sections().getByRole("button", { name: /Vault/ })).not.toHaveAttribute("aria-current");
+    expect(screen.queryByRole("button", { name: "Done" })).not.toBeInTheDocument();
   });
 
   test("the list's details follow the vault, encryption, connections and account", async () => {
@@ -774,7 +784,7 @@ describe("on a phone", () => {
       encryption: { set_up: true, unlocked: false, folders: [] },
       connectors: connectors({ google: "a@gmail.com", apple_calendar: "granted", apple_reminders: "denied" }),
     });
-    await open();
+    await openTab();
     const detail = (name: string) => sections().getByRole("button", { name: new RegExp(`^${name}`) }).querySelector(".sec-detail")!.textContent;
     expect(detail("Vault")).toBe("notes, syncs with GitHub");
     expect(detail("Encryption")).toBe("Locked");
@@ -784,93 +794,25 @@ describe("on a phone", () => {
 
   test("encryption not set up reads Not set up", async () => {
     app.status = status({ encryption: { set_up: false, unlocked: false, folders: [] } });
-    await open();
+    await openTab();
     expect(sections().getByRole("button", { name: /^Encryption/ })).toHaveTextContent("Not set up");
   });
 
-  test("a section opens as its own screen, and its back button returns to the list", async () => {
+  test("a section opens as its own page, and its back button returns to the list", async () => {
     const user = userEvent.setup();
-    await open();
+    await openTab();
     await user.click(sections().getByRole("button", { name: /^Appearance/ }));
     expect(paneTitle()).toBe("Appearance");
+    expect(app.settingsPage).toBe("appearance");
     expect(screen.queryByRole("navigation", { name: "Settings sections" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Settings" }));
     await waitFor(() => expect(screen.getByRole("navigation", { name: "Settings sections" })).toBeInTheDocument());
-    expect(document.querySelector(".pane")).toBeNull();
-    expect(app.settingsOpen).toBe(true);
-  });
-
-  test("the system back gesture steps from a section to the list, then closes", async () => {
-    const user = userEvent.setup();
-    await open();
-    await user.click(sections().getByRole("button", { name: /^Editor/ }));
-    window.dispatchEvent(new PopStateEvent("popstate"));
-    await waitFor(() => expect(screen.getByRole("navigation", { name: "Settings sections" })).toBeInTheDocument());
-    expect(app.settingsOpen).toBe(true);
-    window.dispatchEvent(new PopStateEvent("popstate"));
-    await waitFor(() => expect(app.settingsOpen).toBe(false));
+    expect(app.settingsPage).toBeNull();
   });
 
   test("opened for one section, it goes straight to it", async () => {
-    await open("encryption");
+    await openTab("encryption");
     expect(paneTitle()).toBe("Encryption");
     expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
-  });
-
-  test("Done closes Settings, from the list and from a section", async () => {
-    const user = userEvent.setup();
-    await open();
-    await user.click(screen.getByRole("button", { name: "Done" }));
-    await waitFor(() => expect(app.settingsOpen).toBe(false));
-    app.openSettings("about");
-    await user.click(await screen.findByRole("button", { name: "Done" }));
-    await waitFor(() => expect(app.settingsOpen).toBe(false));
-  });
-
-  test("a tap outside the sheet closes it", async () => {
-    const user = userEvent.setup();
-    await open();
-    await user.click(document.querySelector<HTMLElement>("dialog.settings")!);
-    await waitFor(() => expect(app.settingsOpen).toBe(false));
-  });
-
-  test("dragging the sheet well down closes it; a short slow drag springs back", async () => {
-    let now = 0;
-    vi.spyOn(performance, "now").mockImplementation(() => now);
-    await open();
-    const grabber = document.querySelector<HTMLElement>(".grabber-zone")!;
-    await fireEvent.pointerDown(grabber, { clientY: 100, pointerId: 1 });
-    await fireEvent.pointerMove(grabber, { clientY: 160, pointerId: 1 });
-    expect(document.querySelector("dialog.settings")).toHaveStyle("--drag: 60px");
-    now = 1000;
-    await fireEvent.pointerUp(grabber, { clientY: 160, pointerId: 1 });
-    expect(app.settingsOpen).toBe(true);
-    expect(document.querySelector("dialog.settings")).not.toHaveAttribute("style");
-
-    await fireEvent.pointerDown(grabber, { clientY: 100, pointerId: 1 });
-    await fireEvent.pointerMove(grabber, { clientY: 300, pointerId: 1 });
-    now = 3000;
-    await fireEvent.pointerUp(grabber, { clientY: 300, pointerId: 1 });
-    await waitFor(() => expect(app.settingsOpen).toBe(false));
-  });
-
-  test("a quick flick down closes it", async () => {
-    let now = 0;
-    vi.spyOn(performance, "now").mockImplementation(() => now);
-    await open();
-    const head = screen.getByRole("heading", { name: "Settings" }).closest<HTMLElement>("header")!;
-    await fireEvent.pointerDown(head, { clientY: 100, pointerId: 1 });
-    await fireEvent.pointerMove(head, { clientY: 160, pointerId: 1 });
-    now = 50;
-    await fireEvent.pointerUp(head, { clientY: 160, pointerId: 1 });
-    await waitFor(() => expect(app.settingsOpen).toBe(false));
-  });
-
-  test("a press on a button inside the sheet doesn't start a drag", async () => {
-    await open();
-    const done = screen.getByRole("button", { name: "Done" });
-    await fireEvent.pointerDown(done, { clientY: 100, pointerId: 1 });
-    await fireEvent.pointerMove(done, { clientY: 400, pointerId: 1 });
-    expect(document.querySelector("dialog.settings")).not.toHaveAttribute("style");
   });
 });
