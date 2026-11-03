@@ -1,14 +1,21 @@
 // Plain helpers for reading notes in place: the part of a note an embed asks for, a few lines of
 // Markdown as safe, simple HTML, and frontmatter as properties.
 
-/** `Note#Heading` gives that section; `Note#^id` the line carrying that block id. */
+/**
+ * `Note#Heading` gives that section; `Note#^id` the line carrying that block id, or, when the id
+ * stands on its own line, the block (a table, a list, a paragraph) just above it.
+ */
 export function section(text: string, sub: string | undefined): string {
   const body = text.replace(/^---\n(?:[\s\S]*?\n)?---(?:\n|$)/, "");
   if (!sub) return body;
   const lines = body.split("\n");
   if (sub.startsWith("^")) {
-    const line = lines.find((l) => l.trimEnd().endsWith(` ${sub}`) || l.trim() === sub);
-    return line ? line.replace(` ${sub}`, "") : "";
+    const at = lines.findIndex((l) => l.trimEnd().endsWith(` ${sub}`) || l.trim() === sub);
+    if (at < 0) return "";
+    if (lines[at].trim() !== sub) return lines[at].replace(` ${sub}`, "");
+    let start = at;
+    while (start > 0 && lines[start - 1].trim()) start--;
+    return lines.slice(start, at).join("\n");
   }
   // Heading level per line, 0 for other lines; a `#` line inside a code fence is code, not a heading.
   let fence = false;

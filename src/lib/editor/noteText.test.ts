@@ -57,6 +57,12 @@ test("a block id keeps trailing spaces out and a missing id gives nothing", () =
   assert.equal(section("Rain^r1", "^r1"), "");
 });
 
+test("a block id on its own line names the block above it", () => {
+  assert.equal(section("intro\n\n| a | b |\n|---|---|\n| 1 | 2 |\n^tbl\n\nnext", "^tbl"), "| a | b |\n|---|---|\n| 1 | 2 |");
+  assert.equal(section("para one\npara two\n^p\nnext", "^p"), "para one\npara two");
+  assert.equal(section("^top\nnext", "^top"), "");
+});
+
 test("an empty frontmatter block is not shown in an embed", () => {
   assert.equal(section("---\n---\nBody", undefined), "Body");
   assert.equal(section("---\n---\n# A\nx", "A"), "# A\nx");
