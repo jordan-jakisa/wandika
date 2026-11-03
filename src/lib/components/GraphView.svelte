@@ -34,7 +34,8 @@
   let links: GLink[] = [];
   let neighbours = new Map<string, Set<string>>();
   let hover: GNode | null = null;
-  let sim: { stop(): void; alpha(a: number): any; alphaTarget(a: number): any; restart(): any } | null = null;
+  let sim: { stop(): void; tick(n: number): any; alpha(a: number): any; alphaTarget(a: number): any; restart(): any } | null = null;
+  const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
   let frame = 0;
   let colors = { node: "", ghost: "", line: "", accent: "", text: "", bg: "", dim: "" };
   let groupColor = new Map<string, string>();
@@ -221,12 +222,16 @@
       });
     sim = simulation;
     // Reduced motion: lay the graph out at once and show it settled.
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      simulation.stop();
-      simulation.tick(300);
-      fit();
-      redraw();
-    }
+    if (reducedMotion()) settle();
+  }
+
+  /** Runs the layout to rest in one go and shows the result, for reduced motion. */
+  function settle() {
+    if (!sim) return;
+    sim.stop();
+    sim.tick(300);
+    fit();
+    redraw();
   }
 
   // Rebuild when the notes, their links or the options change. A sync that only touched note
@@ -263,7 +268,9 @@
       s.force("link")?.distance(distance);
       s.force("charge")?.strength(-strength);
       touched = false;
-      s.alpha(0.4).restart();
+      s.alpha(0.4);
+      if (reducedMotion()) settle();
+      else sim?.restart();
     });
   });
 
@@ -442,8 +449,11 @@
     <button class="icon-btn" onclick={() => { touched = false; fit(); }} aria-label="Fit the graph to the window"><Maximize size={17} /></button>
   </header>
   <div class="stage" bind:this={box}>
+    <!-- A picture to screen readers (a canvas has no role of its own, so its label went unread); notes open from search. -->
+    <!-- svelte-ignore a11y_no_interactive_element_to_noninteractive_role -->
     <canvas
       bind:this={canvas}
+      role="img"
       aria-label={`Graph of ${counts.nodes} notes and ${counts.links} links. Use search to open a note.`}
       onpointerdown={down}
       onpointermove={move}
@@ -459,8 +469,10 @@
     ></canvas>
     {#if loadError}
       <p class="empty error" role="alert">{loadError}</p>
+    {:else if local && counts.links === 0}
+      <p class="empty muted">This note has no links yet.</p>
     {:else if counts.nodes === 0}
-      <p class="empty muted">{local ? "This note has no links yet." : "No notes yet. Link notes with [[ ]] to see them connect here."}</p>
+      <p class="empty muted">No notes yet. Link notes with [[ ]] to see them connect here.</p>
     {/if}
     {#if panel}
       <div class="panel" id="graph-display" role="group" aria-label="Graph display">
