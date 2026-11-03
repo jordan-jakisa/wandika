@@ -10,17 +10,7 @@
 set -e
 cd "$(dirname "$0")/.."
 
-# Released binaries must be built from source that is public on GitHub: that's what keeps them
-# outside the US export rules for encryption (15 CFR 734.3(b)(3) and 742.15(b)).
-if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
-  echo "Commit your changes first: a release is built only from code that's on GitHub."
-  exit 1
-fi
-git fetch -q origin
-if [ -n "$(git log --oneline origin/main..HEAD)" ]; then
-  echo "Push first: a release is built only from code that's on GitHub."
-  exit 1
-fi
+. scripts/release-common.sh
 
 identity=$(security find-identity -v -p codesigning | sed -n 's/.*"\(Developer ID Application: .*\)"/\1/p' | head -1)
 if [ -z "$identity" ]; then
@@ -44,6 +34,7 @@ if otool -L "$app/Contents/MacOS/wandika" | tail -n +2 | grep -v -e "^[[:space:]
   echo "The build links the libraries above from outside macOS, so it wouldn't start elsewhere."
   exit 1
 fi
+check_public "$app/Contents/MacOS/wandika"
 xcrun stapler validate "$app"
 
 dmg=$(ls -t src-tauri/target/release/bundle/dmg/*.dmg | head -1)

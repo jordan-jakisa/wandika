@@ -4,17 +4,7 @@
 set -e
 cd "$(dirname "$0")/.."
 
-# Released binaries must be built from source that is public on GitHub: that's what keeps them
-# outside the US export rules for encryption (15 CFR 734.3(b)(3) and 742.15(b)).
-if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
-  echo "Commit your changes first: a release is built only from code that's on GitHub."
-  exit 1
-fi
-git fetch -q origin
-if [ -n "$(git log --oneline origin/main..HEAD)" ]; then
-  echo "Push first: a release is built only from code that's on GitHub."
-  exit 1
-fi
+. scripts/release-common.sh
 
 if [ ! -f src-tauri/gen/android/keystore.properties ]; then
   echo "No src-tauri/gen/android/keystore.properties, so the APK can't be signed. See docs/setup.md."
@@ -32,6 +22,11 @@ export PATH="$HOME/.cargo/bin:$PATH"
 # Both ARM targets: many affordable phones still run 32-bit Android.
 WANDIKA_PUBLIC=1 npm run tauri android build -- --apk --target aarch64 armv7
 apk=$(ls -t src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk | head -1)
+for lib in $(unzip -Z1 "$apk" 'lib/*/libwandika_lib.so'); do
+  unzip -p "$apk" "$lib" > .release-lib.so
+  check_public .release-lib.so
+done
+rm -f .release-lib.so
 "$(ls -d "$ANDROID_HOME"/build-tools/* | tail -1)/apksigner" verify --print-certs "$apk" | grep -i "SHA-256"
 shasum -a 256 "$apk"
 (cd src-tauri/gen/android && ./gradlew --stop >/dev/null)
