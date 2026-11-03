@@ -154,7 +154,8 @@ pub fn write_note(root: &Path, rel: &str, content: &str, crypto: &Crypto) -> Res
     }
 }
 
-fn clean_name(name: &str) -> Result<String> {
+/// A note or folder name as it is saved: no path or reserved characters, never hidden.
+pub fn clean_name(name: &str) -> Result<String> {
     let cleaned: String = name
         .trim()
         .chars()

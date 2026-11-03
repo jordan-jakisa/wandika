@@ -760,7 +760,9 @@ pub async fn event_to_note(app: S<'_>, event: CalEvent) -> Result<String> {
     let crypto = app.crypto()?;
     let title = format!("{day} {}", event.title);
     // Opening the same meeting twice returns the note made the first time.
-    let existing = with_index(&app, |i, _| i.resolve(&format!("Meetings/{}", title.replace('/', "-"))))?;
+    // Looked up by the name the note was saved under, where `/`, `:` and `?` became `-`.
+    let name = vault::clean_name(&title)?;
+    let existing = with_index(&app, |i, _| i.resolve(&format!("Meetings/{name}")))?;
     if let Some(p) = existing {
         return Ok(p);
     }
@@ -808,4 +810,38 @@ pub async fn agenda_to_daily(app: S<'_>, date: Option<String>, events: Vec<CalEv
     vault::write_note(&root, &path, &updated, &crypto)?;
     changed(&app);
     Ok(path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_http::block_on;
+    use tauri::test::{mock_app, MockRuntime};
+
+    fn app(tag: &str) -> (tauri::App<MockRuntime>, std::path::PathBuf) {
+        let dir = std::env::temp_dir().join(format!("wandika-cmd-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let a = mock_app();
+        a.manage(App::new(dir.clone()));
+        (a, dir)
+    }
+
+    fn ev(title: &str, start: &str, all_day: bool) -> CalEvent {
+        CalEvent {
+            id: "e".into(), source: "google".into(), calendar: "Work".into(), title: title.into(), start: start.into(),
+            end: start.into(), all_day, location: None, url: None, attendees: vec![],
+        }
+    }
+
+    #[test]
+    fn a_meeting_with_symbols_in_its_title_gets_one_note() {
+        let (a, dir) = app("event-twice");
+        block_on(vault_create_local(a.state(), "Notes".into(), None)).unwrap();
+        let e = ev("Sync: Q4 / plan?", "2026-11-03", true);
+        let first = block_on(event_to_note(a.state(), e.clone())).unwrap();
+        assert_eq!(first, "Meetings/2026-11-03 Sync- Q4 - plan-.md");
+        assert_eq!(block_on(event_to_note(a.state(), e)).unwrap(), first, "the second open finds the first note");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

@@ -47,6 +47,9 @@ objc2-foundation = "0.3"
 objc2-event-kit = "0.3"
 block2 = "0.6"
 
+[dev-dependencies]
+# A mock runtime, so tests can call commands with the app's state.
+tauri = { version = "2", features = ["test"] }
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]
