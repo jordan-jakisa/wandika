@@ -55,5 +55,7 @@
 			<string>$(PRODUCT_BUNDLE_IDENTIFIER).com.googleusercontent.apps.300312260148-1ggsg58n56qsu9j5qsc529tla9pl8d6t</string>
 		</dict>
 	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>
