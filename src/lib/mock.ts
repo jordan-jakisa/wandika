@@ -16,6 +16,9 @@ export function on(event: string, fn: (p: unknown) => void) {
 const today = new Date();
 const iso = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+/** "Tuesday 3 November 2026", as the Rust core heads a new daily note. */
+const longDate = (d: Date) =>
+  `${d.toLocaleDateString("en-GB", { weekday: "long" })} ${d.getDate()} ${d.toLocaleDateString("en-GB", { month: "long" })} ${d.getFullYear()}`;
 const at = (h: number, m = 0) => {
   const d = new Date(today);
   d.setHours(h, m, 0, 0);
@@ -46,7 +49,7 @@ const notes = new Map<string, string>([
   [
     "Daily/" + iso(today) + ".md",
     "# " +
-      today.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) +
+      longDate(today) +
       "\n\n## Agenda\n\n## Notes\n\n## Tasks\n\n",
   ],
   [
@@ -103,6 +106,18 @@ const cleanName = (name: string) => {
 };
 /** The path itself and everything inside it, when it is a folder. */
 const within = (path: string) => (k: string) => k === path || k.startsWith(path + "/");
+const LOCKED = "Encrypted notes are locked. Unlock them with your passphrase.";
+const locked = (path: string) => path.endsWith(".age") && !encryption.unlocked;
+
+/** The daily note for `date` (YYYY-MM-DD, today when absent), created when it doesn't exist yet. */
+function daily(date?: string | null) {
+  const day = date ?? iso(new Date());
+  const d = new Date(`${day}T12:00:00`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || Number.isNaN(d.getTime()) || iso(d) !== day) throw "Dates look like 2026-11-02.";
+  const path = `Daily/${day}.md`;
+  if (!notes.has(path)) notes.set(path, `# ${longDate(d)}\n\n## Agenda\n\n## Notes\n\n## Tasks\n\n`);
+  return path;
+}
 
 /** What was moved to the vault's .trash folder, by the path it came from. */
 const trash = new Map<string, string | Uint8Array>();
@@ -286,12 +301,17 @@ const handlers: Record<string, (a: Args) => unknown> = {
     return files.get(hit)!.slice().buffer;
   },
   note_read: ({ path }) => {
-    if (path.endsWith(".age") && !encryption.unlocked) throw "Encrypted notes are locked. Unlock them with your passphrase.";
+    if (locked(path)) throw LOCKED;
     if (!notes.has(path)) throw "That note no longer exists.";
     return notes.get(path);
   },
-  note_write: ({ path, content }) => void notes.set(path, content),
-  note_create: ({ folder, title, body }) => {
+  note_write: ({ path, content }) => {
+    if (locked(path)) throw LOCKED;
+    notes.set(path, content);
+  },
+  note_create: ({ folder: raw, title: name, body }) => {
+    const folder = String(raw ?? "").replace(/^\/+|\/+$/g, "");
+    const title = cleanName(name);
     const ext = encryption.folders.some((f) => folder === f || folder.startsWith(f + "/")) ? ".md.age" : ".md";
     let n = 1;
     let path = "";
@@ -352,28 +372,51 @@ const handlers: Record<string, (a: Args) => unknown> = {
   },
   note_titles: () => meta(),
   search: ({ query }) => {
-    const q = String(query).toLowerCase();
-    return [...notes.entries()]
-      .filter(([p, t]) => p.toLowerCase().includes(q) || (!p.endsWith(".age") && t.toLowerCase().includes(q)))
-      .map(([p, t]) => {
-        const i = t.toLowerCase().indexOf(q);
-        return { path: p, title: titleOf(p), snippet: i >= 0 ? t.slice(Math.max(0, i - 40), i + 100).replace(/\n/g, " ") : "", encrypted: p.endsWith(".age") };
-      });
+    // Every word must appear in the title, path or text; title matches rank first, as in the core.
+    const q = String(query).trim().toLowerCase();
+    if (!q) return [];
+    const words = q.split(/\s+/);
+    const hits = [];
+    for (const [p, text] of notes) {
+      const title = titleOf(p).toLowerCase();
+      const path = p.toLowerCase();
+      const body = locked(p) ? "" : text.toLowerCase();
+      if (!words.every((w) => title.includes(w) || path.includes(w) || body.includes(w))) continue;
+      let score = (title === q ? 1000 : 0) + (title.startsWith(q) ? 300 : 0);
+      for (const w of words) score += (title.includes(w) ? 100 : 0) + Math.min(20, body.split(w).length - 1);
+      const i = body.indexOf(words[0]);
+      const from = Math.max(0, i - 60);
+      const snippet = locked(p) ? "" : i < 0 ? text.slice(0, 140).replace(/\n/g, " ") : (from ? "…" : "") + text.slice(from, from + 160).replace(/\n/g, " ").trimStart();
+      hits.push({ score, hit: { path: p, title: titleOf(p), snippet, encrypted: p.endsWith(".age") } });
+    }
+    return hits.sort((a, b) => b.score - a.score).slice(0, 50).map((h) => h.hit);
   },
   backlinks: ({ path }) =>
     meta()
       .filter((m) => m.path !== path && m.links.some((l) => l.split("/").pop()!.toLowerCase() === titleOf(path).toLowerCase()))
       .map((m) => ({ path: m.path, title: m.title, snippet: (notes.get(m.path) ?? "").split("\n").find((l) => l.includes("[[")) ?? "", encrypted: m.encrypted })),
-  resolve_link: ({ target: t }) => [...notes.keys()].find((p) => p.replace(/\.md(\.age)?$/, "").toLowerCase().endsWith(String(t).toLowerCase())) ?? null,
+  // A link with a folder matches that path; a bare name matches any folder; the shortest path wins.
+  resolve_link: ({ target }) => {
+    const t = String(target).trim().replace(/\.md$/, "").toLowerCase();
+    const stem = (p: string) => p.toLowerCase().replace(/\.age$/, "").replace(/\.md$/, "");
+    const found = [...notes.keys()].filter((p) => stem(p) === t || stem(p).endsWith("/" + t));
+    return found.sort((a, b) => a.length - b.length)[0] ?? null;
+  },
   tasks_vault: () => tasks(),
-  task_toggle: ({ path, line }) => {
+  // Checks the line still holds the same task, then ticks it with an Obsidian Tasks done date.
+  task_toggle: ({ path, line, text }) => {
+    if (locked(path)) throw LOCKED;
     const lines = (notes.get(path) ?? "").split("\n");
-    const done = /\[ \]/.test(lines[line]);
-    lines[line] = lines[line].replace(/\[( |x|X)\]/, done ? "[x]" : "[ ]");
+    const m = lines[line]?.match(/^(\s*[-*+] \[)([ xX])(\] )(.*)$/);
+    if (!m) throw "That task moved. Refresh and try again.";
+    if (m[4].trim() !== String(text).trim()) throw "That task changed. Refresh and try again.";
+    const done = m[2] === " ";
+    const rest = m[4].replace(/\s*✅ \d{4}-\d{2}-\d{2}/g, "") + (done ? ` ✅ ${iso(new Date())}` : "");
+    lines[line] = `${m[1]}${done ? "x" : " "}${m[3]}${rest}`;
     notes.set(path, lines.join("\n"));
     return done;
   },
-  daily_note: () => "Daily/" + iso(today) + ".md",
+  daily_note: ({ date }) => daily(date),
   encryption_setup: () => (encryption = { ...encryption, set_up: true, unlocked: true }),
   encryption_unlock: ({ passphrase }) => {
     if (String(passphrase).length < 8) throw "Wrong passphrase, or this file was encrypted with another key.";
@@ -413,7 +456,7 @@ const handlers: Record<string, (a: Args) => unknown> = {
   remote_task_toggle: () => undefined,
   mail_to_note: ({ id }) => handlers.note_create({ folder: "Mail", title: id === "a" ? "Your flight to Nairobi is confirmed" : "Re Wandika sync design", body: "# Email\n" }),
   event_to_note: ({ event }) => handlers.note_create({ folder: "Meetings", title: `${iso(today)} ${event.title}`, body: `# ${event.title}\n\n## Notes\n\n` }),
-  agenda_to_daily: () => "Daily/" + iso(today) + ".md",
+  agenda_to_daily: ({ date }) => daily(date),
 };
 
 export async function invoke(cmd: string, args: Args = {}): Promise<unknown> {
