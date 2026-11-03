@@ -88,3 +88,24 @@
 
 - **A toast for every ticked task:** Reminders and Things don't give one. Done tasks stay one click away under "Show done".
 - **Vibrancy in the sidebar:** it would mean a native window effect and a translucent page. That's a new look, so it's Jordan's call.
+
+## Result (2026-11-03, after all three tiers)
+
+| # | Criterion | Mac | What changed |
+|---|---|---|---|
+| 1 | Anticipates needs | 2 | Full-screen Today hands over to whatever you open. An opened note takes the cursor. ⌘[ and ⌘] go back and forward. App shortcuts wait while a dialog is open. |
+| 2 | Intentional transitions | 2 | Every dialog fades out with its content, at the same pace it came in. Resizing a column follows the pointer. |
+| 3 | Delight | 2 | Board cards and columns come back with Undo. |
+| 4 | Knows when not to animate | 2 | New timings use tokens (`--dur-close`, `--dur-hold`), so reduced motion makes them instant. |
+| 5 | Invisible consistency | 2 | The window drags from every column's top and from the start screen. Controls are 32 px. There's one icon size per job, a selected-row token and hairline separators, and the corner buttons have room in every view. |
+| 6 | Empty states | 2 | The empty Tasks message names ⌘L. A note, the graph or a picture that fails to load offers Try again or Sync. |
+| 7 | Rewards discovery | 2 | Claude Code has a row in Connections with its setup command. About lists every shortcut. Right-click opens row menus, and the tree moves with the arrow keys. |
+| 8 | Prescriptive errors | 2 | The status bar says "Click". Start-screen errors sit under what you clicked. Toasts show above dialogs, and a note Claude changes says so. |
+| 9 | Performance | 2 | Unchanged. |
+
+Checked:
+- 1,338 interface tests and 181 Rust tests pass.
+- The type-check is clean.
+- Screenshots at 1280 × 800 in light and dark: the notes list, a note, full-screen Today handing over to Tasks, and the start screen.
+
+Not yet checked: the drag regions and the traffic-light spacing in the real Mac app, which happens with the next Mac build.

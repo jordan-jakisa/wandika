@@ -85,6 +85,12 @@ Save in its top bar and Pin as a switch. Task rows swipe on both phones: right f
 Archive and Delete. Back gestures follow the platform (iOS edge swipe, Android system back), and
 text follows the phone's text size setting.
 
+The Mac (2026-11-03): buttons and fields are 32px (`--control-h`; 44px on touch), icons are 18 in
+toolbars and 16 in menus, and the window drags from the top strip of every column (the title bar is
+Overlay, so columns leave the traffic lights `--titlebar` of room). Right-click opens a row's menu,
+the file tree moves with the arrow keys, ⌘[ and ⌘] go back and forward between notes, and ⌥⌘T shows
+or hides Today. Dialogs leave as quickly as they came (`--dur-close`).
+
 Sheets (2026-11-03): on phones, the task sheet and the drawing pad rise from the bottom and go back
 down, an email pushes in from the right and back out, and questions and pictures fade; each keeps its
 content while it leaves. Android's back closes the sheet on top first. Haptics come from Tauri's

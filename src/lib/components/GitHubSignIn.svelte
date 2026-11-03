@@ -106,7 +106,7 @@
     margin: 0;
   }
   .big {
-    min-height: 50px;
+    min-height: calc(var(--control-h) + var(--space-2));
     padding: 0 20px;
   }
   .small {
