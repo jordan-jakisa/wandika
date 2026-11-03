@@ -71,6 +71,7 @@ class AppState {
   noteStats = $state({ words: 0, chars: 0, cards: null as number | null, backlinks: 0, encrypted: false });
   #todayAt = 0;
   #todayLoading: Promise<void> | null = null;
+  #todayFull = false;
 
   /** Set by the editor so pending typing is saved before a sync reads the files. */
   flush: () => Promise<void> = async () => {};
@@ -462,14 +463,17 @@ class AppState {
    * Today's events, mail and tasks. Network sources are reused for two minutes; within that
    * window only the vault's own tasks are re-read, which costs no network.
    */
-  async loadToday(force = false) {
-    if (this.#todayLoading) return this.#todayLoading;
+  async loadToday(force = false): Promise<void> {
+    // A refresh you asked for waits for a tasks-only one in flight, then fetches everything.
+    if (this.#todayLoading) return force && !this.#todayFull ? this.#todayLoading.then(() => this.loadToday(true)) : this.#todayLoading;
     const fresh = Date.now() - this.#todayAt < TODAY_TTL_MS;
+    this.#todayFull = force || !fresh || !this.today;
     this.#todayLoading = (async () => {
       try {
-        if (!force && fresh && this.today) {
+        if (!this.#todayFull) {
           const tasks = await api.tasksVault();
-          this.today = { ...this.today, tasks: tasks.filter((t) => !t.done) };
+          // Left alone when the vault changed meanwhile and Today was cleared.
+          if (this.today) this.today = { ...this.today, tasks: tasks.filter((t) => !t.done) };
         } else {
           this.today = await api.today();
           this.#todayAt = Date.now();
