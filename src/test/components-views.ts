@@ -114,7 +114,8 @@ export const isModal = (el: HTMLElement) => el.hasAttribute("open") && "modal" i
 
 /** What a canvas was asked to draw: dots and labels in screen pixels, and the last transform. */
 export interface Drawing {
-  dots: { x: number; y: number; r: number; alpha: number; fill: string }[];
+  /** Filled dots are notes; outlined ones are notes not written yet, or the ring on the focused note. */
+  dots: { x: number; y: number; r: number; alpha: number; fill: string; outline: boolean }[];
   labels: { text: string; x: number; y: number; alpha: number }[];
   view: { x: number; y: number; k: number };
 }
@@ -147,20 +148,14 @@ export function recordCanvas() {
     scale: (k: number) => {
       cur.view.k *= k;
     },
-    beginPath: () => {},
+    beginPath: () => void (pending = null),
     moveTo: () => {},
     lineTo: () => {},
-    stroke: () => {},
+    stroke: () => dot(true),
     arc: (x: number, y: number, r: number) => {
       pending = { x, y, r };
     },
-    fill: () => {
-      if (!pending) return;
-      const { x, y, r } = pending;
-      const { view } = cur;
-      cur.dots.push({ x: view.x + x * view.k, y: view.y + y * view.k, r: r * view.k, alpha: ctx.globalAlpha, fill: ctx.fillStyle });
-      pending = null;
-    },
+    fill: () => dot(false),
     strokeText: () => {},
     fillText: (text: string, x: number, y: number) => {
       const { view } = cur;
@@ -168,6 +163,13 @@ export function recordCanvas() {
     },
   };
   let pending: { x: number; y: number; r: number } | null = null;
+  function dot(outline: boolean) {
+    if (!pending) return;
+    const { x, y, r } = pending;
+    const { view } = cur;
+    cur.dots.push({ x: view.x + x * view.k, y: view.y + y * view.k, r: r * view.k, alpha: ctx.globalAlpha, fill: outline ? "" : ctx.fillStyle, outline });
+    pending = null;
+  }
   const spy = vi
     .spyOn(HTMLCanvasElement.prototype, "getContext")
     .mockImplementation(() => ctx as unknown as CanvasRenderingContext2D);
