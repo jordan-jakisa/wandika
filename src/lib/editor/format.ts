@@ -9,23 +9,35 @@ import { convertLines, toggleWrap, type LineKind } from "./lists";
 
 export function setLines(view: EditorView, kind: LineKind) {
   const { state } = view;
-  const changes = state.selection.ranges.map((r) => {
+  // The lines each range touches. Ranges that share a line convert together, once.
+  const blocks: { from: number; to: number; empty: boolean; main: boolean }[] = [];
+  state.selection.ranges.forEach((r, i) => {
     const from = state.doc.lineAt(r.from).from;
     const to = state.doc.lineAt(r.to).to;
-    const lines = state.sliceDoc(from, to).split("\n");
-    return { from, to, insert: convertLines(lines, kind).join("\n") };
+    const main = i === state.selection.mainIndex;
+    const last = blocks[blocks.length - 1];
+    if (last && from <= last.to) {
+      last.to = Math.max(last.to, to);
+      last.empty &&= r.empty;
+      last.main ||= main;
+    } else blocks.push({ from, to, empty: r.empty, main });
   });
+  const changes = blocks.map(({ from, to }) => ({
+    from,
+    to,
+    insert: convertLines(state.sliceDoc(from, to).split("\n"), kind).join("\n"),
+  }));
   const tx = state.update({ changes });
   // Keep whole converted lines selected so the next button applies to the same block. A cursor
   // (a shortcut pressed while typing) stays a cursor at the end of its line, so typing carries on
   // instead of replacing the line.
-  const ranges = changes.map((c, i) => {
-    const start = tx.changes.mapPos(c.from, -1);
-    const end = tx.changes.mapPos(c.to, 1);
-    return state.selection.ranges[i].empty ? EditorSelection.cursor(end) : EditorSelection.range(start, end);
+  const ranges = blocks.map((b) => {
+    const start = tx.changes.mapPos(b.from, -1);
+    const end = tx.changes.mapPos(b.to, 1);
+    return b.empty ? EditorSelection.cursor(end) : EditorSelection.range(start, end);
   });
   // One spec: the selection then refers to the changed document and is not mapped a second time.
-  view.dispatch({ changes, selection: EditorSelection.create(ranges) });
+  view.dispatch({ changes, selection: EditorSelection.create(ranges, blocks.findIndex((b) => b.main)) });
   view.focus();
   return true;
 }

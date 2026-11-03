@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { EditorSelection } from "@codemirror/state";
 import { runScopeHandlers, type EditorView } from "@codemirror/view";
 import { test } from "vitest";
 import { formatting, setLines, wrap } from "./format.ts";
@@ -61,6 +62,33 @@ test("list buttons work at the very start and end of a note", () => {
   const end = viewOf("first\nlast‸");
   setLines(end, "quote");
   assert.equal(show(end.state), "first\n> last‸");
+});
+
+test("two cursors on one line convert that line once", () => {
+  const view = viewOf("a‸b‸c\nd");
+  setLines(view, "bullet");
+  assert.equal(show(view.state), "- abc‸\nd");
+});
+
+test("ranges that share a line convert as one block", () => {
+  const view = viewOf("«a\nb»«\nc»\nd");
+  setLines(view, "numbered");
+  assert.equal(show(view.state), "«1. a\n2. b\n3. c»\nd");
+});
+
+test("cursors on separate lines each stay at the end of their line", () => {
+  const view = viewOf("a‸\n‸b\nc");
+  setLines(view, "bullet");
+  assert.equal(show(view.state), "- a‸\n- b‸\nc");
+});
+
+test("the main selection stays the main one", () => {
+  const view = viewOf("«a»\nb\n«c»");
+  view.dispatch({ selection: EditorSelection.create(view.state.selection.ranges, 1) });
+  assert.equal(view.state.selection.mainIndex, 1);
+  setLines(view, "bullet");
+  assert.equal(view.state.selection.mainIndex, 1);
+  assert.equal(view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to), "- c");
 });
 
 test("wrapping toggles a mark around the selection and keeps it selected", () => {
