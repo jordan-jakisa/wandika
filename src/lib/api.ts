@@ -51,12 +51,15 @@ async function call<T>(cmd: string, args?: Args | Uint8Array, options?: { header
   try {
     return (await invoke(cmd, args, options)) as T;
   } catch (e) {
-    if (e && typeof e === "object" && "code" in e && "message" in e) {
+    // The core's errors carry a text code; a DOMException's number code is not one of them.
+    if (e && typeof e === "object" && "code" in e && "message" in e && typeof e.code === "string") {
       const { code, message, detail } = e as { code: string; message: string; detail?: string };
       if (detail && detail !== message) console.warn(`[wandika] ${cmd}: ${detail}`);
       throw new AppError(message, code, detail);
     }
-    const message = typeof e === "string" ? e : e instanceof Error ? e.message : String(e);
+    // Errors from another realm (a DOMException from the web view) fail instanceof, so read message.
+    const text = e && typeof e === "object" && "message" in e && typeof e.message === "string" ? e.message : null;
+    const message = typeof e === "string" ? e : (text ?? String(e));
     throw new AppError(message, "message");
   }
 }
