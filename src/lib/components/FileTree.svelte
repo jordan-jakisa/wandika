@@ -293,7 +293,7 @@
     }
   }
   .row.current {
-    background: color-mix(in srgb, var(--papyrus) 16%, transparent);
+    background: var(--papyrus-selected);
   }
   .row.current .name {
     color: var(--ink);

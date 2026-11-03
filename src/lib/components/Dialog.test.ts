@@ -61,11 +61,12 @@ describe("confirm", () => {
   test("a destructive action is drawn as danger, others as primary", () => {
     render(Dialog);
     void ask({ title: "Delete column?", confirm: "Delete column", danger: true });
-    expect(screen.getByRole("button", { name: "Delete column" })).toHaveClass("danger-fill");
-    expect(screen.getByRole("button", { name: "Delete column" })).not.toHaveClass("primary");
+    expect(screen.getByRole("button", { name: "Delete column" })).toHaveClass("primary", "danger");
+    expect(screen.getByRole("button", { name: "Delete column" })).toHaveClass("danger");
     void ask({ title: "Rename?", confirm: "Rename" });
     flushSync();
     expect(screen.getByRole("button", { name: "Rename" })).toHaveClass("primary");
+    expect(screen.getByRole("button", { name: "Rename" })).not.toHaveClass("danger");
   });
 });
 

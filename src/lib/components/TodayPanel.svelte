@@ -474,12 +474,13 @@
   .row-menu {
     display: none;
   }
-  @media (max-width: 899px) {
-    .row-actions .link-btn,
+  /* Links beside a heading or on a row are small, below the heading's size. */
+  .row-actions .link-btn,
   .section-head .link-btn {
     font-size: var(--small);
     font-weight: 500;
   }
+  @media (max-width: 899px) {
   .row-actions {
       display: none !important;
     }

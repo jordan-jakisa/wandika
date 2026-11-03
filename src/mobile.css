@@ -43,7 +43,7 @@
     dialog[aria-labelledby="dialog-title"] .buttons.single {
       grid-template-columns: 1fr;
     }
-    dialog[aria-labelledby="dialog-title"] .buttons .danger-fill {
+    dialog[aria-labelledby="dialog-title"] .buttons .primary.danger {
       background: var(--alarm);
       color: var(--sheet);
     }

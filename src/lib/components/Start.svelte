@@ -204,7 +204,7 @@
     align-items: center;
   }
   .known li + li {
-    border-top: 1px solid var(--rule);
+    border-top: 1px solid var(--hairline);
   }
   .vault-row {
     flex: 1;

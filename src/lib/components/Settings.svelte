@@ -806,7 +806,7 @@
     }
   }
   .sections li button.on {
-    background: color-mix(in srgb, var(--papyrus) 16%, transparent);
+    background: var(--papyrus-selected);
     font-weight: 600;
   }
   .phone .sections li button {
@@ -875,7 +875,7 @@
     padding: 10px 14px;
   }
   .row + .row {
-    border-top: 1px solid var(--rule);
+    border-top: 1px solid var(--hairline);
   }
   .row.stack {
     flex-direction: column;

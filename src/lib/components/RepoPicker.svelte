@@ -240,7 +240,7 @@
     padding: 0;
   }
   li + li {
-    border-top: 1px solid var(--rule);
+    border-top: 1px solid var(--hairline);
   }
   li button {
     display: grid;

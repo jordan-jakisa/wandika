@@ -227,7 +227,7 @@
     line-height: var(--view-title-line);
   }
   .more {
-    min-height: var(--target);
+    min-height: var(--control-h);
     margin: 4px 0 16px;
     padding: 0;
     border: 0;

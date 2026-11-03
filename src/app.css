@@ -7,6 +7,7 @@
   --rule: #d6dad4;
   --papyrus: #2e6a4e;
   --papyrus-wash: #2e6a4e14;
+  --papyrus-selected: color-mix(in srgb, var(--papyrus) 16%, transparent);
   --amber: #9a5f0e;
   --alarm: #b03c2c;
   --on-papyrus: #fbfbf9;
@@ -75,6 +76,8 @@
   --sidebar: 268px;
   --today: 320px;
   --target: 44px;
+  /* A button or field: macOS's push-button height with a pointer, a finger's target on touch. */
+  --control-h: 32px;
 
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -94,6 +97,8 @@
     --rule: #2c332f;
     --papyrus: #7fc19c;
     --papyrus-wash: #7fc19c1f;
+  --papyrus-selected: color-mix(in srgb, var(--papyrus) 24%, transparent);
+    --papyrus-selected: color-mix(in srgb, var(--papyrus) 24%, transparent);
     --amber: #e0a94f;
     --alarm: #f08a78;
     --on-papyrus: #151917;
@@ -203,14 +208,20 @@ a {
   color: var(--papyrus);
 }
 
+@media (pointer: coarse) {
+  :root {
+    --control-h: var(--target);
+  }
+}
+
 /* Shared controls */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: var(--target);
-  padding: 0 20px;
+  min-height: var(--control-h);
+  padding: 0 var(--space-4);
   border-radius: var(--radius);
   border: 1px solid var(--rule);
   background: var(--sheet);
@@ -234,6 +245,24 @@ a {
 }
 .btn.danger {
   color: var(--alarm);
+}
+/* The confirming button of something that can't be taken back. */
+.btn.primary.danger {
+  background: var(--alarm);
+  border-color: var(--alarm);
+  color: var(--sheet);
+}
+
+/* One icon size per job on the Mac: 18 in toolbars and close buttons, 16 in menus. */
+@media (min-width: 900px) {
+  .icon-btn > svg {
+    width: 18px;
+    height: 18px;
+  }
+  .menu .list [role="menuitem"] > svg {
+    width: 16px;
+    height: 16px;
+  }
 }
 .btn:disabled {
   opacity: 0.5;
@@ -395,8 +424,8 @@ a {
 
 .field {
   width: 100%;
-  min-height: var(--target);
-  padding: 0 14px;
+  min-height: var(--control-h);
+  padding: 0 var(--space-3);
   border-radius: var(--radius);
   border: 1px solid var(--rule);
   background: var(--sheet);

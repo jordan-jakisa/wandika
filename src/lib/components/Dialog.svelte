@@ -65,7 +65,7 @@
       <div class="buttons" class:single={!!shown.choices}>
         <button type="button" class="btn" onclick={() => app.dialog?.resolve(null)}>{shown.cancel ?? "Cancel"}</button>
         {#if !shown.choices}
-          <button class="btn" class:primary={!shown.danger} class:danger-fill={shown.danger}>
+          <button class="btn primary" class:danger={shown.danger}>
             {shown.confirm}
           </button>
         {/if}
@@ -133,10 +133,5 @@
     .choices button:hover {
       background: color-mix(in srgb, var(--ink) 6%, transparent);
     }
-  }
-  .danger-fill {
-    background: var(--alarm);
-    border-color: var(--alarm);
-    color: var(--sheet);
   }
 </style>

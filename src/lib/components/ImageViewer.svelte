@@ -123,6 +123,17 @@
     min-height: 52px;
     padding: 0 8px 0 20px;
   }
+  /* The stage is black in both themes, so its buttons are light in both. */
+  header :global(.btn.quiet),
+  header :global(.icon-btn) {
+    color: color-mix(in srgb, white 80%, transparent);
+  }
+  @media (hover: hover) {
+    header :global(.btn.quiet:hover),
+    header :global(.icon-btn:hover) {
+      color: white;
+    }
+  }
   .name {
     flex: 1;
     min-width: 0;

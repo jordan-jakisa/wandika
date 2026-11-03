@@ -692,7 +692,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    min-height: 34px;
+    min-height: var(--control-h);
     padding: 0 10px;
     border: 1px solid var(--rule);
     border-radius: var(--radius-sm);
@@ -730,7 +730,7 @@
     }
   }
   .side-nav button.active {
-    background: color-mix(in srgb, var(--papyrus) 16%, transparent);
+    background: var(--papyrus-selected);
     font-weight: 600;
   }
   .side-tree {

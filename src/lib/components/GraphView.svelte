@@ -529,7 +529,7 @@
   }
   header .field {
     width: 200px;
-    min-height: 36px;
+    min-height: var(--control-h);
   }
   .opt {
     display: inline-flex;
@@ -567,7 +567,7 @@
     pointer-events: none;
   }
   .small-btn {
-    min-height: 34px;
+    min-height: var(--control-h);
     padding: 0 12px;
     font-size: var(--small);
   }
