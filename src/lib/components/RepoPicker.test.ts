@@ -242,3 +242,23 @@ test("works against the in-browser core", async () => {
   expect(await screen.findByRole("button", { name: /jordan-jakisa\/notes/ }, { timeout: 2000 })).toBeInTheDocument();
   expect(screen.getByLabelText("New private repository")).toHaveValue("notes-2");
 });
+
+test("shows the seven most recently updated; typing finds the rest", async () => {
+  const many = Array.from({ length: 10 }, (_, i) => repo(`repo-${i + 1}`));
+  vi.spyOn(api, "reposList").mockResolvedValue(many);
+  const user = userEvent.setup();
+  render(RepoPicker);
+  await screen.findByText("jordan-jakisa/repo-1");
+  const names = () => screen.getAllByRole("listitem").map((li) => li.querySelector(".name")?.textContent?.trim());
+  expect(names()).toEqual(["repo-1", "repo-2", "repo-3", "repo-4", "repo-5", "repo-6", "repo-7"].map((n) => `jordan-jakisa/${n}`));
+  expect(screen.getByText(/3 more repositories\. Type its name above to find it\./)).toBeInTheDocument();
+  await user.type(screen.getByLabelText("Filter repositories"), "repo-9");
+  expect(names()).toEqual(["jordan-jakisa/repo-9"]);
+  expect(screen.queryByText(/more repositor/)).not.toBeInTheDocument();
+});
+
+test("one hidden repository is singular", async () => {
+  vi.spyOn(api, "reposList").mockResolvedValue(Array.from({ length: 8 }, (_, i) => repo(`r${i}`)));
+  render(RepoPicker);
+  expect(await screen.findByText(/^1 more repository\./)).toBeInTheDocument();
+});

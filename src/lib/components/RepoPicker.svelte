@@ -34,9 +34,13 @@
 
   const nameTaken = $derived(!!repos?.some((r) => r.name.toLowerCase() === newName.trim().toLowerCase()));
 
-  const shown = $derived(
+  /** The seven most recently updated; typing finds the rest. */
+  const TOP = 7;
+  const matches = $derived(
     (repos ?? []).filter((r) => r.full_name.toLowerCase().includes(filter.trim().toLowerCase())),
   );
+  const shown = $derived(matches.slice(0, TOP));
+  const hidden = $derived(matches.length - shown.length);
 
   async function open(owner: string, repo: string) {
     opening = `${owner}/${repo}`;
@@ -153,11 +157,20 @@
           </li>
         {/each}
       </ul>
+      {#if hidden > 0}
+        <p class="muted more">
+          {hidden === 1 ? "1 more repository." : `${hidden} more repositories.`} Type its name above to find it.
+        </p>
+      {/if}
     {/if}
   {/if}
 </div>
 
 <style>
+  .more {
+    margin: var(--space-3) 0 0;
+    font-size: var(--small);
+  }
   .progress {
     position: relative;
     height: 6px;
