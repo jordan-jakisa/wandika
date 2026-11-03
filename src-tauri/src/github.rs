@@ -110,6 +110,11 @@ pub async fn start_device_flow(http: &reqwest::Client) -> Result<DeviceCode> {
         .await?
         .json()
         .await?;
+    device_code(v)
+}
+
+/// GitHub's answer to a sign-in request: the code to show, or why it refused.
+fn device_code(v: Value) -> Result<DeviceCode> {
     if let Some(err) = v.get("error").and_then(Value::as_str) {
         let detail = v["error_description"].as_str().unwrap_or(err);
         return Err(msg(format!("GitHub refused the sign-in request: {detail}")));
@@ -131,6 +136,11 @@ pub async fn poll_device_flow(http: &reqwest::Client, device_code: &str) -> Resu
         .await?
         .json()
         .await?;
+    poll_answer(&v)
+}
+
+/// GitHub's answer to one poll: still waiting, slow down, the token, or why sign-in ended.
+fn poll_answer(v: &Value) -> Result<Poll> {
     match v.get("error").and_then(Value::as_str) {
         Some("authorization_pending") => Ok(Poll::Pending),
         Some("slow_down") => Ok(Poll::SlowDown),
@@ -148,11 +158,13 @@ pub async fn poll_device_flow(http: &reqwest::Client, device_code: &str) -> Resu
 pub struct GitHub {
     http: reqwest::Client,
     token: String,
+    /// The REST API's address; tests point it at a local server.
+    api: String,
 }
 
 impl GitHub {
     pub fn new(http: reqwest::Client, token: String) -> Self {
-        Self { http, token }
+        Self { http, token, api: API.into() }
     }
 
     /// For git over HTTPS, which signs in with the same token.
@@ -162,7 +174,7 @@ impl GitHub {
 
     fn req(&self, method: Method, path: &str) -> RequestBuilder {
         self.http
-            .request(method, format!("{API}{path}"))
+            .request(method, format!("{}{path}", self.api))
             .bearer_auth(&self.token)
             .header("Accept", "application/vnd.github+json")
             .header("X-GitHub-Api-Version", "2022-11-28")
@@ -235,5 +247,224 @@ impl GitHub {
 
     pub async fn repo(&self, owner: &str, repo: &str) -> Result<Repo> {
         Self::json(self.req(Method::GET, &format!("/repos/{owner}/{repo}"))).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_http::{block_on, reply, serve};
+
+    /// The write budget and the rate-limit stop are shared by the whole app, so these tests take
+    /// turns and start from a clean slate.
+    static SERIAL: Mutex<()> = Mutex::new(());
+
+    fn turn() -> std::sync::MutexGuard<'static, ()> {
+        let guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        *BLOCKED_UNTIL.lock().unwrap() = None;
+        WRITES.lock().unwrap().clear();
+        guard
+    }
+
+    fn gh(url: &str) -> GitHub {
+        GitHub { http: reqwest::Client::new(), token: "gho_test".into(), api: url.into() }
+    }
+
+    fn repo_json(name: &str) -> Value {
+        json!({ "name": name, "full_name": format!("amina/{name}"), "owner": { "login": "amina" }, "private": true,
+                "default_branch": "main", "description": null, "pushed_at": "2026-11-01T10:00:00Z" })
+    }
+
+    fn blocked_for() -> Option<Duration> {
+        BLOCKED_UNTIL.lock().unwrap().map(|t| t.saturating_duration_since(Instant::now()))
+    }
+
+    #[test]
+    fn requests_carry_the_token_and_api_version() {
+        let r = GitHub::new(reqwest::Client::new(), "gho_abc".into()).req(Method::GET, "/user").build().unwrap();
+        assert_eq!(r.url().as_str(), "https://api.github.com/user");
+        assert_eq!(r.headers()["authorization"], "Bearer gho_abc");
+        assert_eq!(r.headers()["accept"], "application/vnd.github+json");
+        assert_eq!(r.headers()["x-github-api-version"], "2022-11-28");
+        assert_eq!(GitHub::new(reqwest::Client::new(), "t".into()).token(), "t");
+    }
+
+    #[test]
+    fn reads_the_user_and_one_repository() {
+        let _t = turn();
+        let s = serve(vec![
+            reply(200, r#"{"login":"amina","name":null,"avatar_url":"https://a/1.png","id":5}"#),
+            reply(200, json!({ "name": "notes", "full_name": "amina/notes", "owner": { "login": "amina" }, "private": false }).to_string()),
+        ]);
+        let g = gh(&s.url);
+        let user = block_on(g.user()).unwrap();
+        assert_eq!((user.login.as_str(), user.name.as_deref()), ("amina", None));
+        let repo = block_on(g.repo("amina", "notes")).unwrap();
+        assert_eq!(repo.default_branch, None, "an empty repository has no default branch yet");
+        let reqs = s.requests();
+        assert_eq!((reqs[0].method.as_str(), reqs[0].target.as_str()), ("GET", "/user"));
+        assert_eq!(reqs[1].target, "/repos/amina/notes");
+        assert_eq!(reqs[0].header("authorization"), Some("Bearer gho_test"));
+    }
+
+    #[test]
+    fn lists_repositories_a_page_at_a_time_up_to_ten_pages() {
+        let _t = turn();
+        let page = |n: usize, from: usize| Value::Array((from..from + n).map(|i| repo_json(&format!("r{i}"))).collect()).to_string();
+        let s = serve(vec![reply(200, page(100, 0)), reply(200, page(3, 100))]);
+        let repos = block_on(gh(&s.url).repos()).unwrap();
+        assert_eq!(repos.len(), 103);
+        assert_eq!(repos[102].full_name, "amina/r102");
+        let targets: Vec<String> = s.requests().into_iter().map(|r| r.target).collect();
+        assert_eq!(targets, ["/user/repos?per_page=100&sort=pushed&page=1", "/user/repos?per_page=100&sort=pushed&page=2"]);
+
+        let s = serve((0..11).map(|i| reply(200, page(100, i * 100))).collect());
+        assert_eq!(block_on(gh(&s.url).repos()).unwrap().len(), 1000);
+        assert_eq!(s.requests().len(), 10, "never more than ten pages");
+
+        let s = serve(vec![reply(200, "[]")]);
+        assert!(block_on(gh(&s.url).repos()).unwrap().is_empty());
+    }
+
+    #[test]
+    fn creates_a_private_empty_repository_and_counts_the_write() {
+        let _t = turn();
+        let s = serve(vec![reply(201, repo_json("notes").to_string())]);
+        let repo = block_on(gh(&s.url).create_repo("notes")).unwrap();
+        assert_eq!(repo.name, "notes");
+        let req = &s.requests()[0];
+        assert_eq!((req.method.as_str(), req.target.as_str()), ("POST", "/user/repos"));
+        let body: Value = serde_json::from_str(&req.body).unwrap();
+        assert_eq!(body, json!({ "name": "notes", "private": true, "auto_init": false, "description": "Notes kept with Wandika" }));
+        assert_eq!(WRITES.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn error_answers_become_github_errors_with_the_service_message() {
+        let _t = turn();
+        let s = serve(vec![
+            reply(401, r#"{"message":"Bad credentials"}"#),
+            reply(404, r#"{"message":"Not Found","documentation_url":"x"}"#),
+            reply(422, r#"{"message":"Repository creation failed.","errors":[{"message":"name already exists on this account"}]}"#),
+            reply(502, "<html>Bad gateway</html>"),
+            reply(403, r#"{"message":"Resource not accessible by integration"}"#),
+            reply(200, "not json"),
+        ]);
+        let g = gh(&s.url);
+        let e = block_on(g.user()).unwrap_err();
+        assert_eq!(e.to_string(), "Your GitHub sign-in expired or was revoked. Sign out in Settings and sign in again.");
+        let e = block_on(g.repo("a", "gone")).unwrap_err();
+        assert!(matches!(&e, Error::GitHub { status: 404, message } if message == "Not Found"));
+        let e = block_on(g.create_repo("taken")).unwrap_err();
+        assert_eq!(e.friendly().0, "github_name_taken");
+        let e = block_on(g.user()).unwrap_err();
+        assert!(matches!(&e, Error::GitHub { status: 502, message } if message == "<html>Bad gateway</html>"), "a body that isn't JSON is kept whole");
+        let e = block_on(g.user()).unwrap_err();
+        assert_eq!(e.friendly().0, "github_forbidden");
+        assert!(blocked_for().is_none(), "a plain refusal is not a rate limit");
+        let e = block_on(g.user()).unwrap_err();
+        assert_eq!(e.friendly().0, "bad_response");
+    }
+
+    #[test]
+    fn a_rate_limit_answer_stops_every_request_until_github_says() {
+        let _t = turn();
+        let s = serve(vec![reply(429, r#"{"message":"slow"}"#).with("retry-after", "120")]);
+        let e = block_on(gh(&s.url).user()).unwrap_err();
+        assert!(matches!(&e, Error::GitHub { status: 429, message } if message == "rate limit: slow"));
+        let wait = blocked_for().unwrap();
+        assert!(wait > Duration::from_secs(115) && wait <= Duration::from_secs(120), "{wait:?}");
+
+        // While blocked, nothing is sent at all.
+        let s = serve(vec![reply(200, "{}")]);
+        let e = block_on(gh(&s.url).user()).unwrap_err();
+        assert_eq!(e.friendly().0, "github_rate_limit");
+        assert!(block_on(gh(&s.url).create_repo("x")).is_err());
+        assert!(s.requests().is_empty());
+        assert!(WRITES.lock().unwrap().is_empty(), "a refused write isn't counted");
+    }
+
+    #[test]
+    fn rate_limit_waits_follow_the_reset_time_and_are_never_under_a_minute() {
+        let _t = turn();
+        let reset = chrono::Utc::now().timestamp() + 300;
+        let s = serve(vec![
+            reply(403, r#"{"message":"API rate limit exceeded"}"#).with("x-ratelimit-remaining", "0").with("x-ratelimit-reset", reset.to_string()),
+        ]);
+        assert_eq!(block_on(gh(&s.url).user()).unwrap_err().friendly().0, "github_rate_limit");
+        let wait = blocked_for().unwrap();
+        assert!(wait > Duration::from_secs(290) && wait <= Duration::from_secs(301), "{wait:?}");
+
+        *BLOCKED_UNTIL.lock().unwrap() = None;
+        let s = serve(vec![reply(429, "{}").with("retry-after", "5")]);
+        assert!(block_on(gh(&s.url).user()).is_err());
+        assert!(blocked_for().unwrap() > Duration::from_secs(55), "at least a minute");
+
+        *BLOCKED_UNTIL.lock().unwrap() = None;
+        let s = serve(vec![reply(403, r#"{"message":"You have exceeded a secondary rate limit"}"#)]);
+        assert!(block_on(gh(&s.url).user()).is_err());
+        assert!(blocked_for().unwrap() > Duration::from_secs(55), "no headers: a minute");
+
+        // A limit that has passed lets requests through again.
+        *BLOCKED_UNTIL.lock().unwrap() = Some(Instant::now() - Duration::from_secs(1));
+        assert!(guard().is_ok());
+    }
+
+    #[test]
+    fn writes_are_paced_under_github_limits() {
+        let _t = turn();
+        block_on(pace()).unwrap();
+        assert_eq!(WRITES.lock().unwrap().len(), 1);
+
+        // This hour's budget is spent: refused at once.
+        {
+            let mut q = WRITES.lock().unwrap();
+            q.clear();
+            let now = Instant::now();
+            q.extend((0..WRITES_PER_HOUR).map(|i| now - Duration::from_secs(3000) + Duration::from_millis(i as u64)));
+        }
+        assert_eq!(block_on(pace()).unwrap_err().friendly().0, "github_rate_limit");
+
+        // Writes older than an hour no longer count.
+        {
+            let mut q = WRITES.lock().unwrap();
+            q.clear();
+            let now = Instant::now();
+            q.extend((0..WRITES_PER_HOUR).map(|_| now - Duration::from_secs(3601)));
+        }
+        block_on(pace()).unwrap();
+        assert_eq!(WRITES.lock().unwrap().len(), 1);
+
+        // This minute is full: waits until the oldest is a minute old, then goes.
+        {
+            let mut q = WRITES.lock().unwrap();
+            q.clear();
+            let first = Instant::now() - Duration::from_millis(59_800);
+            q.extend((0..WRITES_PER_MINUTE).map(|_| first));
+        }
+        let t = Instant::now();
+        block_on(pace()).unwrap();
+        let waited = t.elapsed();
+        assert!(waited >= Duration::from_millis(200) && waited < Duration::from_secs(5), "{waited:?}");
+    }
+
+    #[test]
+    fn device_flow_answers() {
+        let code = device_code(json!({ "device_code": "dc", "user_code": "ABCD-1234", "verification_uri": "https://github.com/login/device", "expires_in": 899, "interval": 5 })).unwrap();
+        assert_eq!((code.user_code.as_str(), code.interval), ("ABCD-1234", 5));
+        let e = device_code(json!({ "error": "unauthorized_client", "error_description": "Device flow is disabled" })).unwrap_err();
+        assert_eq!(e.to_string(), "GitHub refused the sign-in request: Device flow is disabled");
+        let e = device_code(json!({ "error": "unauthorized_client" })).unwrap_err();
+        assert_eq!(e.to_string(), "GitHub refused the sign-in request: unauthorized_client");
+        assert_eq!(device_code(json!({ "user_code": "x" })).unwrap_err().friendly().0, "bad_response");
+
+        assert!(matches!(poll_answer(&json!({ "error": "authorization_pending" })), Ok(Poll::Pending)));
+        assert!(matches!(poll_answer(&json!({ "error": "slow_down", "interval": 10 })), Ok(Poll::SlowDown)));
+        assert!(matches!(poll_answer(&json!({ "access_token": "gho_x", "scope": "repo" })), Ok(Poll::Done(t)) if t == "gho_x"));
+        let said = |v: Value| poll_answer(&v).err().unwrap().to_string();
+        assert_eq!(said(json!({ "error": "expired_token" })), "The code expired. Start sign-in again.");
+        assert_eq!(said(json!({ "error": "access_denied" })), "Sign-in was cancelled on GitHub.");
+        assert_eq!(said(json!({ "error": "incorrect_device_code" })), "GitHub sign-in didn't finish. Start again.");
+        assert_eq!(said(json!({ "token_type": "bearer" })), "GitHub didn't return a token.");
     }
 }
