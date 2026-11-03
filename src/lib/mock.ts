@@ -215,7 +215,8 @@ const handlers: Record<string, (a: Args) => unknown> = {
     vault = known.find((k) => k.id === id) ?? null;
   },
   vault_forget: ({ id }) => {
-    known.splice(known.findIndex((k) => k.id === id), 1);
+    const i = known.findIndex((k) => k.id === id);
+    if (i >= 0) known.splice(i, 1);
     if (vault?.id === id) vault = null;
   },
   vault_connect_remote: async ({ owner, repo }) => {
