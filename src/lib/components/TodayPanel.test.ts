@@ -470,3 +470,9 @@ describe("public builds", () => {
     expect(screen.getByRole("heading", { name: "Inbox" })).toBeInTheDocument();
   });
 });
+
+test("Today doesn't point to Connections when this build has nothing to connect", async () => {
+  app.status = { ...statusFixture({ connectors: { google: null, microsoft: null, apple_calendar: "unsupported", apple_reminders: "unsupported" } }), configured: { github: true, google: false, microsoft: false, apple: false, gmail: false } };
+  await setup(todayFixture());
+  expect(screen.queryByRole("button", { name: "Connect an account" })).not.toBeInTheDocument();
+});

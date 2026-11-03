@@ -18,6 +18,8 @@
 
   const c = $derived(app.status?.connectors);
   const calendarConnected = $derived(!!c && (!!c.google || !!c.microsoft || c.apple_calendar === "granted"));
+  /** Only point to Connections when this build has something there to connect. */
+  const canConnect = $derived(!!app.status?.configured && (app.status.configured.google || app.status.configured.microsoft || app.status.configured.apple));
   // Public builds have no Gmail; Google there is Calendar and Tasks.
   const gmail = $derived(app.status?.configured.gmail !== false);
   const mailConnected = $derived(!!c && ((gmail && !!c.google) || !!c.microsoft));
@@ -122,7 +124,7 @@
       }}><NotebookPen size={16} /> Open today's note</button>
   </header>
 
-  {#if !calendarConnected && !mailConnected && data}
+  {#if !calendarConnected && !mailConnected && data && canConnect}
     <p class="connect muted">
       See your calendar and inbox here.
       <button class="link-btn" onclick={() => app.openSettings("connections")}>Connect an account</button>

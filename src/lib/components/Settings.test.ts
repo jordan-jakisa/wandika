@@ -405,8 +405,8 @@ describe("Connections", () => {
   test("a public build waits for Google's review before offering Google", async () => {
     app.status = { ...app.status!, configured: { ...app.status!.configured, google: false, gmail: false } };
     await open("connections");
-    expect(row("Google").getByText("Coming once Google has reviewed Wandika.")).toBeInTheDocument();
-    expect(row("Google").queryByRole("button", { name: "Connect" })).not.toBeInTheDocument();
+    expect(pane().getByText("Google Calendar and Tasks come once Google has reviewed Wandika.")).toBeInTheDocument();
+    expect(pane().queryByText("Google")).not.toBeInTheDocument();
   });
 
   test("a public build's Google is Calendar and Tasks, no Gmail", async () => {
@@ -615,21 +615,31 @@ describe("Connections", () => {
     expect(row("Apple Reminders").queryByRole("button")).not.toBeInTheDocument();
   });
 
-  test("a provider this build can't use says so, with no button", async () => {
-    app.status = status({ configured: { github: true, google: false, microsoft: false, apple: true, gmail: true } });
+  test("a provider this build can't use isn't listed at all", async () => {
+    app.status = status({ configured: { github: true, google: false, microsoft: true, apple: true, gmail: true } });
     await open("connections");
-    expect(row("Google").getByText("Not available in this version.")).toBeInTheDocument();
-    expect(row("Google").queryByRole("button")).not.toBeInTheDocument();
-    expect(row("Outlook").getByText("Not available in this version.")).toBeInTheDocument();
-    expect(row("Outlook").queryByRole("button")).not.toBeInTheDocument();
+    expect(pane().queryByText("Google")).not.toBeInTheDocument();
+    expect(row("Outlook").getByRole("button", { name: "Connect" })).toBeInTheDocument();
+    expect(row("Apple Calendar")).toBeTruthy();
   });
 
-  test("on Android, Google points to the Mac or iPhone", async () => {
-    vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (Linux; Android 15)");
-    app.status = status({ configured: { github: true, google: false, microsoft: true, apple: false, gmail: true } });
+  test("a connected provider stays listed so it can be disconnected", async () => {
+    app.status = status({
+      configured: { github: true, google: false, microsoft: false, apple: false, gmail: true },
+      connectors: connectors({ google: "jordan@example.com" }),
+    });
     await open("connections");
-    expect(row("Google").getByText("Not available on Android yet. Connect Google on your Mac or iPhone.")).toBeInTheDocument();
-    expect(row("Outlook").getByRole("button", { name: "Connect" })).toBeInTheDocument();
+    expect(row("Google").getByRole("button", { name: "Disconnect" })).toBeInTheDocument();
+    expect(pane().queryByText("Outlook")).not.toBeInTheDocument();
+  });
+
+  test("an Android public build has nothing to connect yet, and says why for Google", async () => {
+    app.status = status({ configured: { github: true, google: false, microsoft: false, apple: false, gmail: false } });
+    await open("connections");
+    expect(pane().getByText("There's nothing to connect in this version yet.")).toBeInTheDocument();
+    expect(pane().getByText("Google Calendar and Tasks come once Google has reviewed Wandika.")).toBeInTheDocument();
+    expect(pane().queryByRole("button", { name: "Connect" })).not.toBeInTheDocument();
+    expect(pane().queryByText(/Connected sources appear in Today/)).not.toBeInTheDocument();
   });
 });
 

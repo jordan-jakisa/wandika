@@ -327,14 +327,10 @@
     <div class="row-text">
       <span class="row-label">{name}</span>
       <span class="row-desc">
-        {#if !configured}
-          {provider === "google" && /Android/.test(navigator.userAgent)
-            ? "Not available on Android yet. Connect Google on your Mac or iPhone."
-            : provider === "google" && s?.configured.gmail === false
-              ? "Coming once Google has reviewed Wandika."
-              : "Not available in this version."}
-        {:else if account}
+        {#if account}
           {account}
+        {:else if !configured}
+          Not available in this version.
         {:else}
           {what}
         {/if}
@@ -601,10 +597,15 @@
             they also open with the age command-line tool.
           </p>
         {:else if section === "connections"}
+          <!-- Only what this build can connect (or is connected, so it can be disconnected): no dead rows. -->
+          {@const showGoogle = !!s?.configured.google || !!c?.google}
+          {@const showOutlook = !!s?.configured.microsoft || !!c?.microsoft}
+          {@const googleLater = s?.configured.gmail === false && !s?.configured.google}
+          {#if showGoogle || showOutlook}
           <h4>Mail and calendars</h4>
           <div class="group">
-            {@render google()}
-            {@render connRow("Outlook", "Outlook mail and calendar", c?.microsoft ?? null, "microsoft", !!s?.configured.microsoft, true)}
+            {#if showGoogle}{@render google()}{/if}
+            {#if showOutlook}{@render connRow("Outlook", "Outlook mail and calendar", c?.microsoft ?? null, "microsoft", !!s?.configured.microsoft, true)}{/if}
             {#if device}
               <div class="row stack device" role="status">
                 <span class="row-desc">Enter this code on Microsoft's sign-in page:</span>
@@ -615,12 +616,23 @@
               </div>
             {/if}
           </div>
+          {/if}
+          {#if s?.configured.apple}
           <h4>On this device</h4>
           <div class="group">
             {@render appleRow("Apple Calendar", "apple_calendar")}
             {@render appleRow("Apple Reminders", "apple_reminders")}
           </div>
-          <p class="note">Connected sources appear in Today. Wandika reads mail and calendars; it never sends or changes them.</p>
+          {/if}
+          {#if !showGoogle && !showOutlook && !s?.configured.apple}
+            <p class="note">There's nothing to connect in this version yet.</p>
+          {/if}
+          {#if googleLater}
+            <p class="note">Google Calendar and Tasks come once Google has reviewed Wandika.</p>
+          {/if}
+          {#if showGoogle || showOutlook || s?.configured.apple}
+            <p class="note">Connected sources appear in Today. Wandika reads mail and calendars and never sends or changes them; it only ticks off the tasks you tick.</p>
+          {/if}
         {:else if section === "account"}
           <div class="group">
             {#if s?.user}
