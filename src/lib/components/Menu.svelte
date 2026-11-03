@@ -46,7 +46,15 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="menu" bind:this={root} onkeydown={onKey}>
+<div
+  class="menu"
+  bind:this={root}
+  onkeydown={onKey}
+  onfocusout={(e) => {
+    // Tab out of the menu closes it; focus leaving the window (no new target) doesn't.
+    if (open && e.relatedTarget && !root.contains(e.relatedTarget as Node)) open = false;
+  }}
+>
   <button
     class="icon-btn trigger"
     aria-label={label}
