@@ -1,4 +1,5 @@
-// GFM tables render as real tables while the cursor is elsewhere. Click a row to edit its source.
+// GFM tables render as real tables while the cursor is elsewhere. Click a row to edit its source;
+// links and tags in cells work as they do in the text.
 
 import { syntaxTree } from "@codemirror/language";
 import { type EditorState, type Range, StateEffect, StateField } from "@codemirror/state";
@@ -10,6 +11,7 @@ class Table extends WidgetType {
     readonly source: string,
     readonly from: number,
     readonly onOpenLink: (target: string) => void,
+    readonly onTag: (tag: string) => void,
   ) {
     super();
   }
@@ -50,6 +52,8 @@ class Table extends WidgetType {
       e.preventDefault();
       const link = t.closest<HTMLElement>(".cm-wikilink");
       if (link?.dataset.target) return this.onOpenLink(link.dataset.target);
+      const tag = t.closest<HTMLElement>(".cm-tag")?.dataset.tag;
+      if (tag) return this.onTag(tag);
       const href = t.closest<HTMLElement>(".cm-md-link")?.dataset.href;
       if (href) return window.dispatchEvent(new CustomEvent("wandika:open-url", { detail: href }));
       const pos = Number(t.closest<HTMLElement>("tr")?.dataset.pos ?? this.from);
@@ -64,7 +68,7 @@ class Table extends WidgetType {
   }
 }
 
-function build(state: EditorState, onOpenLink: (target: string) => void): DecorationSet {
+function build(state: EditorState, onOpenLink: (target: string) => void, onTag: (tag: string) => void): DecorationSet {
   const out: Range<Decoration>[] = [];
   const focused = state.field(focusField, false) ?? false;
   const sel = state.selection.main;
@@ -77,7 +81,7 @@ function build(state: EditorState, onOpenLink: (target: string) => void): Decora
       if (focused && sel.from <= to && sel.to >= from) return false;
       const source = state.sliceDoc(from, to);
       if (source.split("\n").length < 2) return false;
-      out.push(Decoration.replace({ widget: new Table(source, from, onOpenLink), block: true }).range(from, to));
+      out.push(Decoration.replace({ widget: new Table(source, from, onOpenLink, onTag), block: true }).range(from, to));
       return false;
     },
   });
@@ -91,9 +95,9 @@ const focusField = StateField.define<boolean>({
 });
 
 /** Block widgets must come from state; focus is mirrored into state so tables close on blur. */
-export function tables(onOpenLink: (target: string) => void) {
+export function tables(onOpenLink: (target: string) => void, onTag: (tag: string) => void) {
   const field = StateField.define<DecorationSet>({
-    create: (state) => build(state, onOpenLink),
+    create: (state) => build(state, onOpenLink, onTag),
     update(value, tr) {
       if (
         tr.docChanged ||
@@ -101,7 +105,7 @@ export function tables(onOpenLink: (target: string) => void) {
         tr.effects.some((e) => e.is(setFocus)) ||
         syntaxTree(tr.startState) !== syntaxTree(tr.state)
       ) {
-        return build(tr.state, onOpenLink);
+        return build(tr.state, onOpenLink, onTag);
       }
       return value;
     },

@@ -6,9 +6,9 @@ import { blur, decorations, focus, md, mousedown, select, show, viewOf } from ".
 const TABLE = "| Name | Age |\n|:--|--:|\n| **Ann** | 30 |\n| [[Bob]] |";
 const doc = `Intro‸\n\n${TABLE}\n\nAfter`;
 
-const setup = (marked: string, onOpenLink = vi.fn()) => {
-  const view = viewOf(marked, [md(), tables(onOpenLink)]);
-  return { view, onOpenLink };
+const setup = (marked: string, onOpenLink = vi.fn(), onTag = vi.fn()) => {
+  const view = viewOf(marked, [md(), tables(onOpenLink, onTag)]);
+  return { view, onOpenLink, onTag };
 };
 
 const tableIn = (view: { dom: HTMLElement }) => view.dom.querySelector<HTMLTableElement>(".cm-table");
@@ -125,6 +125,13 @@ test("clicking a web link in a cell asks the app to open the address", () => {
     window.removeEventListener("wandika:open-url", listener);
   }
   assert.deepEqual(opened.mock.calls, [["https://example.com"]]);
+});
+
+test("clicking a tag in a cell shows that tag", () => {
+  const { view, onTag } = setup("x‸\n\n| a |\n|---|\n| #todo |");
+  mousedown(tableIn(view)!.querySelector(".cm-tag")!);
+  assert.deepEqual(onTag.mock.calls, [["todo"]]);
+  assert.equal(view.state.selection.main.head, 1);
 });
 
 test("two tables render as two widgets", () => {

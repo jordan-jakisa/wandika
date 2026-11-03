@@ -54,7 +54,7 @@ export function inline(md: string): string {
         .replace(/\*\*(.+?)\*\*|__(.+?)__/g, (_m, a?: string, b?: string) => `<strong>${a ?? b}</strong>`)
         .replace(/(^|[^*\w])\*(?!\s)(.+?)\*(?!\w)/g, "$1<em>$2</em>")
         .replace(/~~(.+?)~~/g, "<s>$1</s>")
-        .replace(/(^|\s)(#[A-Za-z][\w/-]*)/g, '$1<span class="cm-tag" data-tag="$2">$2</span>');
+        .replace(/(^|\s)#([A-Za-z][\w/-]*)/g, '$1<span class="cm-tag" data-tag="$2">#$2</span>');
     })
     .join("");
 }

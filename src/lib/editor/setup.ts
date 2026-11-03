@@ -148,7 +148,7 @@ export function extensions(opts: {
     livePreview(opts.onOpenLink, opts.onTag),
     diagrams,
     properties,
-    tables(opts.onOpenLink),
+    tables(opts.onOpenLink, opts.onTag),
     theme,
     diagramTheme,
     tableTheme,

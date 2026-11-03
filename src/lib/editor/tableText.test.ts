@@ -73,6 +73,14 @@ test("a quote in a link target cannot break out of the attribute", () => {
   assert.equal(inline('[[a"b]]'), '<span class="cm-wikilink" data-target="a&quot;b">a&quot;b</span>');
 });
 
+test("tags render as tags, but not inside code or after a letter", () => {
+  assert.equal(inline("#todo"), '<span class="cm-tag" data-tag="todo">#todo</span>');
+  assert.equal(inline("see #a/b-c"), 'see <span class="cm-tag" data-tag="a/b-c">#a/b-c</span>');
+  assert.equal(inline("`#todo`"), "<code>#todo</code>");
+  assert.equal(inline("C#"), "C#");
+  assert.equal(inline("#1"), "#1");
+});
+
 test("marks inside code are left as written", () => {
   assert.equal(inline("`**a**` **b**"), "<code>**a**</code> <strong>b</strong>");
 });
