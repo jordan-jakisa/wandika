@@ -10,12 +10,17 @@ export function section(text: string, sub: string | undefined): string {
     const line = lines.find((l) => l.trimEnd().endsWith(` ${sub}`) || l.trim() === sub);
     return line ? line.replace(` ${sub}`, "") : "";
   }
+  // Heading level per line, 0 for other lines; a `#` line inside a code fence is code, not a heading.
+  let fence = false;
+  const levels = lines.map((l) => {
+    if (/^\s*```/.test(l)) fence = !fence;
+    return !fence && /^#{1,6}\s/.test(l) ? /^#+/.exec(l)![0].length : 0;
+  });
   const want = sub.trim().toLowerCase();
-  const start = lines.findIndex((l) => /^#{1,6}\s/.test(l) && l.replace(/^#+\s*/, "").trim().toLowerCase() === want);
+  const start = lines.findIndex((l, i) => levels[i] > 0 && l.replace(/^#+\s*/, "").trim().toLowerCase() === want);
   if (start < 0) return "";
-  const level = /^#+/.exec(lines[start])![0].length;
   let end = start + 1;
-  while (end < lines.length && !(/^#{1,6}\s/.test(lines[end]) && /^#+/.exec(lines[end])![0].length <= level)) end++;
+  while (end < lines.length && !(levels[end] > 0 && levels[end] <= levels[start])) end++;
   return lines.slice(start, end).join("\n");
 }
 

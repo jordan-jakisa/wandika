@@ -66,6 +66,12 @@ test("a line that starts with --- but is not a fence does not end the frontmatte
   assert.equal(section("---\na: 1\n---x\n---\nBody", undefined), "Body");
 });
 
+test("a # line inside a code block does not end a section", () => {
+  const text = "## Setup\n```sh\n# install\nnpm i\n```\nDone\n## Next\nx";
+  assert.equal(section(text, "Setup"), "## Setup\n```sh\n# install\nnpm i\n```\nDone");
+  assert.equal(section(text, "install"), "");
+});
+
 test("embedded lines render as headings, lists, quotes and paragraphs", () => {
   const { html, more } = renderLite("## Title\n\n- one\n  * two\n3) three\n> quoted\nplain");
   assert.equal(
