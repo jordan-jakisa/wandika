@@ -42,6 +42,12 @@ if (!Element.prototype.setPointerCapture) {
   Element.prototype.hasPointerCapture = () => false;
 }
 
+// CodeMirror measures text through Range rectangles, which jsdom leaves out.
+if (!Range.prototype.getClientRects) {
+  Range.prototype.getClientRects = () => ({ length: 0, item: () => null, [Symbol.iterator]: [][Symbol.iterator] }) as unknown as DOMRectList;
+  Range.prototype.getBoundingClientRect = () => new DOMRect();
+}
+
 /** Drag events with a position and a data transfer, which jsdom doesn't have. */
 if (!("DragEvent" in window)) {
   class DragEvent extends MouseEvent {
