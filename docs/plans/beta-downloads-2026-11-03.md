@@ -28,16 +28,13 @@ Android, and a public TestFlight link for iPhone. Public builds leave Gmail out.
 
 ## Jordan's steps, in order (one at a time)
 
-1. **Mac certificate.** Xcode, Settings, Accounts, Manage Certificates, +, Developer ID Application.
-   Only the account holder can create it.
-2. **Notary credentials.** An app-specific password for the Apple ID (appleid.apple.com), then in
-   Terminal: `xcrun notarytool store-credentials wandika-notary --apple-id <id> --team-id <team>`.
-3. **Android release key.** In Terminal (keep the file and passwords safe, a lost key can't update
-   the app): `keytool -genkey -v -keystore ~/wandika-release.jks -keyalg RSA -keysize 2048 -validity
-   10000 -alias wandika`, then `src-tauri/gen/android/keystore.properties` with storeFile,
-   storePassword, keyAlias and keyPassword.
-4. **App Store Connect.** A new app record for bundle ID me.jordanjakisa.wandika, then the
-   review-readiness checklist, then TestFlight external testing with a public link.
+1. **Mac certificate.** Done 2026-11-03: "Developer ID Application" is in the keychain.
+2. **Android release key.** One `keytool` command and keystore.properties (docs/setup.md, Releases).
+3. **iPhone.** An App Store Connect app record (console, Jordan's yes), then Xcode Archive and
+   Upload with the Apple Account Xcode already has, then the review-readiness checklist and an
+   external TestFlight group.
+4. **Mac notarizing.** An App Store Connect team API key (no Apple Account password; Tauri's and
+   Apple's docs, and real Tauri apps such as Jan, use it). Waits until Jordan is ready.
 5. **Where downloads live.** GitHub Releases on jordan-jakisa/wandika (public), linked from the site.
 
 Then Claude runs the two release scripts, uploads the iPhone build, and the site gets its download
