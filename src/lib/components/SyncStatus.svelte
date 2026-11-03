@@ -60,7 +60,7 @@
   onclick={tap}
   disabled={app.syncing}
   title={app.syncError?.message ?? "Sync now"}
-  aria-label={`${text}. Sync now`}
+  aria-label={/[.…]$/.test(text) ? `${text} Sync now` : `${text}. Sync now`}
 >
   <span class="icon" class:spin={slow}><RefreshCw size={13} /></span>
   <span>{text}</span>
