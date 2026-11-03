@@ -15,7 +15,12 @@ const TYPES: Record<string, string> = {
   heic: "image/heic",
 };
 
-const ext = (name: string) => name.split(/[?#]/)[0].split(".").pop()?.toLowerCase() ?? "";
+/** The file type from the last part of the path: "" for "png" or "photos.v2/Note" (no type of its own). */
+const ext = (name: string) => {
+  const file = name.split(/[?#]/)[0].split("/").pop()!;
+  const dot = file.lastIndexOf(".");
+  return dot > 0 ? file.slice(dot + 1).toLowerCase() : "";
+};
 export const isImage = (target: string) => ext(target) in TYPES;
 
 const cache = new Map<string, Promise<string>>();
@@ -32,13 +37,16 @@ export function imageUrl(target: string, from: string): Promise<string> {
   const key = `${from}\n${target}`;
   let url = cache.get(key);
   if (!url) {
-    url = api.attachmentRead(target, from).then((buf) => {
+    const read: Promise<string> = api.attachmentRead(target, from).then((buf) => {
       const u = URL.createObjectURL(new Blob([buf], { type: TYPES[ext(target)] }));
-      ready.set(key, u);
+      // Not when the images were forgotten meanwhile: that URL is about to be revoked.
+      if (cache.get(key) === read) ready.set(key, u);
       return u;
     });
-    url.catch(() => cache.delete(key));
-    cache.set(key, url);
+    url = read;
+    // A failed read is tried again next time.
+    read.catch(() => cache.get(key) === read && cache.delete(key));
+    cache.set(key, read);
   }
   return url;
 }
