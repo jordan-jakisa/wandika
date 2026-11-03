@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { noTouch } from "../test/lib";
 
 // The browser stand-in and the Tauri modules are replaced, so each test sees exactly what the
 // interface sends to the Rust core.
@@ -266,18 +267,14 @@ describe("outside the core", () => {
 
   test("canPickFolder only on a Mac without touch", async () => {
     const platform = vi.spyOn(navigator, "platform", "get");
-    // jsdom has touch events; take them away to look like a Mac.
-    let owner: object | null = document;
-    while (owner && !Object.hasOwn(owner, "ontouchend")) owner = Object.getPrototypeOf(owner);
-    const touch = Object.getOwnPropertyDescriptor(owner!, "ontouchend")!;
-    delete (owner as Record<string, unknown>).ontouchend;
+    const restore = noTouch();
     try {
       platform.mockReturnValue("MacIntel");
       expect((await load()).canPickFolder).toBe(true);
       platform.mockReturnValue("Linux x86_64");
       expect((await load()).canPickFolder).toBe(false);
     } finally {
-      Object.defineProperty(owner!, "ontouchend", touch);
+      restore();
     }
     // An iPad says MacIntel too, but has touch.
     platform.mockReturnValue("MacIntel");

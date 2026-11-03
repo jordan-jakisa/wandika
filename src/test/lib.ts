@@ -22,3 +22,13 @@ export function storageFull() {
     throw new DOMException("Quota exceeded", "QuotaExceededError");
   });
 }
+
+/** jsdom has touch events, so it looks like an iPad; this takes them away until `restore()`. */
+export function noTouch() {
+  let owner: object | null = document;
+  while (owner && !Object.hasOwn(owner, "ontouchend")) owner = Object.getPrototypeOf(owner);
+  if (!owner) return () => {};
+  const touch = Object.getOwnPropertyDescriptor(owner, "ontouchend")!;
+  delete (owner as Record<string, unknown>).ontouchend;
+  return () => Object.defineProperty(owner, "ontouchend", touch);
+}
