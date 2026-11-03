@@ -95,6 +95,18 @@ let lastSync: number | null = null;
 
 const titleOf = (p: string) => p.split("/").pop()!.replace(/\.age$/, "").replace(/\.md$/, "");
 
+/** As the Rust core cleans a name: characters a file name can't hold become "-"; one is required. */
+const cleanName = (name: string) => {
+  const n = String(name).trim().replace(/[/\\:*?"<>|]/g, "-").replace(/^\.+/, "").trim();
+  if (!n) throw "Give the note a name.";
+  return n;
+};
+/** The path itself and everything inside it, when it is a folder. */
+const within = (path: string) => (k: string) => k === path || k.startsWith(path + "/");
+
+/** What was moved to the vault's .trash folder, by the path it came from. */
+const trash = new Map<string, string | Uint8Array>();
+
 /** Images and other files, by vault path. */
 const files = new Map<string, Uint8Array>([
   [
@@ -238,7 +250,17 @@ const handlers: Record<string, (a: Args) => unknown> = {
   tree: () => entries(),
   sync_cancel: () => undefined,
   sync_held_deletions: () => undefined,
-  entry_restore: () => undefined,
+  entry_restore: ({ path }) => {
+    const back = [...trash.keys()].filter(within(path));
+    if (!back.length) throw "It isn't in the trash any more.";
+    if ([...notes.keys(), ...files.keys()].some(within(path))) throw "Something new has the same name there now, so it stays in the trash.";
+    for (const k of back) {
+      const v = trash.get(k)!;
+      if (typeof v === "string") notes.set(k, v);
+      else files.set(k, v);
+      trash.delete(k);
+    }
+  },
   note_discard_if_empty: ({ path }) => {
     if (!/^Untitled( \d+)?$/.test(titleOf(path)) || (notes.get(path) ?? "x").trim()) return false;
     notes.delete(path);
@@ -280,15 +302,53 @@ const handlers: Record<string, (a: Args) => unknown> = {
   },
   folder_create: () => undefined,
   entry_rename: ({ path, name }) => {
+    const clean = cleanName(name);
     const dir = path.includes("/") ? path.slice(0, path.lastIndexOf("/") + 1) : "";
-    const ext = path.endsWith(".md.age") ? ".md.age" : ".md";
-    const to = dir + name + ext;
-    notes.set(to, notes.get(path) ?? "");
-    notes.delete(path);
+    const folder = !notes.has(path) && !files.has(path);
+    if (folder && ![...notes.keys(), ...files.keys()].some(within(path))) throw "That note no longer exists.";
+    // Notes keep .md (and .age); other files keep their type: "photo.png" renamed "beach" stays a PNG.
+    let suffix = "";
+    if (!folder) {
+      const file = path.slice(dir.length);
+      const base = file.replace(/\.age$/, "");
+      const ext = path.endsWith(".md") || path.endsWith(".md.age") ? ".md" : base.includes(".") ? base.slice(base.lastIndexOf(".")) : "";
+      const typed = ext && !ext.startsWith(".md") && clean.toLowerCase().endsWith(ext.toLowerCase());
+      suffix = (typed ? "" : ext) + (file.endsWith(".age") ? ".age" : "");
+    }
+    const to = dir + clean + suffix;
+    if (to === path) return to;
+    const taken = [...notes.keys(), ...files.keys()].some(within(to));
+    if (taken && to.toLowerCase() !== path.toLowerCase()) throw `“${clean}” already exists here.`;
+    for (const map of [notes, files] as Map<string, unknown>[])
+      for (const k of [...map.keys()].filter(within(path))) {
+        const v = map.get(k);
+        map.delete(k);
+        map.set(to + k.slice(path.length), v);
+      }
+    if (folder) encryption.folders = encryption.folders.map((f) => (within(path)(f) ? to + f.slice(path.length) : f));
+    else {
+      // Links to it follow the new name, keeping any folder, heading and alias as written.
+      const [from, into] = [titleOf(path), titleOf(to)];
+      for (const [k, text] of notes) {
+        const updated = text.replace(/\[\[([^\]|#\n]+)(#[^\]|\n]*)?(\|[^\]\n]*)?\]\]/g, (all, target: string, heading = "", alias = "") => {
+          const t = target.trim();
+          const slash = t.lastIndexOf("/");
+          if (t.slice(slash + 1).toLowerCase() !== from.toLowerCase()) return all;
+          return `[[${t.slice(0, slash + 1)}${into}${heading}${alias}]]`;
+        });
+        if (updated !== text) notes.set(k, updated);
+      }
+    }
     return to;
   },
   entry_trash: ({ path }) => {
-    for (const k of [...notes.keys()]) if (k === path || k.startsWith(path + "/")) notes.delete(k);
+    for (const k of [...trash.keys()].filter(within(path))) trash.delete(k);
+    for (const map of [notes, files] as Map<string, string | Uint8Array>[])
+      for (const k of [...map.keys()].filter(within(path))) {
+        trash.set(k, map.get(k)!);
+        map.delete(k);
+      }
+    encryption.folders = encryption.folders.filter((f) => !within(path)(f));
   },
   note_titles: () => meta(),
   search: ({ query }) => {
