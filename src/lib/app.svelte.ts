@@ -161,23 +161,47 @@ class AppState {
     this.status = await api.status();
   }
 
+  /**
+   * Forgets what belonged to the vault being left: its sync results, held deletions, Today and
+   * filters, so none of it shows in (or acts on) the next vault.
+   */
+  #leave(next: Status) {
+    this.current = null;
+    this.viewing = null;
+    this.graphFocus = null;
+    this.tagFilter = null;
+    this.conflicts = [];
+    this.tooBig = [];
+    this.heldDeletions = [];
+    this.vaultBytes = 0;
+    this.syncError = null;
+    this.syncProgress = null;
+    this.lastSync = next.last_sync;
+    this.today = null;
+    this.#todayAt = 0;
+    this.#failures = 0;
+    this.#retryAt = 0;
+    forgetImages();
+  }
+
   /** Shows a vault just opened, created or connected; GitHub vaults then keep syncing. */
   async enterVault(report?: SyncReport) {
+    const first = this.lastSync === null;
+    const before = this.status?.vault?.id;
+    await this.refreshFiles();
+    const status = await api.status();
+    // Connecting or disconnecting GitHub keeps the open note; a different vault starts fresh.
+    // Everything changes before `status` does, so the session saved for the new vault is its own.
+    if (status.vault?.id !== before) {
+      this.#leave(status);
+      if (status.vault) this.#restore(status.vault.id);
+    }
+    this.status = status;
     if (report) {
-      const first = this.lastSync === null;
       this.apply(report);
       this.#failures = 0;
       this.#retryAt = 0;
       if (first) this.say("Your notes are on GitHub. Every device you sign in on gets them.");
-    }
-    const before = this.status?.vault?.id;
-    await this.refreshFiles();
-    await this.refreshStatus();
-    // Connecting or disconnecting GitHub keeps the open note; a different vault starts fresh.
-    if (this.status?.vault?.id !== before) {
-      this.current = null;
-      forgetImages();
-      if (this.status?.vault) this.#restore(this.status.vault.id);
     }
     void this.loadSnippets();
     this.stopAutoSync();
@@ -474,11 +498,13 @@ class AppState {
     await this.flush();
     this.stopAutoSync();
     await api.vaultClose();
-    this.current = null;
+    // Read before changing anything, so the vault left keeps its open note for next time.
+    const status = await api.status();
+    this.#leave(status);
     this.tree = [];
     this.titles = [];
     this.settingsOpen = false;
-    await this.refreshStatus();
+    this.status = status;
   }
 
   /** Local vaults stay open; a GitHub vault closes with the sign-in. */
@@ -487,9 +513,14 @@ class AppState {
     const closes = this.synced;
     this.stopAutoSync();
     await api.githubSignOut();
-    if (closes) this.current = null;
+    const status = await api.status();
+    if (closes) {
+      this.#leave(status);
+      this.tree = [];
+      this.titles = [];
+    }
     this.settingsOpen = false;
-    await this.refreshStatus();
+    this.status = status;
   }
 }
 
