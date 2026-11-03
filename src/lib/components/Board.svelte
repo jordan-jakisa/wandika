@@ -122,9 +122,12 @@
   }
 
   async function removeLane(lane: Lane) {
-    if (lane.cards.length) {
+    // Text written in the column (not a card) goes with it too, so that is asked about as well.
+    const n = lane.cards.length;
+    if (n || lane.notes?.length) {
+      const what = n ? `its ${n} ${n === 1 ? "card" : "cards"}${lane.notes?.length ? " and text" : ""}` : "the text in it";
       const ok = await app.ask({
-        title: `Delete “${lane.title}” and its ${lane.cards.length} ${lane.cards.length === 1 ? "card" : "cards"}?`,
+        title: `Delete “${lane.title}” and ${what}?`,
         confirm: "Delete column",
         danger: true,
       });

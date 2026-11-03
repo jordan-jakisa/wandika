@@ -30,6 +30,14 @@ export interface Lane {
   /** Lane marked `**Complete**`: cards moved here are ticked. */
   complete: boolean;
   cards: Card[];
+  /** Text in the lane that isn't a card, kept so saving the board doesn't lose it. */
+  notes?: LaneNote[];
+}
+
+export interface LaneNote {
+  /** The card it follows, or null at the top of the lane; if that card moves away, it goes last. */
+  after: string | null;
+  text: string;
 }
 
 export interface Board {
@@ -89,6 +97,9 @@ export function parse(text: string): Board {
   const lanes: Lane[] = [];
   let lane: Lane | null = null;
   let card: Card | null = null;
+  let note: LaneNote | null = null;
+  // Blank lines since the note's last line: kept inside it when more of its text follows.
+  let gap = 0;
   for (; i < lines.length; i++) {
     const line = lines[i];
     if (line.startsWith("***") || line.startsWith("%% kanban:settings")) break;
@@ -97,6 +108,7 @@ export function parse(text: string): Board {
       lane = { id: id(), title: heading[1].trim(), complete: false, cards: [] };
       lanes.push(lane);
       card = null;
+      note = null;
       continue;
     }
     if (!lane) {
@@ -105,12 +117,14 @@ export function parse(text: string): Board {
     }
     if (line.trim() === "**Complete**") {
       lane.complete = true;
+      note = null;
       continue;
     }
     const item = /^[-*+] \[([ xX])\] ?(.*)$/.exec(line);
     if (item) {
       card = { id: id(), text: item[2], done: item[1] !== " " };
       lane.cards.push(card);
+      note = null;
       continue;
     }
     // Indented continuation lines belong to the card above.
@@ -118,7 +132,15 @@ export function parse(text: string): Board {
       card.text += "\n" + line.trim();
       continue;
     }
-    if (line.trim()) card = null;
+    if (!line.trim()) {
+      gap++;
+      continue;
+    }
+    // Any other text belongs to the lane, in its place among the cards.
+    if (note) note.text += "\n".repeat(gap + 1) + line;
+    else (lane.notes ??= []).push((note = { after: lane.cards.at(-1)?.id ?? null, text: line }));
+    gap = 0;
+    card = null;
   }
   const tail = lines.slice(i).join("\n");
   // Text above the first lane is kept with the frontmatter, so saving the board doesn't lose it.
@@ -134,10 +156,26 @@ export function serialize(board: Board) {
   for (const lane of board.lanes) {
     parts.push(`## ${lane.title}`, "");
     if (lane.complete) parts.push("**Complete**");
+    const here = new Set(lane.cards.map((c) => c.id));
+    let text = false;
+    // Notes sit apart from the cards by a blank line, so neither reads as part of the other.
+    const write = (keep: (n: LaneNote) => boolean) => {
+      for (const n of lane.notes ?? []) {
+        if (!keep(n)) continue;
+        if (parts.at(-1) !== "") parts.push("");
+        parts.push(n.text);
+        text = true;
+      }
+    };
+    write((n) => n.after === null);
     for (const c of lane.cards) {
+      if (text) parts.push("");
+      text = false;
       const [first, ...rest] = c.text.split("\n");
       parts.push(`- [${c.done ? "x" : " "}] ${first}`, ...rest.map((r) => `\t${r}`));
+      write((n) => n.after === c.id);
     }
+    write((n) => n.after !== null && !here.has(n.after));
     parts.push("", "");
   }
   let out = parts.join("\n");
