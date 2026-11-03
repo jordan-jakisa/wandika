@@ -54,6 +54,14 @@ test("an empty selection converts to nothing", () => {
   assert.deepEqual(convertLines([], "bullet"), []);
 });
 
+test("a lone blank line starts a list, so a toolbar button works on an empty line", () => {
+  assert.deepEqual(convertLines([""], "bullet"), ["- "]);
+  assert.deepEqual(convertLines([""], "task"), ["- [ ] "]);
+  assert.deepEqual(convertLines([""], "numbered"), ["1. "]);
+  assert.deepEqual(convertLines([""], "quote"), ["> "]);
+  assert.deepEqual(convertLines([""], "plain"), [""]);
+});
+
 test("blank lines between items stay blank", () => {
   assert.deepEqual(convertLines(["a", "", "   ", "b"], "task"), ["- [ ] a", "", "   ", "- [ ] b"]);
 });

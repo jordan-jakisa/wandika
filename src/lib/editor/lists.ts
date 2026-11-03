@@ -22,16 +22,19 @@ function parse(line: string): Parsed {
 const width = (indent: string) => indent.replace(/\t/g, "    ").length;
 
 /**
- * Converts lines to `kind`. Blank lines stay blank. When some lines are already list items, lines
- * indented deeper than those items and not items themselves are treated as their descriptions and
- * left alone. Converting lines that are all already `kind` turns them back into plain text.
+ * Converts lines to `kind`. Blank lines stay blank, except a lone blank line, which becomes an
+ * empty item so a list can be started on an empty line. When some lines are already list items,
+ * lines indented deeper than those items and not items themselves are treated as their
+ * descriptions and left alone. Converting lines that are all already `kind` turns them back into
+ * plain text.
  */
 export function convertLines(lines: string[], kind: LineKind): string[] {
   const parsed = lines.map(parse);
   const listed = parsed.filter((p) => p.kind !== "plain" && p.kind !== "quote");
   const itemIndent = listed.length ? Math.min(...listed.map((p) => width(p.indent))) : Infinity;
+  const lone = lines.length === 1;
   const isContinuation = (p: Parsed, raw: string) =>
-    !raw.trim() || (listed.length > 0 && p.kind === "plain" && width(p.indent) > itemIndent);
+    (!raw.trim() && !lone) || (listed.length > 0 && p.kind === "plain" && width(p.indent) > itemIndent);
 
   const targets = parsed.filter((p, i) => !isContinuation(p, lines[i]));
   const target: LineKind = targets.length > 0 && targets.every((p) => p.kind === kind) ? "plain" : kind;
