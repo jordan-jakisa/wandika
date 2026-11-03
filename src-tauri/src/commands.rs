@@ -789,7 +789,8 @@ pub async fn agenda_to_daily(app: S<'_>, date: Option<String>, events: Vec<CalEv
             };
             format!("- {time} {}", e.title)
         })
-        .filter(|l| !text.contains(l.as_str()))
+        // Whole lines: "Standup" is not already there because "Standup review" is.
+        .filter(|l| !text.lines().any(|t| t.trim_end() == l))
         .collect();
     if lines.is_empty() {
         return Ok(path);
@@ -842,6 +843,18 @@ mod tests {
         let first = block_on(event_to_note(a.state(), e.clone())).unwrap();
         assert_eq!(first, "Meetings/2026-11-03 Sync- Q4 - plan-.md");
         assert_eq!(block_on(event_to_note(a.state(), e)).unwrap(), first, "the second open finds the first note");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_agenda_line_is_skipped_only_when_the_same_line_is_there() {
+        let (a, dir) = app("agenda-similar");
+        block_on(vault_create_local(a.state(), "Notes".into(), None)).unwrap();
+        let day = Some("2026-11-03".to_string());
+        block_on(agenda_to_daily(a.state(), day.clone(), vec![ev("Standup review", "2026-11-03", true)])).unwrap();
+        let path = block_on(agenda_to_daily(a.state(), day, vec![ev("Standup", "2026-11-03", true)])).unwrap();
+        let text = block_on(note_read(a.state(), path)).unwrap();
+        assert!(text.contains("- All day Standup\n") && text.contains("- All day Standup review\n"), "{text}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
