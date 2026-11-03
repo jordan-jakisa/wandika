@@ -12,13 +12,17 @@
   let showDone = $state(readView("tasks", { showDone: false }).showDone);
   $effect(() => saveView("tasks", { showDone }));
   let loading = $state(true);
+  let failed = $state(false);
 
   async function load() {
     loading = true;
+    // Google Tasks and Reminders arrive through Today on their own; the vault's tasks never wait on the network.
+    void app.loadToday();
     try {
-      const [vaultTasks] = await Promise.all([api.tasksVault(), app.loadToday()]);
-      tasks = vaultTasks;
+      tasks = await api.tasksVault();
+      failed = false;
     } catch (e) {
+      failed = true;
       app.say((e as Error).message);
     } finally {
       loading = false;
@@ -64,9 +68,11 @@
   <p class="muted summary">
     {loading && !tasks.length
       ? "Gathering tasks from your notes…"
-      : open
-        ? `${open} open ${open === 1 ? "task" : "tasks"} in your notes.`
-        : "No open tasks. Write - [ ] in any note to add one."}
+      : failed && !tasks.length
+        ? "Couldn't gather your tasks."
+        : open
+          ? `${open} open ${open === 1 ? "task" : "tasks"} in your notes.`
+          : "No open tasks. Write - [ ] in any note to add one."}
   </p>
 
   {#each byNote.slice(0, notesShown) as [path, items] (path)}
