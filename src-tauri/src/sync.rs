@@ -153,12 +153,15 @@ fn open(p: &Paths, remote: &Remote) -> Result<Repository> {
     let repo = if p.git.join("HEAD").exists() {
         Repository::open(&p.git)?
     } else {
+        // Made without a working folder, which is set below: made with one, libgit2 writes a
+        // `.git` link file into the vault folder (and fails when the folder is a git repo itself).
         let mut opts = RepositoryInitOptions::new();
-        opts.workdir_path(&p.files).no_dotgit_dir(true).initial_head(&remote.branch).mkpath(true);
+        opts.bare(true).initial_head(&remote.branch).mkpath(true);
         Repository::init_opts(&p.git, &opts)?
     };
     // A folder vault can move; follow it.
     repo.set_workdir(&p.files, false)?;
+    remove_old_link(p);
     std::fs::create_dir_all(p.git.join("info"))?;
     std::fs::write(p.git.join("info/exclude"), DEVICE_FILES.join("\n") + "\n")?;
     match repo.find_remote("origin") {
@@ -173,6 +176,18 @@ fn open(p: &Paths, remote: &Remote) -> Result<Repository> {
     cfg.set_bool("core.autocrlf", false)?;
     cfg.set_bool("core.precomposeunicode", true)?;
     Ok(repo)
+}
+
+/// Earlier versions left a `.git` link file in the vault folder, pointing at this repository.
+fn remove_old_link(p: &Paths) {
+    let link = p.files.join(".git");
+    let ours = |text: String| {
+        let dir = text.trim().strip_prefix("gitdir:").map(|d| PathBuf::from(d.trim()));
+        dir.and_then(|d| d.canonicalize().ok()) == p.git.canonicalize().ok()
+    };
+    if link.is_file() && std::fs::read_to_string(&link).is_ok_and(ours) {
+        let _ = std::fs::remove_file(link);
+    }
 }
 
 fn callbacks<'a>(remote: &'a Remote, ctl: &'a Ctl, phase: &'static str) -> RemoteCallbacks<'a> {
@@ -729,5 +744,51 @@ mod tests {
         assert_eq!(conflict_path("README", "S"), "README (conflict S)");
         assert_eq!(conflict_path(".gitignore", "S"), ".gitignore (conflict S)");
         assert_eq!(conflict_path("a/b/c/Café 日本.md", "S"), "a/b/c/Café 日本 (conflict S).md");
+    }
+
+    fn files_on_hub(base: &Path) -> Vec<String> {
+        let hub = Repository::open_bare(base.join("hub.git")).unwrap();
+        let tree = hub.find_reference("refs/heads/main").unwrap().peel_to_tree().unwrap();
+        let mut out = Vec::new();
+        tree.walk(git2::TreeWalkMode::PreOrder, |dir, e| {
+            if e.kind() == Some(git2::ObjectType::Blob) {
+                out.push(format!("{dir}{}", e.name().unwrap()));
+            }
+            git2::TreeWalkResult::Ok
+        })
+        .unwrap();
+        out.sort();
+        out
+    }
+
+    #[test]
+    fn a_vault_folder_that_is_a_git_repo_keeps_its_own_git() {
+        let (base, url) = setup("own-git");
+        let mac = device(&base, "mac", &url);
+        let own = Repository::init(&mac.p.files).unwrap();
+        write(&mac, "Plan.md", "plan");
+        sync(&mac.p, &mac.r, &ctl()).unwrap();
+        assert!(mac.p.files.join(".git").is_dir(), "their repository is untouched");
+        assert!(own.head().is_err(), "and gets no commits from us");
+        assert_eq!(files_on_hub(&base), ["Plan.md"]);
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_link_file_left_by_an_earlier_version_is_removed() {
+        let (base, url) = setup("old-link");
+        let mac = device(&base, "mac", &url);
+        std::fs::create_dir_all(&mac.p.git).unwrap();
+        write(&mac, ".git", &format!("gitdir: {}/\n", mac.p.git.display()));
+        let mut opts = RepositoryInitOptions::new();
+        opts.bare(true).initial_head("main");
+        Repository::init_opts(&mac.p.git, &opts).unwrap();
+        sync(&mac.p, &mac.r, &ctl()).unwrap();
+        assert!(!mac.p.files.join(".git").exists());
+        // A link to some other repository is not ours to remove.
+        write(&mac, ".git", "gitdir: /somewhere/else\n");
+        sync(&mac.p, &mac.r, &ctl()).unwrap();
+        assert!(mac.p.files.join(".git").is_file());
+        let _ = std::fs::remove_dir_all(&base);
     }
 }
