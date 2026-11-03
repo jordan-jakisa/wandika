@@ -7,6 +7,13 @@ import { EditorSelection, EditorState, type Extension } from "@codemirror/state"
 import { Decoration, EditorView } from "@codemirror/view";
 import { onTestFinished } from "vitest";
 
+// jsdom has no layout. CodeMirror measures text ranges to draw the selection; without these it
+// logs an error on every measure. Nothing in the tests depends on the sizes.
+if (typeof Range !== "undefined" && !Range.prototype.getClientRects) {
+  Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
+  Range.prototype.getBoundingClientRect = () => new DOMRect();
+}
+
 /** The plain document and selection that a marked-up string describes. */
 export function parse(marked: string): { doc: string; selection: EditorSelection | undefined } {
   let doc = "";
