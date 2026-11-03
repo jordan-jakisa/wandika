@@ -14,8 +14,19 @@ pub fn github_client_id() -> Result<&'static str> {
     need(option_env!("WANDIKA_GITHUB_CLIENT_ID"), "GitHub sign-in")
 }
 
+/// Google allows sensitive scopes (Calendar, Tasks) in a public app only after it has reviewed
+/// the app; until then a public build doesn't offer Google. WANDIKA_GOOGLE_REVIEWED=1 turns it on.
+/// https://developers.google.com/identity/protocols/oauth2/policies
+fn google_allowed() -> Result<()> {
+    if public(option_env!("WANDIKA_PUBLIC")) && !public(option_env!("WANDIKA_GOOGLE_REVIEWED")) {
+        return Err(msg("Google Calendar and Tasks come to this version once Google has reviewed Wandika."));
+    }
+    Ok(())
+}
+
 /// Google "Desktop app" client: used on the Mac with a loopback redirect.
 pub fn google_desktop() -> Result<(&'static str, &'static str)> {
+    google_allowed()?;
     Ok((
         need(option_env!("WANDIKA_GOOGLE_DESKTOP_CLIENT_ID"), "Google")?,
         need(option_env!("WANDIKA_GOOGLE_DESKTOP_CLIENT_SECRET"), "Google")?,
@@ -28,6 +39,7 @@ pub fn google_mobile_client_id() -> Result<&'static str> {
     if cfg!(target_os = "android") {
         return Err(msg("Google can't connect on Android in this version. Connect it on your Mac or iPhone; Outlook works here."));
     }
+    google_allowed()?;
     need(option_env!("WANDIKA_GOOGLE_IOS_CLIENT_ID"), "Google")
 }
 
@@ -58,6 +70,15 @@ pub fn configured() -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_public_build_offers_google_only_after_google_has_reviewed_it() {
+        let public_unreviewed = public(option_env!("WANDIKA_PUBLIC")) && !public(option_env!("WANDIKA_GOOGLE_REVIEWED"));
+        match google_desktop() {
+            Err(e) if public_unreviewed => assert!(e.to_string().contains("once Google has reviewed Wandika"), "{e}"),
+            _ => assert!(!public_unreviewed),
+        }
+    }
 
     #[test]
     fn a_public_build_is_marked_by_a_set_flag() {
@@ -94,8 +115,9 @@ mod tests {
         // Either both halves are baked in, or the error names Google.
         match google_desktop() {
             Ok((id, secret)) => assert!(!id.trim().is_empty() && !secret.trim().is_empty()),
-            Err(e) => assert!(e.to_string().starts_with("Google isn't set up")),
+            Err(e) => assert!(e.to_string().starts_with("Google isn't set up") || e.to_string().contains("once Google has reviewed"), "{e}"),
         }
-        assert_eq!(google_mobile_client_id().is_ok(), option_env!("WANDIKA_GOOGLE_IOS_CLIENT_ID").is_some_and(|v| !v.trim().is_empty()));
+        let has_id = option_env!("WANDIKA_GOOGLE_IOS_CLIENT_ID").is_some_and(|v| !v.trim().is_empty());
+        assert_eq!(google_mobile_client_id().is_ok(), has_id && google_allowed().is_ok());
     }
 }

@@ -560,7 +560,10 @@ mod tests {
                 assert_eq!((q["state"].as_str(), q["access_type"].as_str(), q["prompt"].as_str()), ("st", "offline", "consent"));
                 assert_eq!(q["scope"], scopes(crate::config::gmail()));
             }
-            Err(e) => assert!(e.to_string().starts_with("Google isn't set up in this build yet."), "{e}"),
+            Err(e) => assert!(
+                e.to_string().starts_with("Google isn't set up in this build yet.") || e.to_string().contains("once Google has reviewed"),
+                "{e}"
+            ),
         }
     }
 
