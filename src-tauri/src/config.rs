@@ -43,3 +43,39 @@ pub fn configured() -> serde_json::Value {
         "apple": cfg!(any(target_os = "macos", target_os = "ios")),
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_missing_or_blank_client_id_says_how_to_set_it_up() {
+        assert_eq!(need(Some("abc.apps.googleusercontent.com"), "Google").unwrap(), "abc.apps.googleusercontent.com");
+        for missing in [None, Some(""), Some("   ")] {
+            let e = need(missing, "GitHub sign-in").unwrap_err();
+            assert_eq!(e.friendly().0, "message");
+            assert!(e.to_string().starts_with("GitHub sign-in isn't set up in this build yet."), "{e}");
+            assert!(e.to_string().contains(".env"));
+        }
+    }
+
+    #[test]
+    fn configured_reports_each_connection_from_the_build() {
+        let v = configured();
+        assert_eq!(v["github"], github_client_id().is_ok());
+        assert_eq!(v["microsoft"], microsoft_client_id().is_ok());
+        assert_eq!(v["google"], google_desktop().is_ok(), "the Mac uses the desktop client");
+        assert_eq!(v["apple"], cfg!(any(target_os = "macos", target_os = "ios")));
+        assert_eq!(v.as_object().unwrap().len(), 4);
+    }
+
+    #[test]
+    fn google_on_this_mac_needs_both_desktop_values() {
+        // Either both halves are baked in, or the error names Google.
+        match google_desktop() {
+            Ok((id, secret)) => assert!(!id.trim().is_empty() && !secret.trim().is_empty()),
+            Err(e) => assert!(e.to_string().starts_with("Google isn't set up")),
+        }
+        assert_eq!(google_mobile_client_id().is_ok(), option_env!("WANDIKA_GOOGLE_IOS_CLIENT_ID").is_some_and(|v| !v.trim().is_empty()));
+    }
+}
