@@ -14,8 +14,8 @@ Android, and a public TestFlight link for iPhone. Public builds leave Gmail out.
 - **TestFlight.** External testers need Beta App Review, so the review-readiness gate
   (docs/store/review-readiness.md) must be all yes first. It puts the app in front of App Review on
   Jordan's account.
-- **Money.** Jordan's default for every mobile app is a hard paywall. Jordan decided the beta is
-  free (2026-11-03); revisit before any App Store listing beyond TestFlight.
+- **Money.** Jordan's default for every mobile app is a hard paywall. Jordan decided Wandika is free
+  for good (2026-11-03): no paywall, subscription or in-app purchase, now or later.
 
 ## Done in the repo
 
