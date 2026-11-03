@@ -264,3 +264,102 @@ test("reloads when a sync changes the notes", async () => {
   expect(await screen.findByRole("checkbox", { name: "From the phone" })).toBeInTheDocument();
   expect(screen.getByText("1 open task in your notes.")).toBeInTheDocument();
 });
+
+describe("search, tags and pins", () => {
+  const tagged = (): VaultTask[] => [
+    task("Projects/Launch.md", 3, "Set up OAuth apps #setup"),
+    task("Projects/Launch.md", 4, "Test on the phone #testing 📌 ⏫", { details: "Pixel and iPhone" }),
+    task("Welcome.md", 8, "Write your first note #setup"),
+    task("Errands.md", 1, "Call Amina about the lease #home"),
+  ];
+
+  test("search keeps tasks whose words, notes or note name match", async () => {
+    vi.mocked(api.tasksVault).mockResolvedValue(tagged());
+    const user = userEvent.setup();
+    render(TasksView);
+    await screen.findByText("4 open tasks in your notes.");
+    await user.type(screen.getByRole("searchbox", { name: "Search tasks" }), "lease");
+    expect(screen.getAllByRole("checkbox").map((c) => c.getAttribute("aria-label"))).toEqual(["Call Amina about the lease #home"]);
+    await user.clear(screen.getByRole("searchbox", { name: "Search tasks" }));
+    await user.type(screen.getByRole("searchbox", { name: "Search tasks" }), "iphone");
+    expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+  });
+
+  test("tag chips show the tags in use, most used first, and filter by them", async () => {
+    vi.mocked(api.tasksVault).mockResolvedValue(tagged());
+    const user = userEvent.setup();
+    render(TasksView);
+    await screen.findByText("4 open tasks in your notes.");
+    const chips = within(screen.getByRole("group", { name: "Tags" })).getAllByRole("button");
+    expect(chips.map((c) => c.textContent)).toEqual(["#setup", "#home", "#testing"]);
+    await user.click(chips[0]);
+    expect(chips[0]).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("searchbox", { name: "Search tasks" })).toHaveValue("#setup");
+    expect(screen.getAllByRole("checkbox").map((c) => c.getAttribute("aria-label"))).toEqual([
+      "Set up OAuth apps #setup",
+      "Write your first note #setup",
+    ]);
+    await user.click(chips[0]);
+    expect(screen.getByRole("searchbox", { name: "Search tasks" })).toHaveValue("");
+    expect(screen.getAllByRole("checkbox")).toHaveLength(4);
+  });
+
+  test("no match says so and clears in one tap", async () => {
+    vi.mocked(api.tasksVault).mockResolvedValue(tagged());
+    const user = userEvent.setup();
+    render(TasksView);
+    await screen.findByText("4 open tasks in your notes.");
+    await user.type(screen.getByRole("searchbox", { name: "Search tasks" }), "zebra");
+    expect(screen.getByText(/No tasks match “zebra”/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Clear search" }));
+    expect(screen.getAllByRole("checkbox")).toHaveLength(4);
+  });
+
+  test("search reaches Google Tasks and Reminders too", async () => {
+    vi.mocked(api.tasksVault).mockResolvedValue(tagged());
+    app.today = todayFixture({ remote_tasks: [remote(), remote({ id: "r2", title: "Book flights" })] });
+    const user = userEvent.setup();
+    render(TasksView);
+    await screen.findByText("4 open tasks in your notes.");
+    await user.type(screen.getByRole("searchbox", { name: "Search tasks" }), "flights");
+    expect(screen.getAllByRole("checkbox").map((c) => c.getAttribute("aria-label"))).toEqual(["Book flights"]);
+  });
+
+  test("pinned tasks gather at the top, outside their note", async () => {
+    vi.mocked(api.tasksVault).mockResolvedValue(tagged());
+    render(TasksView);
+    await screen.findByText("4 open tasks in your notes.");
+    const pinned = screen.getByRole("heading", { name: "Pinned" }).closest("section")!;
+    expect(within(pinned).getAllByRole("checkbox").map((c) => c.getAttribute("aria-label"))).toEqual(["Test on the phone #testing"]);
+    expect(within(group("Launch")).getAllByRole("checkbox")).toHaveLength(1);
+  });
+
+  test("pinning writes the 📌 into the task and keeps its notes", async () => {
+    vi.mocked(api.tasksVault).mockResolvedValue(tagged());
+    const edit = vi.spyOn(api, "taskEdit").mockResolvedValue();
+    const user = userEvent.setup();
+    render(TasksView);
+    await screen.findByText("4 open tasks in your notes.");
+    await user.click(screen.getByRole("button", { name: "Actions for Set up OAuth apps #setup" }));
+    await user.click(screen.getByRole("menuitem", { name: "Pin to top" }));
+    expect(edit).toHaveBeenCalledWith("Projects/Launch.md", 3, "Set up OAuth apps #setup", "Set up OAuth apps #setup 📌", "");
+    await user.click(screen.getByRole("button", { name: "Actions for Test on the phone #testing" }));
+    await user.click(screen.getByRole("menuitem", { name: "Unpin" }));
+    expect(edit).toHaveBeenLastCalledWith("Projects/Launch.md", 4, "Test on the phone #testing 📌 ⏫", "Test on the phone #testing ⏫", "Pixel and iPhone");
+    await vi.waitFor(() => expect(app.changed.paths).toEqual(["Projects/Launch.md"]));
+  });
+
+  test("a task's name opens the editor; Focus starts a session on it", async () => {
+    vi.mocked(api.tasksVault).mockResolvedValue(tagged());
+    const { focus } = await import("../focus.svelte");
+    const start = vi.spyOn(focus, "start").mockImplementation(() => {});
+    const user = userEvent.setup();
+    render(TasksView);
+    await screen.findByText("4 open tasks in your notes.");
+    await user.click(screen.getByRole("button", { name: "Write your first note #setup" }));
+    expect(app.editingTask).toMatchObject({ path: "Welcome.md", line: 8 });
+    await user.click(screen.getByRole("button", { name: "Actions for Write your first note #setup" }));
+    await user.click(screen.getByRole("menuitem", { name: "Focus on this" }));
+    expect(start).toHaveBeenCalledWith(expect.objectContaining({ text: "Write your first note #setup", task: expect.objectContaining({ line: 8 }) }));
+  });
+});

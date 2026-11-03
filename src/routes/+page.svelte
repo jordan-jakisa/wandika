@@ -2,7 +2,9 @@
   import { app } from "$lib/app.svelte";
   import Dialog from "$lib/components/Dialog.svelte";
   import ImageViewer from "$lib/components/ImageViewer.svelte";
+  import FocusSession from "$lib/components/FocusSession.svelte";
   import MailReader from "$lib/components/MailReader.svelte";
+  import TaskEditor from "$lib/components/TaskEditor.svelte";
   import Settings from "$lib/components/Settings.svelte";
   import Start from "$lib/components/Start.svelte";
   import Workspace from "$lib/components/Workspace.svelte";
@@ -35,6 +37,8 @@
 <Dialog />
 <ImageViewer />
 <MailReader />
+<TaskEditor />
+<FocusSession />
 
 <!-- Always in the page, so screen readers announce each new message. -->
 <div class="toast" class:shown={!!app.toast} role="status" aria-live="polite">

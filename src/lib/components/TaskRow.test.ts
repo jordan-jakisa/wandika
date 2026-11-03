@@ -12,7 +12,19 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-type Props = { text: string; done?: boolean; due?: string | null; where?: string; leaves?: boolean; onOpen?: () => void; onToggle?: () => Promise<void> };
+type Props = {
+  text: string;
+  done?: boolean;
+  due?: string | null;
+  where?: string;
+  leaves?: boolean;
+  details?: string;
+  onOpen?: () => void;
+  onToggle?: () => Promise<void>;
+  onEdit?: () => void;
+  onPin?: () => Promise<void>;
+  onFocus?: () => void;
+};
 
 function setup(p: Props) {
   const onToggle = p.onToggle ?? vi.fn(async () => {});
@@ -29,6 +41,8 @@ describe("the label", () => {
     ["Call [[People/Amina|Amina]] back", "Call Amina back"],
     ["Read [the docs](https://example.com)", "Read the docs"],
     ["Fix **sync** and _merge_ then ~~old~~ `code`", "Fix sync and merge then old code"],
+    ["Ship it #work 📌 ⏫ 📅 2026-11-05", "Ship it #work"],
+    ["Reply to Amina [email from Amina](https://mail.google.com/mail/u/0/#all/18c2f0a1b2c3)", "Reply to Amina"],
   ])("“%s” reads “%s”", (text, label) => {
     setup({ text });
     expect(screen.getByRole("checkbox", { name: label })).toBeInTheDocument();
@@ -184,5 +198,77 @@ describe("in a list that hides done tasks", () => {
     await fireEvent.click(box);
     expect(onToggle).toHaveBeenCalledOnce();
     expect(box.closest("li")).not.toHaveClass("leaving");
+  });
+});
+
+describe("pins, priority, notes and actions", () => {
+  test("a pinned task says so; a high priority shows in the meta line", () => {
+    setup({ text: "Ship it 📌 ⏫" });
+    expect(screen.getByLabelText("Pinned")).toBeInTheDocument();
+    expect(screen.getByText("High priority")).toHaveClass("urgent");
+  });
+
+  test("a low priority shows quietly", () => {
+    setup({ text: "Tidy up 🔽" });
+    expect(screen.getByText("Low priority")).not.toHaveClass("urgent");
+  });
+
+  test("the first line of the notes shows under the task", () => {
+    setup({ text: "Call Amina", details: "Ask about the lease\nand the keys" });
+    expect(screen.getByText("Ask about the lease")).toBeInTheDocument();
+    expect(screen.queryByText(/and the keys/)).not.toBeInTheDocument();
+  });
+
+  test("the name opens the editor; the menu edits, pins and starts a focus session", async () => {
+    const user = userEvent.setup();
+    const onEdit = vi.fn();
+    const onPin = vi.fn(async () => {});
+    const onFocus = vi.fn();
+    setup({ text: "Write the brief", onEdit, onPin, onFocus });
+    await user.click(screen.getByRole("button", { name: "Write the brief" }));
+    expect(onEdit).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: "Actions for Write the brief" }));
+    await user.click(screen.getByRole("menuitem", { name: "Edit" }));
+    await user.click(screen.getByRole("button", { name: "Actions for Write the brief" }));
+    await user.click(screen.getByRole("menuitem", { name: "Pin to top" }));
+    await user.click(screen.getByRole("button", { name: "Actions for Write the brief" }));
+    await user.click(screen.getByRole("menuitem", { name: "Focus on this" }));
+    expect([onEdit.mock.calls.length, onPin.mock.calls.length, onFocus.mock.calls.length]).toEqual([2, 1, 1]);
+  });
+
+  test("a pinned task offers Unpin; a failed pin says why", async () => {
+    const user = userEvent.setup();
+    setup({ text: "Ship it 📌", onPin: vi.fn(async () => Promise.reject(new Error("That task changed. Refresh and try again."))) });
+    await user.click(screen.getByRole("button", { name: "Actions for Ship it" }));
+    await user.click(screen.getByRole("menuitem", { name: "Unpin" }));
+    await vi.waitFor(() => expect(app.toast).toBe("That task changed. Refresh and try again."));
+  });
+
+  test("a done task offers no focus session", async () => {
+    const user = userEvent.setup();
+    setup({ text: "Done thing", done: true, onFocus: vi.fn(), onEdit: vi.fn() });
+    await user.click(screen.getByRole("button", { name: "Actions for Done thing" }));
+    expect(screen.queryByRole("menuitem", { name: "Focus on this" })).not.toBeInTheDocument();
+  });
+
+  test("a task with no actions has no menu", () => {
+    setup({ text: "Plain" });
+    expect(screen.queryByRole("button", { name: "Actions for Plain" })).not.toBeInTheDocument();
+  });
+
+  test("a task made from an email opens the email in Wandika", async () => {
+    const user = userEvent.setup();
+    const open = vi.spyOn(app, "openLink").mockImplementation(() => {});
+    setup({ text: "Reply [email](https://mail.google.com/mail/u/0/#all/18c2f0a1b2c3)", onEdit: vi.fn() });
+    await user.click(screen.getByRole("button", { name: "Open email" }));
+    expect(open).toHaveBeenCalledWith("https://mail.google.com/mail/u/0/#all/18c2f0a1b2c3");
+    await user.click(screen.getByRole("button", { name: "Actions for Reply" }));
+    await user.click(screen.getByRole("menuitem", { name: "Open email" }));
+    expect(open).toHaveBeenCalledTimes(2);
+  });
+
+  test("an ordinary link is not an email", () => {
+    setup({ text: "Read [the docs](https://example.com)" });
+    expect(screen.queryByRole("button", { name: "Open email" })).not.toBeInTheDocument();
   });
 });

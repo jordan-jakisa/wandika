@@ -1,5 +1,9 @@
 <script lang="ts">
+  import { Mail, Pencil, Pin, PinOff, Timer } from "@lucide/svelte";
   import { app } from "../app.svelte";
+  import { mailRef } from "../mailLinks";
+  import { parseTask, PRIORITIES } from "../taskText";
+  import Menu from "./Menu.svelte";
   import { clock } from "../clock.svelte";
   import { duration } from "../motion";
   let {
@@ -9,6 +13,10 @@
     where,
     onToggle,
     onOpen,
+    onEdit,
+    onPin,
+    onFocus,
+    details = "",
     leaves = false,
   }: {
     text: string;
@@ -17,6 +25,14 @@
     where: string;
     onToggle: () => Promise<void>;
     onOpen?: () => void;
+    /** Opens the task editor (vault tasks). */
+    onEdit?: () => void;
+    /** Pins or unpins the task (vault tasks). */
+    onPin?: () => Promise<void>;
+    /** Starts a focus session on the task. */
+    onFocus?: () => void;
+    /** The notes under the task; the first line shows under it. */
+    details?: string;
     /** The list hides done tasks: a ticked one shows its strike-through, then folds away. */
     leaves?: boolean;
   } = $props();
@@ -28,11 +44,16 @@
   const checked = $derived(shown ?? done);
   const today = $derived(clock.today);
   const overdue = $derived(!!due && due < today && !done);
-  // Plain words for the list: dates move to the meta line, Markdown marks go.
+  const parts = $derived(parseTask(text));
+  const urgent = $derived(parts.priority === "highest" || parts.priority === "high");
+  const priorityLabel = $derived(PRIORITIES.find((p) => p.value === parts.priority)?.label);
+  const firstNote = $derived(details.split("\n")[0] ?? "");
+  /** A task made from an email links back to it; the email opens in Wandika. */
+  const email = $derived([...text.matchAll(/\]\((https?:[^)\s]+)\)/g)].map((m) => m[1]).find((u) => mailRef(u)));
+  // Plain words for the list: markers move to the meta line, the email link to "Open email", Markdown marks go.
   const label = $derived(
-    text
-      .replace(/\s*📅\s?\d{4}-\d{2}-\d{2}/, "")
-      .replace(/\s*✅ \d{4}-\d{2}-\d{2}/, "")
+    parts.name
+      .replace(/\s*\[[^\]]*\]\((https?:[^)\s]+)\)/g, (all, url: string) => (mailRef(url) ? "" : all))
       .replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, "$2")
       .replace(/\[\[([^\]]+)\]\]/g, "$1")
       .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
@@ -69,11 +90,18 @@
   });
 </script>
 
-<li class="task" class:done={checked} class:leaving>
+<li class="task" class:done={checked} class:leaving class:pinned={parts.pinned}>
   <label class="box"><input type="checkbox" {checked} disabled={busy} onchange={toggle} aria-label={label} /></label>
   <div class="body">
-    <span class="text">{label}</span>
+    {#if onEdit}
+      <button class="text edit" onclick={onEdit}>{#if parts.pinned}<Pin size={14} aria-label="Pinned" />{/if}{label}</button>
+    {:else}
+      <span class="text">{#if parts.pinned}<Pin size={14} aria-label="Pinned" />{/if}{label}</span>
+    {/if}
+    {#if firstNote}<span class="note">{firstNote}</span>{/if}
     <span class="meta">
+      {#if priorityLabel}<span class:urgent>{priorityLabel} priority</span>{/if}
+      {#if email}<button class="where" onclick={() => app.openLink(email)}>Open email</button>{/if}
       {#if due}<span class:overdue class:due-today={due === today}>{due === today ? "Today" : overdue ? `Overdue, ${due}` : due}</span>{/if}
       {#if onOpen}
         <button class="where" onclick={onOpen}>{where}</button>
@@ -82,6 +110,20 @@
       {/if}
     </span>
   </div>
+  {#if onEdit || onPin || onFocus}
+    <span class="actions">
+      <Menu label={`Actions for ${label}`} size={16}>
+        {#if onEdit}<button role="menuitem" onclick={onEdit}><Pencil size={18} /> Edit</button>{/if}
+        {#if onPin}
+          <button role="menuitem" onclick={() => onPin().catch((e) => app.say((e as Error).message))}>
+            {#if parts.pinned}<PinOff size={18} /> Unpin{:else}<Pin size={18} /> Pin to top{/if}
+          </button>
+        {/if}
+        {#if onFocus && !checked}<button role="menuitem" onclick={onFocus}><Timer size={18} /> Focus on this</button>{/if}
+        {#if email}<button role="menuitem" onclick={() => app.openLink(email)}><Mail size={18} /> Open email</button>{/if}
+      </Menu>
+    </span>
+  {/if}
 </li>
 
 <style>
@@ -121,10 +163,49 @@
     }
   }
   .body {
+    flex: 1;
     min-width: 0;
     display: grid;
     gap: 1px;
     overflow-wrap: anywhere;
+  }
+  .text {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+  .text :global(svg) {
+    flex: none;
+    align-self: center;
+    color: var(--papyrus);
+  }
+  .edit {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    overflow-wrap: anywhere;
+  }
+  @media (hover: hover) {
+    .edit:hover {
+      color: var(--papyrus);
+    }
+  }
+  .note {
+    font-size: var(--small);
+    color: var(--graphite);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .urgent {
+    color: var(--alarm);
+  }
+  .actions {
+    margin-left: auto;
+    flex: none;
   }
   .done .text {
     color: var(--graphite);

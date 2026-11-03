@@ -107,6 +107,9 @@ const cleanName = (name: string) => {
 /** The path itself and everything inside it, when it is a folder. */
 const within = (path: string) => (k: string) => k === path || k.startsWith(path + "/");
 // Thrown the way the core sends it, so the interface sees code "locked" and shows the passphrase form.
+/** The mock inbox's first email, the flight booking. */
+const FLIGHT = "18c2f0a1b2c3d4e5";
+
 const LOCKED = {
   code: "locked",
   message: "Encrypted notes are locked. Unlock them with your passphrase.",
@@ -456,13 +459,13 @@ const handlers: Record<string, (a: Args) => unknown> = {
     return path;
   },
   mail_read: ({ id }) => ({
-    subject: id === "a" ? "Your flight to Nairobi is confirmed" : "Re: Wandika sync design",
-    from: id === "a" ? "Uganda Airlines <bookings@ugandaairlines.com>" : "Amina Okello <amina@example.com>",
+    subject: id === FLIGHT ? "Your flight to Nairobi is confirmed" : "Re: Wandika sync design",
+    from: id === FLIGHT ? "Uganda Airlines <bookings@ugandaairlines.com>" : "Amina Okello <amina@example.com>",
     to: "jordan@example.com",
     date: at(7, 12),
     text: "Booking reference UR8K2.\n\nCheck-in opens 24 hours before departure.",
-    html: id === "a" ? '<h1>You are going to Nairobi</h1><p>Booking reference <b>UR8K2</b>.</p><p><a href="https://example.com/checkin">Check in</a></p><img src="https://tracker.example.com/pixel.gif" alt="">' : null,
-    url: `https://mail.google.com/mail/u/0/#all/${id}0000000000`,
+    html: id === FLIGHT ? '<h1>You are going to Nairobi</h1><p>Booking reference <b>UR8K2</b>.</p><p><a href="https://example.com/checkin">Check in</a></p><img src="https://tracker.example.com/pixel.gif" alt="">' : null,
+    url: `https://mail.google.com/mail/u/0/#all/${id}`,
   }),
   daily_note: ({ date }) => daily(date),
   encryption_setup: () => (encryption = { ...encryption, set_up: true, unlocked: true }),
@@ -490,8 +493,8 @@ const handlers: Record<string, (a: Args) => unknown> = {
     return {
       events,
       mail: [
-        { id: "a", source: "google", subject: "Your flight to Nairobi is confirmed", from: "Uganda Airlines", date: at(7, 12), snippet: "Booking reference UR8K2. Check-in opens 24 hours before departure.", url: "https://mail.google.com/mail/u/0/#inbox/a0000000000", unread: true },
-        { id: "b", source: "google", subject: "Re: Wandika sync design", from: "Amina Okello", date: at(6, 40), snippet: "Three-way merge sounds right. What happens when both sides edit the same line?", url: null, unread: false },
+        { id: "18c2f0a1b2c3d4e5", source: "google", subject: "Your flight to Nairobi is confirmed", from: "Uganda Airlines", date: at(7, 12), snippet: "Booking reference UR8K2. Check-in opens 24 hours before departure.", url: "https://mail.google.com/mail/u/0/#inbox/18c2f0a1b2c3d4e5", unread: true },
+        { id: "18c2f0a1b2c3d4e6", source: "google", subject: "Re: Wandika sync design", from: "Amina Okello", date: at(6, 40), snippet: "Three-way merge sounds right. What happens when both sides edit the same line?", url: null, unread: false },
       ],
       tasks: tasks().filter((t) => !t.done),
       remote_tasks: [{ id: "r1", source: "google", list_id: "l", list: "My Tasks", title: "Renew domain", done: false, due: iso(today) }],
@@ -502,7 +505,7 @@ const handlers: Record<string, (a: Args) => unknown> = {
     };
   },
   remote_task_toggle: () => undefined,
-  mail_to_note: ({ id }) => handlers.note_create({ folder: "Mail", title: id === "a" ? "Your flight to Nairobi is confirmed" : "Re Wandika sync design", body: "# Email\n" }),
+  mail_to_note: ({ id }) => handlers.note_create({ folder: "Mail", title: id === FLIGHT ? "Your flight to Nairobi is confirmed" : "Re Wandika sync design", body: "# Email\n" }),
   event_to_note: ({ event }) => handlers.note_create({ folder: "Meetings", title: `${iso(today)} ${event.title}`, body: `# ${event.title}\n\n## Notes\n\n` }),
   agenda_to_daily: ({ date }) => daily(date),
 };

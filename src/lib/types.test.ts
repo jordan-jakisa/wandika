@@ -75,6 +75,6 @@ test("Today and everything in it have every field", async () => {
 
 test("a whole email has every field", async () => {
   const run = await mock();
-  const body = await run<MailBody>("mail_read", { source: "google", id: "a" });
+  const body = await run<MailBody>("mail_read", { source: "google", id: "18c2f0a1b2c3d4e5" });
   expect(Object.keys(body).sort()).toEqual(BODY);
 });

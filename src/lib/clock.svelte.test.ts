@@ -118,3 +118,9 @@ test("the heading follows the date when it moves on", async () => {
   vi.advanceTimersByTime(5_000);
   expect(clock.heading).toContain("Wednesday");
 });
+
+test("tomorrow rolls over months and years", async () => {
+  expect((await clockAt(new Date(2026, 10, 3, 9))).tomorrow).toBe("2026-11-04");
+  expect((await clockAt(new Date(2026, 10, 30, 23))).tomorrow).toBe("2026-12-01");
+  expect((await clockAt(new Date(2026, 11, 31, 8))).tomorrow).toBe("2027-01-01");
+});

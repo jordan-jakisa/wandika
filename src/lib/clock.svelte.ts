@@ -27,6 +27,13 @@ class Clock {
     document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && tick());
   }
 
+  /** Tomorrow, YYYY-MM-DD in local time. */
+  get tomorrow() {
+    const d = new Date(`${this.today}T12:00:00`);
+    d.setDate(d.getDate() + 1);
+    return iso(d);
+  }
+
   /** "Tuesday 3 November", for headings. */
   get heading() {
     return new Date(`${this.today}T12:00:00`).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
