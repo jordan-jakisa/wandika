@@ -27,6 +27,15 @@ const SESSION_KEY = "wandika.session";
 const SYNC_EVERY_MS = 3 * 60_000;
 /** Mail and calendars are fetched at most this often unless asked; vault tasks are always fresh. */
 const TODAY_TTL_MS = 2 * 60_000;
+/** A Today load that hasn't answered by then is given up, so one hung call can't hold Today and Tasks. */
+const TODAY_WAIT_MS = 30_000;
+
+/** `p`, or a rejection with `message` once `ms` have passed without an answer. */
+function within<T>(p: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new Error(message)), ms)));
+  return Promise.race([p, late]).finally(() => clearTimeout(timer));
+}
 
 class AppState {
   status = $state<Status | null>(null);
@@ -470,12 +479,13 @@ class AppState {
     this.#todayFull = force || !fresh || !this.today;
     this.#todayLoading = (async () => {
       try {
+        const slow = "Today is taking too long to load. Try again in a moment.";
         if (!this.#todayFull) {
-          const tasks = await api.tasksVault();
+          const tasks = await within(api.tasksVault(), TODAY_WAIT_MS, slow);
           // Left alone when the vault changed meanwhile and Today was cleared.
           if (this.today) this.today = { ...this.today, tasks: tasks.filter((t) => !t.done) };
         } else {
-          this.today = await api.today();
+          this.today = await within(api.today(), TODAY_WAIT_MS, slow);
           this.#todayAt = Date.now();
         }
       } catch (e) {
