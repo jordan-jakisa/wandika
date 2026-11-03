@@ -160,59 +160,70 @@ pub async fn events(http: &reqwest::Client, secrets: &Secrets, from: DateTime<Ut
     let lists = get(http, secrets, "https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=reader").await?;
     let mut out = Vec::new();
     for cal in lists["items"].as_array().cloned().unwrap_or_default() {
-        if cal["selected"].as_bool() != Some(true) && cal["primary"].as_bool() != Some(true) {
-            continue;
-        }
-        let id = cal["id"].as_str().unwrap_or_default();
-        let name = cal["summaryOverride"].as_str().or(cal["summary"].as_str()).unwrap_or("Calendar").to_string();
-        let mut url = url::Url::parse(&format!(
-            "https://www.googleapis.com/calendar/v3/calendars/{}/events",
-            url::form_urlencoded::byte_serialize(id.as_bytes()).collect::<String>()
-        ))
-        .unwrap();
-        url.query_pairs_mut()
-            .append_pair("timeMin", &from.to_rfc3339())
-            .append_pair("timeMax", &to.to_rfc3339())
-            .append_pair("singleEvents", "true")
-            .append_pair("orderBy", "startTime")
-            .append_pair("maxResults", "100");
-        let v = get(http, secrets, url.as_str()).await?;
-        for e in v["items"].as_array().cloned().unwrap_or_default() {
-            if e["status"].as_str() == Some("cancelled") {
-                continue;
-            }
-            // Skip events Jordan declined.
-            let declined = e["attendees"].as_array().is_some_and(|a| {
-                a.iter().any(|p| p["self"].as_bool() == Some(true) && p["responseStatus"].as_str() == Some("declined"))
-            });
-            if declined {
-                continue;
-            }
-            let (start, all_day) = parse_time(&e["start"]);
-            let (end, _) = parse_time(&e["end"]);
-            out.push(CalEvent {
-                id: e["id"].as_str().unwrap_or_default().to_string(),
-                source: "google".into(),
-                calendar: name.clone(),
-                title: e["summary"].as_str().unwrap_or("(No title)").to_string(),
-                start,
-                end,
-                all_day,
-                location: e["location"].as_str().map(str::to_string),
-                url: e["hangoutLink"].as_str().or(e["htmlLink"].as_str()).map(str::to_string),
-                attendees: e["attendees"]
-                    .as_array()
-                    .map(|a| {
-                        a.iter()
-                            .filter(|p| p["self"].as_bool() != Some(true))
-                            .filter_map(|p| p["displayName"].as_str().or(p["email"].as_str()).map(str::to_string))
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-            });
-        }
+        let Some((id, name)) = shown_calendar(&cal) else { continue };
+        let v = get(http, secrets, events_url(&id, from, to).as_str()).await?;
+        out.extend(v["items"].as_array().into_iter().flatten().filter_map(|e| event(e, &name)));
     }
     Ok(out)
+}
+
+/// A calendar's id and name, when it is ticked in Google Calendar (or is the main one).
+fn shown_calendar(cal: &Value) -> Option<(String, String)> {
+    if cal["selected"].as_bool() != Some(true) && cal["primary"].as_bool() != Some(true) {
+        return None;
+    }
+    let name = cal["summaryOverride"].as_str().or(cal["summary"].as_str()).unwrap_or("Calendar").to_string();
+    Some((cal["id"].as_str().unwrap_or_default().to_string(), name))
+}
+
+fn events_url(calendar_id: &str, from: DateTime<Utc>, to: DateTime<Utc>) -> url::Url {
+    let mut url = url::Url::parse(&format!(
+        "https://www.googleapis.com/calendar/v3/calendars/{}/events",
+        url::form_urlencoded::byte_serialize(calendar_id.as_bytes()).collect::<String>()
+    ))
+    .unwrap();
+    url.query_pairs_mut()
+        .append_pair("timeMin", &from.to_rfc3339())
+        .append_pair("timeMax", &to.to_rfc3339())
+        .append_pair("singleEvents", "true")
+        .append_pair("orderBy", "startTime")
+        .append_pair("maxResults", "100");
+    url
+}
+
+/// One event from the Calendar API; None for cancelled events and ones Jordan declined.
+fn event(e: &Value, calendar: &str) -> Option<CalEvent> {
+    if e["status"].as_str() == Some("cancelled") {
+        return None;
+    }
+    let declined = e["attendees"].as_array().is_some_and(|a| {
+        a.iter().any(|p| p["self"].as_bool() == Some(true) && p["responseStatus"].as_str() == Some("declined"))
+    });
+    if declined {
+        return None;
+    }
+    let (start, all_day) = parse_time(&e["start"]);
+    let (end, _) = parse_time(&e["end"]);
+    Some(CalEvent {
+        id: e["id"].as_str().unwrap_or_default().to_string(),
+        source: "google".into(),
+        calendar: calendar.to_string(),
+        title: e["summary"].as_str().unwrap_or("(No title)").to_string(),
+        start,
+        end,
+        all_day,
+        location: e["location"].as_str().map(str::to_string),
+        url: e["hangoutLink"].as_str().or(e["htmlLink"].as_str()).map(str::to_string),
+        attendees: e["attendees"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter(|p| p["self"].as_bool() != Some(true))
+                    .filter_map(|p| p["displayName"].as_str().or(p["email"].as_str()).map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default(),
+    })
 }
 
 fn header(msg: &Value, name: &str) -> String {
@@ -235,24 +246,30 @@ pub async fn mail(http: &reqwest::Client, secrets: &Secrets) -> Result<Vec<MailI
         async move { get(http, secrets, &url).await }
     });
     let msgs = futures::future::try_join_all(fetches).await?;
-    Ok(msgs
-        .into_iter()
-        .map(|m| MailItem {
-            id: m["id"].as_str().unwrap_or_default().to_string(),
-            source: "google".into(),
-            subject: header(&m, "Subject"),
-            from: header(&m, "From"),
-            date: m["internalDate"]
-                .as_str()
-                .and_then(|s| s.parse::<i64>().ok())
-                .and_then(DateTime::from_timestamp_millis)
-                .map(|d| d.to_rfc3339())
-                .unwrap_or_default(),
-            snippet: html_unescape(m["snippet"].as_str().unwrap_or_default()),
-            url: m["threadId"].as_str().map(|t| format!("https://mail.google.com/mail/u/0/#inbox/{t}")),
-            unread: m["labelIds"].as_array().is_some_and(|l| l.iter().any(|x| x == "UNREAD")),
-        })
-        .collect())
+    Ok(msgs.iter().map(mail_item).collect())
+}
+
+fn thread_url(m: &Value) -> Option<String> {
+    m["threadId"].as_str().map(|t| format!("https://mail.google.com/mail/u/0/#inbox/{t}"))
+}
+
+/// One inbox message, read with `format=metadata`.
+fn mail_item(m: &Value) -> MailItem {
+    MailItem {
+        id: m["id"].as_str().unwrap_or_default().to_string(),
+        source: "google".into(),
+        subject: header(m, "Subject"),
+        from: header(m, "From"),
+        date: m["internalDate"]
+            .as_str()
+            .and_then(|s| s.parse::<i64>().ok())
+            .and_then(DateTime::from_timestamp_millis)
+            .map(|d| d.to_rfc3339())
+            .unwrap_or_default(),
+        snippet: html_unescape(m["snippet"].as_str().unwrap_or_default()),
+        url: thread_url(m),
+        unread: m["labelIds"].as_array().is_some_and(|l| l.iter().any(|x| x == "UNREAD")),
+    }
 }
 
 fn find_part(payload: &Value, mime: &str) -> Option<String> {
@@ -269,17 +286,22 @@ fn find_part(payload: &Value, mime: &str) -> Option<String> {
 
 pub async fn mail_body(http: &reqwest::Client, secrets: &Secrets, id: &str) -> Result<MailBody> {
     let m = get(http, secrets, &format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{id}?format=full")).await?;
+    Ok(mail_body_of(&m))
+}
+
+/// A whole message (`format=full`): the plain text part, else the HTML one as text, else the snippet.
+fn mail_body_of(m: &Value) -> MailBody {
     let text = find_part(&m["payload"], "text/plain")
         .or_else(|| find_part(&m["payload"], "text/html").map(|h| strip_html(&h)))
         .unwrap_or_else(|| html_unescape(m["snippet"].as_str().unwrap_or_default()));
-    Ok(MailBody {
-        subject: header(&m, "Subject"),
-        from: header(&m, "From"),
-        to: header(&m, "To"),
-        date: header(&m, "Date"),
+    MailBody {
+        subject: header(m, "Subject"),
+        from: header(m, "From"),
+        to: header(m, "To"),
+        date: header(m, "Date"),
         text,
-        url: m["threadId"].as_str().map(|t| format!("https://mail.google.com/mail/u/0/#inbox/{t}")),
-    })
+        url: thread_url(m),
+    }
 }
 
 pub async fn tasks(http: &reqwest::Client, secrets: &Secrets) -> Result<Vec<RemoteTask>> {
@@ -294,23 +316,26 @@ pub async fn tasks(http: &reqwest::Client, secrets: &Secrets) -> Result<Vec<Remo
             &format!("https://tasks.googleapis.com/tasks/v1/lists/{list_id}/tasks?showCompleted=false&maxResults=100"),
         )
         .await?;
-        for t in v["items"].as_array().cloned().unwrap_or_default() {
-            let title = t["title"].as_str().unwrap_or_default().trim().to_string();
-            if title.is_empty() {
-                continue;
-            }
-            out.push(RemoteTask {
-                id: t["id"].as_str().unwrap_or_default().to_string(),
-                source: "google".into(),
-                list_id: list_id.clone(),
-                list: list.clone(),
-                title,
-                done: t["status"].as_str() == Some("completed"),
-                due: t["due"].as_str().map(|d| d.chars().take(10).collect()),
-            });
-        }
+        out.extend(v["items"].as_array().into_iter().flatten().filter_map(|t| task(t, &list_id, &list)));
     }
     Ok(out)
+}
+
+/// One Google task; None for the blank rows Google Tasks keeps.
+fn task(t: &Value, list_id: &str, list: &str) -> Option<RemoteTask> {
+    let title = t["title"].as_str().unwrap_or_default().trim().to_string();
+    if title.is_empty() {
+        return None;
+    }
+    Some(RemoteTask {
+        id: t["id"].as_str().unwrap_or_default().to_string(),
+        source: "google".into(),
+        list_id: list_id.to_string(),
+        list: list.to_string(),
+        title,
+        done: t["status"].as_str() == Some("completed"),
+        due: t["due"].as_str().map(|d| d.chars().take(10).collect()),
+    })
 }
 
 pub async fn set_task_done(http: &reqwest::Client, secrets: &Secrets, list_id: &str, id: &str, done: bool) -> Result<()> {
@@ -353,5 +378,194 @@ mod tests {
     fn strips_html_email() {
         let html = "<html><head><title>x</title></head><style>p{}</style><p>Hi &amp; welcome</p><div>Line two<br>three</div></html>";
         assert_eq!(strip_html(html), "Hi & welcome\nLine two\nthree");
+    }
+
+    fn b64(s: &str) -> String {
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(s)
+    }
+
+    #[test]
+    fn strip_html_drops_scripts_keeps_escaped_text_and_collapses_blank_lines() {
+        let html = "<SCRIPT type=x>alert(1)</SCRIPT><p>1 &lt; 2 &amp;&amp; 3 &gt; 2</p>\n\n\n\n<h2>Next</h2><table><tr><td>a</td></tr></table><li>item</li>";
+        assert_eq!(strip_html(html), "1 < 2 && 3 > 2\n\nNext\na\nitem");
+        assert_eq!(strip_html("   "), "");
+        assert_eq!(strip_html("plain text"), "plain text");
+    }
+
+    #[test]
+    fn unescapes_gmail_entities_once() {
+        assert_eq!(html_unescape("It&#39;s &quot;fine&quot; &lt;ok&gt;&nbsp;now"), "It's \"fine\" <ok> now");
+        assert_eq!(html_unescape("&amp;lt; stays literal"), "&lt; stays literal", "never unescaped twice");
+    }
+
+    #[test]
+    fn calendars_shown_are_the_ticked_ones_and_the_main_one() {
+        assert_eq!(shown_calendar(&json!({ "id": "a@x", "summary": "Work", "selected": true })), Some(("a@x".into(), "Work".into())));
+        assert_eq!(shown_calendar(&json!({ "id": "me", "summary": "Me", "summaryOverride": "Mine", "primary": true })), Some(("me".into(), "Mine".into())));
+        assert_eq!(shown_calendar(&json!({ "id": "h", "selected": true })).unwrap().1, "Calendar");
+        assert_eq!(shown_calendar(&json!({ "id": "holidays", "summary": "Holidays", "selected": false })), None);
+        assert_eq!(shown_calendar(&json!({ "id": "other" })), None);
+    }
+
+    #[test]
+    fn event_urls_escape_the_calendar_id_and_ask_for_one_day() {
+        let from = DateTime::parse_from_rfc3339("2026-11-02T21:00:00Z").unwrap().to_utc();
+        let to = from + chrono::Duration::days(1);
+        let url = events_url("en.ug#holiday@group.v.calendar.google.com", from, to);
+        assert_eq!(url.path(), "/calendar/v3/calendars/en.ug%23holiday%40group.v.calendar.google.com/events");
+        let q: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
+        assert_eq!(q["timeMin"], "2026-11-02T21:00:00+00:00");
+        assert_eq!(q["timeMax"], "2026-11-03T21:00:00+00:00");
+        assert_eq!((q["singleEvents"].as_str(), q["orderBy"].as_str(), q["maxResults"].as_str()), ("true", "startTime", "100"));
+    }
+
+    #[test]
+    fn reads_events_and_skips_cancelled_and_declined_ones() {
+        let e = event(
+            &json!({
+                "id": "e1", "summary": "Standup", "location": "Kampala office",
+                "start": { "dateTime": "2026-11-03T09:00:00+03:00" }, "end": { "dateTime": "2026-11-03T09:15:00+03:00" },
+                "hangoutLink": "https://meet.google.com/abc", "htmlLink": "https://calendar.google.com/e1",
+                "attendees": [
+                    { "email": "me@x", "self": true, "responseStatus": "accepted" },
+                    { "email": "amina@x", "displayName": "Amina" },
+                    { "email": "bob@x" }
+                ]
+            }),
+            "Work",
+        )
+        .unwrap();
+        assert_eq!((e.id.as_str(), e.source.as_str(), e.calendar.as_str(), e.title.as_str()), ("e1", "google", "Work", "Standup"));
+        assert_eq!((e.start.as_str(), e.end.as_str(), e.all_day), ("2026-11-03T09:00:00+03:00", "2026-11-03T09:15:00+03:00", false));
+        assert_eq!(e.url.as_deref(), Some("https://meet.google.com/abc"), "the meeting link before the calendar page");
+        assert_eq!(e.attendees, ["Amina", "bob@x"], "everyone but me, by name when there is one");
+        assert_eq!(e.location.as_deref(), Some("Kampala office"));
+
+        let all_day = event(&json!({ "id": "e2", "start": { "date": "2026-11-03" }, "end": { "date": "2026-11-04" }, "htmlLink": "h" }), "Me").unwrap();
+        assert_eq!((all_day.start.as_str(), all_day.end.as_str(), all_day.all_day), ("2026-11-03T00:00:00", "2026-11-04T00:00:00", true));
+        assert_eq!(all_day.title, "(No title)");
+        assert_eq!(all_day.url.as_deref(), Some("h"));
+        assert!(all_day.attendees.is_empty() && all_day.location.is_none());
+
+        assert!(event(&json!({ "status": "cancelled", "start": {}, "end": {} }), "Me").is_none());
+        let declined = json!({ "start": {}, "end": {}, "attendees": [{ "self": true, "responseStatus": "declined" }] });
+        assert!(event(&declined, "Me").is_none());
+        let someone_else_declined = json!({ "start": {}, "end": {}, "attendees": [{ "email": "a", "responseStatus": "declined" }] });
+        assert!(event(&someone_else_declined, "Me").is_some());
+    }
+
+    #[test]
+    fn reads_inbox_items() {
+        let m = json!({
+            "id": "m1", "threadId": "t1", "labelIds": ["INBOX", "UNREAD"], "snippet": "Tom &amp; Jerry&#39;s plan",
+            "internalDate": "1762156800000",
+            "payload": { "headers": [{ "name": "subject", "value": "Plan" }, { "name": "From", "value": "Amina <a@x>" }] }
+        });
+        let item = mail_item(&m);
+        assert_eq!((item.id.as_str(), item.source.as_str(), item.subject.as_str(), item.from.as_str()), ("m1", "google", "Plan", "Amina <a@x>"));
+        assert_eq!(item.snippet, "Tom & Jerry's plan");
+        assert_eq!(item.date, "2025-11-03T08:00:00+00:00");
+        assert_eq!(item.url.as_deref(), Some("https://mail.google.com/mail/u/0/#inbox/t1"));
+        assert!(item.unread);
+        let bare = mail_item(&json!({ "id": "m2", "internalDate": "soon" }));
+        assert_eq!((bare.subject.as_str(), bare.date.as_str(), bare.url, bare.unread), ("", "", None, false));
+    }
+
+    #[test]
+    fn reads_the_plain_part_then_the_html_part_then_the_snippet() {
+        let headers = json!([{ "name": "Subject", "value": "Hi" }, { "name": "To", "value": "me@x" }, { "name": "Date", "value": "Mon, 3 Nov 2026" }]);
+        let nested = json!({ "threadId": "t", "payload": { "headers": headers, "mimeType": "multipart/mixed", "parts": [
+            { "mimeType": "multipart/alternative", "parts": [
+                { "mimeType": "text/html", "body": { "data": b64("<p>html</p>") } },
+                { "mimeType": "text/plain", "body": { "data": b64("plain ✓ text") } }
+            ]},
+            { "mimeType": "application/pdf", "body": { "attachmentId": "a" } }
+        ]}});
+        let body = mail_body_of(&nested);
+        assert_eq!(body.text, "plain ✓ text");
+        assert_eq!((body.subject.as_str(), body.to.as_str(), body.date.as_str()), ("Hi", "me@x", "Mon, 3 Nov 2026"));
+        assert_eq!(body.url.as_deref(), Some("https://mail.google.com/mail/u/0/#inbox/t"));
+
+        let padded = format!("{}==", b64("<div>Only</div><div>html</div>"));
+        let html_only = json!({ "payload": { "mimeType": "text/html", "body": { "data": padded } } });
+        assert_eq!(mail_body_of(&html_only).text, "Only\nhtml");
+
+        let empty = json!({ "snippet": "Just the &quot;snippet&quot;", "payload": { "mimeType": "text/plain", "body": { "size": 0 } } });
+        assert_eq!(mail_body_of(&empty).text, "Just the \"snippet\"");
+        let broken = json!({ "snippet": "fallback", "payload": { "mimeType": "text/plain", "body": { "data": "%%%" } } });
+        assert_eq!(mail_body_of(&broken).text, "fallback", "an unreadable part falls back to the snippet");
+    }
+
+    #[test]
+    fn reads_tasks_and_skips_blank_ones() {
+        let t = task(&json!({ "id": "1", "title": "  Pay rent ", "status": "needsAction", "due": "2026-11-05T00:00:00.000Z" }), "L", "My Tasks").unwrap();
+        assert_eq!((t.id.as_str(), t.title.as_str(), t.list_id.as_str(), t.list.as_str()), ("1", "Pay rent", "L", "My Tasks"));
+        assert_eq!((t.done, t.due.as_deref(), t.source.as_str()), (false, Some("2026-11-05"), "google"));
+        assert!(task(&json!({ "id": "2", "title": "Done", "status": "completed" }), "L", "x").unwrap().done);
+        assert!(task(&json!({ "id": "3", "title": "   " }), "L", "x").is_none());
+        assert!(task(&json!({ "id": "4" }), "L", "x").is_none());
+    }
+
+    #[test]
+    fn the_sign_in_address_asks_for_offline_access_with_pkce() {
+        let p = Pkce { verifier: "v".into(), challenge: "c".into() };
+        match auth_url("http://127.0.0.1:5555", &p, "st") {
+            Ok(url) => {
+                let url = url::Url::parse(&url).unwrap();
+                assert_eq!(url.host_str(), Some("accounts.google.com"));
+                let q: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
+                assert_eq!(q["client_id"], client().unwrap().0);
+                assert_eq!(q["redirect_uri"], "http://127.0.0.1:5555");
+                assert_eq!((q["code_challenge"].as_str(), q["code_challenge_method"].as_str()), ("c", "S256"));
+                assert_eq!((q["state"].as_str(), q["access_type"].as_str(), q["prompt"].as_str()), ("st", "offline", "consent"));
+                assert_eq!(q["scope"], SCOPES);
+                assert!(SCOPES.contains("gmail.readonly") && SCOPES.contains("calendar.readonly") && SCOPES.contains("/auth/tasks"));
+            }
+            Err(e) => assert!(e.to_string().starts_with("Google isn't set up in this build yet."), "{e}"),
+        }
+    }
+
+    /// The browser's side of the loopback sign-in.
+    fn browser(port: u16, requests: Vec<&'static str>) -> std::thread::JoinHandle<Vec<String>> {
+        std::thread::spawn(move || {
+            use std::io::{Read, Write};
+            requests
+                .into_iter()
+                .map(|r| {
+                    let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+                    s.write_all(r.as_bytes()).unwrap();
+                    let mut out = String::new();
+                    let _ = s.read_to_string(&mut out);
+                    out
+                })
+                .collect()
+        })
+    }
+
+    #[test]
+    fn the_loopback_sign_in_takes_the_code_and_ignores_stray_requests() {
+        crate::test_http::block_on(async {
+            let (listener, redirect) = loopback().await.unwrap();
+            let port: u16 = redirect.rsplit(':').next().unwrap().parse().unwrap();
+            assert_eq!(redirect, format!("http://127.0.0.1:{port}"));
+            let b = browser(port, vec!["GET /favicon.ico HTTP/1.1\r\n\r\n", "GET /?state=good&code=4%2Fabc HTTP/1.1\r\n\r\n"]);
+            assert_eq!(await_code(listener, "good").await.unwrap(), "4/abc");
+            let pages = b.join().unwrap();
+            assert!(pages[0].starts_with("HTTP/1.1 404"));
+            assert!(pages[1].starts_with("HTTP/1.1 200") && pages[1].contains("Google is connected"));
+        });
+    }
+
+    #[test]
+    fn the_loopback_sign_in_refuses_a_wrong_state_or_a_refusal() {
+        crate::test_http::block_on(async {
+            for request in ["GET /?state=forged&code=abc HTTP/1.1\r\n\r\n", "GET /?error=access_denied&state=good HTTP/1.1\r\n\r\n"] {
+                let (listener, redirect) = loopback().await.unwrap();
+                let port: u16 = redirect.rsplit(':').next().unwrap().parse().unwrap();
+                let b = browser(port, vec![request]);
+                assert_eq!(await_code(listener, "good").await.unwrap_err().to_string(), "Google sign-in was cancelled.");
+                assert!(b.join().unwrap()[0].contains("Google wasn't connected"));
+            }
+        });
     }
 }
