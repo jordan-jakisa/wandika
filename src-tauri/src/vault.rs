@@ -827,8 +827,14 @@ mod tests {
         let root = Path::new("/v");
         assert!(safe(root, "../x").is_err());
         assert!(safe(root, "/etc/passwd").is_err());
-        assert!(safe(root, "a/./b").is_ok() || safe(root, "a/./b").is_err());
+        // A `.` inside a path is dropped by the path parser; one at the start, or `..`, is refused.
+        assert_eq!(safe(root, "a/./b").unwrap(), Path::new("/v/a/b"));
+        assert!(safe(root, "./a").is_err());
+        assert!(safe(root, "a/../../b").is_err());
+        assert!(safe(root, "").is_err());
         assert!(safe(root, "Daily/2026-11-02.md").is_ok());
+        assert_eq!(safe(root, "Notes/Café 日本/Ndiyo.md").unwrap(), Path::new("/v/Notes/Café 日本/Ndiyo.md"));
+        assert_eq!(safe(root, "../x").unwrap_err().to_string(), "That path is outside the vault.");
     }
 
     #[test]
@@ -1063,4 +1069,514 @@ mod tests {
         assert_eq!(fill_template(text, "Standup", at), "# Standup\n2026-11-03 14:30 Tuesday 3 November 2:30 pm");
     }
 
+
+    fn temp_vault(tag: &str) -> (PathBuf, Crypto) {
+        let root = std::env::temp_dir().join(format!("wandika-vault-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let crypto = Crypto::load(&root, &crate::secrets::Secrets::new(root.join(".secrets")), &format!("test/{tag}"));
+        (root, crypto)
+    }
+
+    fn put(root: &Path, rel: &str, text: &str) {
+        let path = root.join(rel);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    }
+
+    fn get(root: &Path, rel: &str) -> String {
+        std::fs::read_to_string(root.join(rel)).unwrap()
+    }
+
+    #[test]
+    fn hidden_paths_note_names_and_titles() {
+        assert!(hidden(".obsidian/app.json"));
+        assert!(hidden("Projects/.trash/Plan.md"));
+        assert!(hidden("Plan.md.wandika-tmp"));
+        assert!(!hidden("v1.2/Plan.md"), "a dot inside a name is not hidden");
+        assert!(is_note("Plan.md") && is_note("Private/Diary.md.age"));
+        assert!(!is_note("photo.png") && !is_note("photo.png.age") && !is_note("md"));
+        assert_eq!(title_of("Projects/Kampala 2026/Plan.md"), "Plan");
+        assert_eq!(title_of("Café ☕.md"), "Café ☕");
+        assert_eq!(title_of("attachments/photo.png"), "photo.png");
+        assert_eq!(rel_of(Path::new("/v"), Path::new("/v/a/b.md")).as_deref(), Some("a/b.md"));
+        assert_eq!(rel_of(Path::new("/v"), Path::new("/w/b.md")), None);
+        assert_eq!(mtime_ms(SystemTime::UNIX_EPOCH - Duration::from_secs(5)), 0, "before 1970 reads as 0");
+        assert_eq!(mtime_ms(SystemTime::UNIX_EPOCH + Duration::from_millis(1500)), 1500);
+    }
+
+    #[test]
+    fn write_atomic_makes_folders_and_leaves_no_temp_file() {
+        let (root, _) = temp_vault("atomic");
+        let path = root.join("a/b/c/Note.md");
+        write_atomic(&path, b"one").unwrap();
+        write_atomic(&path, b"two").unwrap();
+        assert_eq!(get(&root, "a/b/c/Note.md"), "two");
+        assert!(!root.join(format!("a/b/c/Note.md{TMP_SUFFIX}")).exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn tree_lists_visible_entries_with_kinds_sorted_without_case() {
+        let (root, _) = temp_vault("tree");
+        put(&root, "b.md", "");
+        put(&root, "Archive/Old.md", "");
+        put(&root, "attachments/Photo.PNG", "png");
+        put(&root, "Private/Diary.md.age", "x");
+        put(&root, ".obsidian/app.json", "{}");
+        put(&root, ".trash/Gone.md", "");
+        put(&root, "Projects/.hidden/x.md", "");
+        put(&root, "Draft.md.wandika-tmp", "");
+        put(&root, "Ünïcode/Ndiyo.md", "");
+        let entries = tree(&root).unwrap();
+        let paths: Vec<&str> = entries.iter().map(|e| e.path.as_str()).collect();
+        assert_eq!(
+            paths,
+            ["Archive", "Archive/Old.md", "attachments", "attachments/Photo.PNG", "b.md", "Private", "Private/Diary.md.age", "Projects", "Ünïcode", "Ünïcode/Ndiyo.md"]
+        );
+        let by = |p: &str| entries.iter().find(|e| e.path == p).unwrap();
+        assert_eq!((by("Archive").kind, by("Archive").name.as_str()), ("folder", "Archive"));
+        assert_eq!((by("b.md").kind, by("b.md").name.as_str()), ("note", "b"));
+        assert_eq!((by("attachments/Photo.PNG").kind, by("attachments/Photo.PNG").name.as_str()), ("file", "Photo.PNG"));
+        assert!(by("Private/Diary.md.age").encrypted && by("Private/Diary.md.age").kind == "note");
+        assert!(by("b.md").modified > 0);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn reading_and_writing_notes_and_their_errors() {
+        let (root, crypto) = temp_vault("readwrite");
+        write_note(&root, "Notes/Café.md", "Habari 👋\n", &crypto).unwrap();
+        assert_eq!(read_note(&root, "Notes/Café.md", &crypto).unwrap(), "Habari 👋\n");
+        let missing = read_note(&root, "Nope.md", &crypto).unwrap_err();
+        assert_eq!(missing.friendly().0, "not_found");
+        std::fs::write(root.join("bin.md"), [0xff, 0xfe, 0x00]).unwrap();
+        assert_eq!(read_note(&root, "bin.md", &crypto).unwrap_err().to_string(), "This file isn't text.");
+        assert!(read_note(&root, "../outside.md", &crypto).is_err());
+        assert!(write_note(&root, "/abs.md", "x", &crypto).is_err());
+        put(&root, "Locked.md.age", "-----BEGIN AGE ENCRYPTED FILE-----");
+        assert!(matches!(read_note(&root, "Locked.md.age", &crypto), Err(crate::error::Error::Locked)));
+        assert_eq!(write_note(&root, "New.md.age", "x", &crypto).unwrap_err().to_string(), "Set up encryption first.");
+        assert!(!root.join("New.md.age").exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn create_note_cleans_the_name_and_picks_a_free_one() {
+        let (root, crypto) = temp_vault("create");
+        assert_eq!(create_note(&root, "", "Plan", "one", &crypto).unwrap(), "Plan.md");
+        assert_eq!(create_note(&root, "", "Plan", "two", &crypto).unwrap(), "Plan 2.md");
+        assert_eq!(create_note(&root, "", "Plan", "three", &crypto).unwrap(), "Plan 3.md");
+        assert_eq!(get(&root, "Plan 2.md"), "two");
+        assert_eq!(create_note(&root, "/Projects/2026/", " Q1: a/b? ", "", &crypto).unwrap(), "Projects/2026/Q1- a-b-.md");
+        assert_eq!(create_note(&root, "", "..hidden", "", &crypto).unwrap(), "hidden.md", "never a hidden file");
+        assert_eq!(create_note(&root, "Mail", "Habari ya leo 🌍", "", &crypto).unwrap(), "Mail/Habari ya leo 🌍.md");
+        for blank in ["", "   ", "..."] {
+            assert_eq!(create_note(&root, "", blank, "", &crypto).unwrap_err().to_string(), "Give the note a name.");
+        }
+        assert!(create_note(&root, "../out", "Plan", "", &crypto).is_err());
+        assert!(!root.parent().unwrap().join("out/Plan.md").exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn new_note_folder_ignores_bad_settings() {
+        let (root, _) = temp_vault("newloc-bad");
+        put(&root, ".obsidian/app.json", r#"{"newFileLocation":"folder","newFileFolderPath":"../outside"}"#);
+        assert_eq!(new_note_folder(&root, Some("Projects/Plan.md")), "", "a folder outside the vault is ignored");
+        put(&root, ".obsidian/app.json", r#"{"newFileLocation":"folder","newFileFolderPath":"/Inbox/"}"#);
+        assert_eq!(new_note_folder(&root, None), "Inbox");
+        put(&root, ".obsidian/app.json", r#"{"newFileLocation":"current"}"#);
+        assert_eq!(new_note_folder(&root, None), "", "no open note: the root");
+        assert_eq!(new_note_folder(&root, Some("Top.md")), "");
+        assert_eq!(new_note_folder(&root, Some("a/b/c/Deep.md")), "a/b/c");
+        put(&root, ".obsidian/app.json", "not json");
+        assert_eq!(new_note_folder(&root, Some("Projects/Plan.md")), "");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn discard_keeps_anything_named_written_or_missing() {
+        let (root, crypto) = temp_vault("discard-more");
+        put(&root, "Untitled 3.md", "  \n\t\n");
+        put(&root, "Untitled copy.md", "");
+        put(&root, "Untitled.txt", "");
+        put(&root, "Projects/Untitled.md", "");
+        assert!(discard_if_empty(&root, "Untitled 3.md", &crypto).unwrap(), "whitespace only counts as empty");
+        assert!(!root.join("Untitled 3.md").exists());
+        assert!(!discard_if_empty(&root, "Untitled copy.md", &crypto).unwrap());
+        assert!(!discard_if_empty(&root, "Untitled.txt", &crypto).unwrap());
+        assert!(!discard_if_empty(&root, "Untitled 9.md", &crypto).unwrap(), "already gone");
+        assert!(discard_if_empty(&root, "Projects/Untitled.md", &crypto).unwrap());
+        assert!(discard_if_empty(&root, "../Untitled.md", &crypto).is_err());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn create_folder_makes_nested_folders_inside_the_vault_only() {
+        let (root, _) = temp_vault("folder");
+        create_folder(&root, "a/b/Ünï").unwrap();
+        assert!(root.join("a/b/Ünï").is_dir());
+        create_folder(&root, "a/b/Ünï").unwrap();
+        assert!(create_folder(&root, "../escape").is_err());
+        assert!(create_folder(&root, "").is_err());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn rename_handles_folders_types_clashes_and_no_ops() {
+        let (root, _) = temp_vault("rename-more");
+        put(&root, "Plan.md", "");
+        put(&root, "Taken.md", "");
+        put(&root, "Private/Diary.md.age", "x");
+        put(&root, "Private/2025/Old.md.age", "x");
+        put(&root, "attachments/pic.png.age", "x");
+        put(&root, "attachments/scan.jpeg", "x");
+        put(&root, "LICENSE", "x");
+        crypto::save_config(&root, &crypto::EncConfig { folders: vec!["Private".into(), "Private/2025".into(), "Work".into()], ..Default::default() }).unwrap();
+        let crypto = Crypto::load(&root, &crate::secrets::Secrets::new(root.join(".secrets")), "test/rename-more");
+        let mut index = Index::default();
+
+        assert_eq!(rename(&root, "Plan.md", "Plan", &crypto, &mut index).unwrap(), "Plan.md", "same name: nothing to do");
+        assert_eq!(rename(&root, "Plan.md", "Taken", &crypto, &mut index).unwrap_err().to_string(), "“Taken” already exists here.");
+        assert!(root.join("Plan.md").exists());
+        assert_eq!(rename(&root, "Plan.md", "", &crypto, &mut index).unwrap_err().to_string(), "Give the note a name.");
+        assert_eq!(rename(&root, "attachments/pic.png.age", "beach", &crypto, &mut index).unwrap(), "attachments/beach.png.age");
+        assert_eq!(rename(&root, "attachments/scan.jpeg", "receipt.JPEG", &crypto, &mut index).unwrap(), "attachments/receipt.JPEG", "a typed extension isn't doubled");
+        assert_eq!(rename(&root, "LICENSE", "COPYING", &crypto, &mut index).unwrap(), "COPYING");
+        assert_eq!(rename(&root, "Private/Diary.md.age", "Journal", &crypto, &mut index).unwrap(), "Private/Journal.md.age");
+
+        // A folder moves with everything in it, and stays encrypted under its new name.
+        assert_eq!(rename(&root, "Private", "Siri", &crypto, &mut index).unwrap(), "Siri");
+        assert!(root.join("Siri/2025/Old.md.age").exists());
+        let cfg: crypto::EncConfig = serde_json::from_slice(&std::fs::read(root.join(crypto::CONFIG_PATH)).unwrap()).unwrap();
+        assert_eq!(cfg.folders, vec!["Siri", "Siri/2025", "Work"]);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn trash_replaces_an_older_copy_and_forgets_encrypted_folders() {
+        let (root, _) = temp_vault("trash-more");
+        put(&root, "Plan.md", "first");
+        put(&root, "Private/Diary.md.age", "x");
+        crypto::save_config(&root, &crypto::EncConfig { folders: vec!["Private".into(), "Work".into()], ..Default::default() }).unwrap();
+        let crypto = Crypto::load(&root, &crate::secrets::Secrets::new(root.join(".secrets")), "test/trash-more");
+        trash(&root, "Plan.md", &crypto).unwrap();
+        put(&root, "Plan.md", "second");
+        trash(&root, "Plan.md", &crypto).unwrap();
+        assert_eq!(get(&root, ".trash/Plan.md"), "second", "the newest deletion is the one kept");
+        trash(&root, "Private", &crypto).unwrap();
+        assert!(root.join(".trash/Private/Diary.md.age").exists());
+        let cfg: crypto::EncConfig = serde_json::from_slice(&std::fs::read(root.join(crypto::CONFIG_PATH)).unwrap()).unwrap();
+        assert_eq!(cfg.folders, vec!["Work"]);
+        assert!(trash(&root, "../x", &crypto).is_err());
+        assert!(trash(&root, "Missing.md", &crypto).is_err());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn restore_never_overwrites_something_new() {
+        let (root, crypto) = temp_vault("restore-taken");
+        put(&root, "Projects/Plan.md", "old");
+        trash(&root, "Projects/Plan.md", &crypto).unwrap();
+        std::fs::remove_dir_all(root.join("Projects")).unwrap();
+        put(&root, "Projects/Plan.md", "new");
+        assert_eq!(
+            restore(&root, "Projects/Plan.md").unwrap_err().to_string(),
+            "Something new has the same name there now, so it stays in the trash."
+        );
+        assert_eq!(get(&root, "Projects/Plan.md"), "new");
+        std::fs::remove_dir_all(root.join("Projects")).unwrap();
+        restore(&root, "Projects/Plan.md").unwrap();
+        assert_eq!(get(&root, "Projects/Plan.md"), "old", "its folder is made again");
+        assert_eq!(restore(&root, "Projects/Plan.md").unwrap_err().to_string(), "It isn't in the trash any more.");
+        assert!(restore(&root, "../Plan.md").is_err());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn set_encrypted_converts_notes_and_folders_both_ways() {
+        let (root, mut locked) = temp_vault("encrypt");
+        put(&root, "Plan.md", "plan");
+        assert_eq!(set_encrypted(&root, "Plan.md", true, &mut locked).unwrap_err().to_string(), "Set up or unlock encryption first.");
+        assert_eq!(set_encrypted(&root, "Plan.md", false, &mut locked).unwrap_err().to_string(), "Unlock encrypted notes first.");
+
+        let secrets = crate::secrets::Secrets::new(root.join(".secrets"));
+        let mut crypto = Crypto::set_up(&root, &secrets, "test/encrypt", "long passphrase").unwrap();
+        assert_eq!(set_encrypted(&root, "Plan.md", true, &mut crypto).unwrap(), "Plan.md.age");
+        assert!(!root.join("Plan.md").exists());
+        assert!(get(&root, "Plan.md.age").starts_with("-----BEGIN AGE ENCRYPTED FILE-----"));
+        assert_eq!(read_note(&root, "Plan.md.age", &crypto).unwrap(), "plan");
+        assert_eq!(set_encrypted(&root, "Plan.md.age", true, &mut crypto).unwrap(), "Plan.md.age", "already encrypted");
+        assert_eq!(set_encrypted(&root, "Plan.md.age", false, &mut crypto).unwrap(), "Plan.md");
+        assert_eq!(get(&root, "Plan.md"), "plan");
+
+        // A folder: its notes are encrypted, pictures and hidden files left, and new notes follow.
+        put(&root, "Private/Diary.md", "dear diary");
+        put(&root, "Private/2025/Old.md", "old");
+        put(&root, "Private/photo.png", "png");
+        put(&root, "Private/.obsidian/x.md", "hidden");
+        assert_eq!(set_encrypted(&root, "Private/", true, &mut crypto).unwrap(), "Private/");
+        assert!(root.join("Private/Diary.md.age").exists() && root.join("Private/2025/Old.md.age").exists());
+        assert_eq!(get(&root, "Private/photo.png"), "png");
+        assert_eq!(get(&root, "Private/.obsidian/x.md"), "hidden");
+        assert_eq!(crypto.status().folders, vec!["Private"]);
+        assert_eq!(Crypto::load(&root, &secrets, "test/encrypt").status().folders, vec!["Private"], "saved in the vault");
+        assert_eq!(create_note(&root, "Private/2025", "New", "x", &crypto).unwrap(), "Private/2025/New.md.age");
+        set_encrypted(&root, "Private", true, &mut crypto).unwrap();
+        assert_eq!(crypto.status().folders, vec!["Private"], "listed once");
+
+        set_encrypted(&root, "Private", false, &mut crypto).unwrap();
+        assert_eq!(get(&root, "Private/Diary.md"), "dear diary");
+        assert_eq!(get(&root, "Private/2025/New.md"), "x");
+        assert!(crypto.status().folders.is_empty());
+        assert!(set_encrypted(&root, "../x", true, &mut crypto).is_err());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn parse_reads_nested_tags_once_and_skips_non_tags() {
+        let m = parse("a.md", "#area/home and #Idea, #idea again\nemail a#b, #1 and # heading\n#idea", 7, true, true);
+        assert_eq!(m.tags, vec!["Idea", "area/home", "idea"]);
+        assert_eq!((m.modified, m.encrypted, m.locked), (7, true, true));
+        let m = parse("a.md", "[[A]] [[A]] [[ B |x]] [[C#Head]]", 0, false, false);
+        assert_eq!(m.links, vec!["A", "B", "C"], "repeats next to each other collapse; names are trimmed");
+        assert!(!parse("a.md", "plain", 0, false, false).board);
+    }
+
+    #[test]
+    fn boards_need_the_kanban_key_in_the_frontmatter() {
+        assert!(is_board("---\ntags: [x]\n  kanban-plugin: board\n---\n"));
+        assert!(is_board("---\nkanban-plugin: basic"), "frontmatter that never closes still counts");
+        assert!(!is_board("---\ntitle: x\n---\nkanban-plugin: basic\n"));
+        assert!(!is_board(""));
+    }
+
+    #[test]
+    fn strip_code_drops_fenced_blocks_only() {
+        assert_eq!(strip_code("a\n```rust\n#[derive]\n```\nb\n  ```\n[[x]]\n  ```\nc"), "a\nb\nc\n");
+        assert_eq!(strip_code("inline `#tag` stays"), "inline `#tag` stays\n");
+    }
+
+    #[test]
+    fn snippets_show_the_match_in_context() {
+        assert_eq!(snippet("first line\nsecond", "absent"), "first line second");
+        let long = format!("{}needle here", "word ".repeat(40));
+        let s = snippet(&long, "needle");
+        assert!(s.starts_with('…') && s.contains("needle here"), "{s}");
+        assert!(!snippet("needle at the start", "needle").starts_with('…'));
+        // Lowercasing İ adds a byte, so the snippet starts at the top instead of mid-character.
+        let turkish = format!("İ{}needle", "x".repeat(100));
+        assert!(snippet(&turkish, "needle").starts_with('İ'));
+        let multibyte = format!("{}needle", "日本".repeat(40));
+        assert!(snippet(&multibyte, "needle").contains("needle"), "never cuts inside a character");
+    }
+
+    #[test]
+    fn tasks_in_reads_every_list_style_and_skips_code() {
+        let t = tasks_in("a.md", "A", "- [ ] one\n  * [x] two 📅 2026-01-02\n+ [X] three\n- [] not\n-[ ] not\n```\n- [ ] code\n```\n1. [ ] numbered");
+        let texts: Vec<(&str, bool, usize)> = t.iter().map(|t| (t.text.as_str(), t.done, t.line)).collect();
+        assert_eq!(texts, [("one", false, 0), ("two 📅 2026-01-02", true, 1), ("three", true, 2)]);
+        assert_eq!(t[1].due.as_deref(), Some("2026-01-02"));
+        assert_eq!((t[0].path.as_str(), t[0].title.as_str()), ("a.md", "A"));
+    }
+
+    #[test]
+    fn toggle_task_ticks_unticks_and_refuses_stale_lines() {
+        let (root, crypto) = temp_vault("toggle");
+        put(&root, "T.md", "# T\n  * [X] Done ✅ 2026-01-01\n- [ ] Open\nplain");
+        let today = Local::now().format("%Y-%m-%d").to_string();
+        assert!(!toggle_task(&root, "T.md", 1, "Done ✅ 2026-01-01", &crypto).unwrap());
+        assert!(toggle_task(&root, "T.md", 2, " Open ", &crypto).unwrap());
+        assert_eq!(get(&root, "T.md"), format!("# T\n  * [ ] Done\n- [x] Open ✅ {today}\nplain"));
+        let moved = "That task moved. Refresh and try again.";
+        assert_eq!(toggle_task(&root, "T.md", 9, "Open", &crypto).unwrap_err().to_string(), moved);
+        assert_eq!(toggle_task(&root, "T.md", 3, "plain", &crypto).unwrap_err().to_string(), moved);
+        assert_eq!(toggle_task(&root, "T.md", 1, "Something else", &crypto).unwrap_err().to_string(), "That task changed. Refresh and try again.");
+        assert!(toggle_task(&root, "Missing.md", 0, "x", &crypto).is_err());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn index_rescans_only_when_due() {
+        let (root, crypto) = temp_vault("fresh");
+        put(&root, "A.md", "alpha");
+        let mut index = Index::default();
+        index.ensure_fresh(&root, &crypto);
+        assert_eq!(index.titles().len(), 1);
+        // Changed outside the app, within the rescan interval: not seen until marked stale.
+        put(&root, "B.md", "beta");
+        index.ensure_fresh(&root, &crypto);
+        assert_eq!(index.titles().len(), 1);
+        index.mark_stale();
+        index.ensure_fresh(&root, &crypto);
+        assert_eq!(index.titles().len(), 2);
+        // Deleted notes leave the index.
+        std::fs::remove_file(root.join("A.md")).unwrap();
+        index.refresh(&root, &crypto);
+        assert_eq!(index.titles().iter().map(|n| n.path.as_str()).collect::<Vec<_>>(), ["B.md"]);
+        // Another vault replaces everything.
+        let (other, other_crypto) = temp_vault("fresh-other");
+        put(&other, "C.md", "gamma");
+        index.ensure_fresh(&other, &other_crypto);
+        assert_eq!(index.titles().iter().map(|n| n.path.as_str()).collect::<Vec<_>>(), ["C.md"]);
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&other);
+    }
+
+    #[test]
+    fn index_lists_titles_newest_first_and_marks_locked_notes() {
+        let (root, crypto) = temp_vault("titles");
+        put(&root, "Old.md", "old");
+        put(&root, "Private/Diary.md.age", "-----BEGIN AGE ENCRYPTED FILE-----");
+        put(&root, ".obsidian/Hidden.md", "x");
+        put(&root, "photo.png", "x");
+        let old = std::fs::File::options().write(true).open(root.join("Old.md")).unwrap();
+        old.set_modified(SystemTime::now() - Duration::from_secs(3600)).unwrap();
+        let mut index = Index::default();
+        index.refresh(&root, &crypto);
+        let titles = index.titles();
+        assert_eq!(titles.iter().map(|n| n.title.as_str()).collect::<Vec<_>>(), ["Diary", "Old"]);
+        assert!(titles[0].encrypted && titles[0].locked);
+        assert!(!titles[1].encrypted && !titles[1].locked);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn resolve_matches_names_paths_and_prefers_the_shortest() {
+        let (root, crypto) = temp_vault("resolve");
+        for p in ["Plan.md", "Projects/Plan.md", "Projects/Deep/Plan.md", "Private/Diary.md.age", "Kampala Trip.md", "Ünïcode/Ndiyo.md"] {
+            put(&root, p, "");
+        }
+        let mut index = Index::default();
+        index.refresh(&root, &crypto);
+        assert_eq!(index.resolve("Plan").as_deref(), Some("Plan.md"));
+        assert_eq!(index.resolve(" plan.md ").as_deref(), Some("Plan.md"));
+        assert_eq!(index.resolve("Projects/Plan").as_deref(), Some("Projects/Plan.md"));
+        assert_eq!(index.resolve("Deep/Plan").as_deref(), Some("Projects/Deep/Plan.md"));
+        assert_eq!(index.resolve("diary").as_deref(), Some("Private/Diary.md.age"));
+        assert_eq!(index.resolve("kampala trip").as_deref(), Some("Kampala Trip.md"));
+        assert_eq!(index.resolve("Ndiyo").as_deref(), Some("Ünïcode/Ndiyo.md"));
+        assert_eq!(index.resolve("lan"), None, "part of a name is not a match");
+        assert_eq!(index.resolve("Missing"), None);
+        put(&root, "L.md", "[[projects/plan]] [[Other]]");
+        index.refresh(&root, &crypto);
+        assert_eq!(index.notes_linking_to("PLAN"), ["L.md"], "by name, without case");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn search_needs_every_word_and_ranks_titles_first() {
+        let (root, crypto) = temp_vault("search");
+        put(&root, "Kampala.md", "A city.");
+        put(&root, "Kampala Trip.md", "Bags.");
+        put(&root, "Notes.md", "Went to kampala, then kampala again. Trip was long.");
+        put(&root, "Other.md", "Nothing here.");
+        let mut index = Index::default();
+        index.refresh(&root, &crypto);
+        assert!(index.search("   ", &crypto).is_empty());
+        let titles: Vec<String> = index.search("Kampala", &crypto).into_iter().map(|h| h.title).collect();
+        assert_eq!(titles, ["Kampala", "Kampala Trip", "Notes"], "exact title, then title start, then body");
+        let both: Vec<String> = index.search("kampala trip", &crypto).into_iter().map(|h| h.title).collect();
+        assert_eq!(both, ["Kampala Trip", "Notes"], "every word must appear somewhere");
+        assert_eq!(index.search("projects", &crypto).len(), 0);
+        put(&root, "Projects/x.md", "");
+        index.refresh(&root, &crypto);
+        assert_eq!(index.search("projects", &crypto)[0].path, "Projects/x.md", "the folder counts");
+        for i in 0..60 {
+            put(&root, &format!("many/n{i}.md"), "common");
+        }
+        index.refresh(&root, &crypto);
+        assert_eq!(index.search("common", &crypto).len(), 50, "at most 50 results");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn backlinks_list_other_notes_by_title() {
+        let (root, crypto) = temp_vault("backlinks");
+        put(&root, "Plan.md", "I link [[Plan]] myself");
+        put(&root, "b.md", "See [[Projects/Plan|it]]");
+        put(&root, "A.md", "Also [[plan#Goals]]");
+        put(&root, "C.md", "No link to Plan");
+        let mut index = Index::default();
+        index.refresh(&root, &crypto);
+        let hits = index.backlinks("Plan.md", &crypto);
+        assert_eq!(hits.iter().map(|h| h.title.as_str()).collect::<Vec<_>>(), ["A", "b"]);
+        assert!(hits[0].snippet.contains("[[plan#Goals]]"));
+        assert!(index.backlinks("Nobody.md", &crypto).is_empty());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn vault_tasks_sort_by_due_date_and_skip_templates() {
+        let (root, crypto) = temp_vault("tasks");
+        put(&root, "b.md", "- [ ] no date\n- [ ] later 📅 2026-12-01");
+        put(&root, "a.md", "- [ ] sooner 📅 2026-11-05\n- [ ] undated a");
+        put(&root, "Templates/Daily.md", "- [ ] template blank");
+        let mut index = Index::default();
+        index.refresh(&root, &crypto);
+        let texts: Vec<String> = index.tasks().into_iter().map(|t| t.text).collect();
+        assert_eq!(texts, ["sooner 📅 2026-11-05", "later 📅 2026-12-01", "undated a", "no date"]);
+        put(&root, ".obsidian/templates.json", r#"{"folder":"Kits"}"#);
+        put(&root, "Kits/T.md", "- [ ] kit blank");
+        index.refresh(&root, &crypto);
+        let texts: Vec<String> = index.tasks().into_iter().map(|t| t.text).collect();
+        assert!(texts.contains(&"template blank".to_string()), "Templates is ordinary once another folder is set");
+        assert!(!texts.contains(&"kit blank".to_string()));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn daily_note_reuses_existing_notes_and_fills_its_template() {
+        let (root, crypto) = temp_vault("daily-more");
+        let day = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap();
+        let rel = daily_note(&root, day, &crypto).unwrap();
+        assert_eq!(get(&root, &rel), "# Tuesday 3 November 2026\n\n## Agenda\n\n## Notes\n\n## Tasks\n\n");
+        put(&root, &rel, "edited");
+        assert_eq!(daily_note(&root, day, &crypto).unwrap(), rel);
+        assert_eq!(get(&root, &rel), "edited", "an existing note is never rewritten");
+
+        // An encrypted daily note counts as today's note.
+        put(&root, "Daily/2026-11-04.md.age", "x");
+        assert_eq!(daily_note(&root, day.succ_opt().unwrap(), &crypto).unwrap(), "Daily/2026-11-04.md.age");
+
+        put(&root, ".obsidian/daily-notes.json", r#"{"folder":"Journal/","format":"dddd D MMM","template":"Templates/Day.md"}"#);
+        put(&root, "Templates/Day.md", "# {{title}}\nDate: {{date:YYYY-MM-DD}}");
+        assert_eq!(daily_note(&root, day, &crypto).unwrap(), "Journal/Tuesday 3 Nov.md");
+        assert_eq!(get(&root, "Journal/Tuesday 3 Nov.md"), "# Tuesday 3 Nov\nDate: 2026-11-03");
+        put(&root, ".obsidian/daily-notes.json", r#"{"folder":"Journal","template":"Templates/Gone"}"#);
+        assert_eq!(daily_note(&root, day.pred_opt().unwrap(), &crypto).unwrap(), "Journal/2026-11-02.md");
+        assert_eq!(get(&root, "Journal/2026-11-02.md"), "", "a missing template gives an empty note");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn template_variables_cover_defaults_spacing_and_unknowns() {
+        let at = NaiveDate::from_ymd_opt(2026, 1, 5).unwrap().and_hms_opt(7, 3, 9).unwrap();
+        assert_eq!(fill_template("{{ title }}|{{date:}}|{{time:HH:mm:ss}}|{{foo}}|{{Title}}", "T", at), "T|2026-01-05|07:03:09|{{foo}}|{{Title}}");
+        assert_eq!(fill_template("no variables", "T", at), "no variables");
+        assert_eq!(moment_format("YY M D H h A a hh ddd MMM", at), "26 1 5 7 7 AM am 07 Mon Jan");
+        assert_eq!(moment_format("Wk 日本", at), "Wk 日本", "other text passes through");
+    }
+
+    #[test]
+    fn templates_come_from_the_configured_folder_sorted_by_name() {
+        let (root, _) = temp_vault("templates");
+        assert!(templates(&root).is_empty(), "no Templates folder");
+        put(&root, "Templates/zeta.md", "");
+        put(&root, "Templates/Alpha.md", "");
+        put(&root, "Templates/Sub/Beta.md.age", "");
+        put(&root, "Templates/logo.png", "");
+        put(&root, "Templates/.hidden.md", "");
+        assert_eq!(templates(&root), ["Templates/Alpha.md", "Templates/Sub/Beta.md.age", "Templates/zeta.md"]);
+        put(&root, ".obsidian/templates.json", r#"{"folder":"/Kits/"}"#);
+        assert!(templates(&root).is_empty(), "the configured folder doesn't exist yet");
+        put(&root, "Kits/Meeting.md", "");
+        assert_eq!(templates(&root), ["Kits/Meeting.md"]);
+        put(&root, ".obsidian/templates.json", r#"{"folder":"../outside"}"#);
+        assert!(templates(&root).is_empty());
+        put(&root, ".obsidian/templates.json", r#"{"folder":""}"#);
+        assert_eq!(templates(&root).len(), 3, "an empty setting falls back to Templates");
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }
