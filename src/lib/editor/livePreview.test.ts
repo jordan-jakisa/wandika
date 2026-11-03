@@ -258,6 +258,14 @@ test("links and tags inside code blocks stay code", () => {
   assert.ok(!view.dom.querySelector(".cm-tag"));
 });
 
+test("links and tags inside inline code stay code", () => {
+  const { view } = setup("‸\n`[[Plan]]` and `#include`, then [[Real]] #real");
+  const links = [...view.dom.querySelectorAll<HTMLElement>(".cm-wikilink")].map((l) => l.dataset.target);
+  const tags = [...view.dom.querySelectorAll<HTMLElement>(".cm-tag")].map((t) => t.dataset.tag);
+  assert.deepEqual(links, ["Real"]);
+  assert.deepEqual(tags, ["real"]);
+});
+
 test("frontmatter is dimmed and never rendered as Markdown", async () => {
   const doc = "---\ntitle: *x* [[Plan]] #tag\n---\n‸Body";
   const { view } = setup(doc);

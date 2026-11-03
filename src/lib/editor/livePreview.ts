@@ -247,7 +247,7 @@ function build(view: EditorView): DecorationSet {
       const lineActive = active.has(line.number);
       for (const m of line.text.matchAll(WIKILINK)) {
         // `![[file]]` is an embed, drawn by the embeds extension, not a link.
-        if (line.text[m.index! - 1] === "!") continue;
+        if (line.text[m.index! - 1] === "!" || inInlineCode(state, line.from + m.index!)) continue;
         const start = line.from + m.index!;
         const end = start + m[0].length;
         const [target, alias] = m[1].split("|");
@@ -263,11 +263,20 @@ function build(view: EditorView): DecorationSet {
       for (const m of line.text.matchAll(TAG)) {
         if (/^#+\s/.test(line.text) && m.index === 0) continue;
         const start = line.from + m.index! + m[1].length;
+        if (inInlineCode(state, start)) continue;
         out.push(Decoration.mark({ class: "cm-tag", attributes: { "data-tag": m[2].slice(1) } }).range(start, start + m[2].length));
       }
     }
   }
   return Decoration.set(out, true);
+}
+
+function inInlineCode(state: EditorState, pos: number) {
+  const node = syntaxTree(state).resolveInner(pos, 1);
+  for (let n: typeof node | null = node; n; n = n.parent) {
+    if (n.name === "InlineCode") return true;
+  }
+  return false;
 }
 
 /** Whether `pos` is in a code block. A position in a line's indent counts by the line's text. */
