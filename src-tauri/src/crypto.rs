@@ -167,3 +167,190 @@ pub fn save_config(root: &Path, config: &EncConfig) -> Result<()> {
     std::fs::write(path, serde_json::to_vec_pretty(config)?)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::error::Error;
+
+    /// A vault folder and this device's secrets, kept apart like the real app keeps them.
+    fn vault(tag: &str) -> (PathBuf, Secrets) {
+        let base = std::env::temp_dir().join(format!("wandika-crypto-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(base.join("files")).unwrap();
+        (base.join("files"), Secrets::new(base.join("device")))
+    }
+
+    fn cleanup(root: &Path) {
+        let _ = std::fs::remove_dir_all(root.parent().unwrap());
+    }
+
+    fn message(e: Error) -> String {
+        e.to_string()
+    }
+
+    #[test]
+    fn set_up_encrypts_round_trips_and_another_device_unlocks_with_the_passphrase() {
+        let (root, secrets) = vault("setup");
+        let me = Crypto::set_up(&root, &secrets, "local/notes", "kampala river").unwrap();
+        assert!(me.unlocked());
+        let status = me.status();
+        assert!(status.set_up && status.unlocked && status.folders.is_empty());
+
+        let config: EncConfig = serde_json::from_slice(&std::fs::read(root.join(CONFIG_PATH)).unwrap()).unwrap();
+        assert_eq!(config.version, 1);
+        assert!(config.recipient.starts_with("age1"));
+        assert!(config.identity.starts_with("-----BEGIN AGE ENCRYPTED FILE-----"), "the key is stored armored");
+        assert!(!config.identity.contains("AGE-SECRET-KEY"), "never in the clear");
+        assert!(secrets.get(&secret_key("local/notes")).unwrap().starts_with("AGE-SECRET-KEY-"));
+
+        let text = "Diary: 🌧 in Kampala\n".as_bytes();
+        let sealed = me.encrypt(text).unwrap();
+        assert!(String::from_utf8(sealed.clone()).unwrap().starts_with("-----BEGIN AGE ENCRYPTED FILE-----"));
+        assert_eq!(me.decrypt(&sealed).unwrap(), text);
+        assert_ne!(me.encrypt(text).unwrap(), sealed, "each encryption is fresh");
+        assert_eq!(me.decrypt(&me.encrypt(b"").unwrap()).unwrap(), b"", "an empty note round trips");
+
+        // The same vault on a phone: set up, locked, and anyone with the repo can still encrypt.
+        let phone = Secrets::new(root.parent().unwrap().join("phone"));
+        let locked = Crypto::load(&root, &phone, "local/notes");
+        assert_eq!((locked.status().set_up, locked.status().unlocked), (true, false));
+        assert!(matches!(locked.decrypt(&sealed), Err(Error::Locked)));
+        let from_phone = locked.encrypt(b"written while locked").unwrap();
+
+        let wrong = Crypto::unlock(&root, &phone, "local/notes", "kampala rivers").err().unwrap();
+        assert_eq!(message(wrong), "That passphrase didn't unlock this vault. Check it and try again.");
+        assert!(phone.get(&secret_key("local/notes")).is_none(), "a wrong passphrase stores nothing");
+
+        let unlocked = Crypto::unlock(&root, &phone, "local/notes", "kampala river").unwrap();
+        assert_eq!(unlocked.decrypt(&sealed).unwrap(), text);
+        assert_eq!(me.decrypt(&from_phone).unwrap(), b"written while locked");
+        // Unlocked once, the phone stays unlocked on the next start.
+        assert!(Crypto::load(&root, &phone, "local/notes").unlocked());
+
+        Crypto::lock(&phone, "local/notes");
+        assert!(!Crypto::load(&root, &phone, "local/notes").unlocked());
+        assert!(Crypto::load(&root, &secrets, "local/notes").unlocked(), "locking one device leaves the other");
+        cleanup(&root);
+    }
+
+    #[test]
+    fn set_up_refuses_short_passphrases_and_a_second_set_up() {
+        let (root, secrets) = vault("refuse");
+        let short = Crypto::set_up(&root, &secrets, "v", "seven77").err().unwrap();
+        assert_eq!(message(short), "Use a passphrase of at least 8 characters.");
+        // Characters, not bytes: four two-byte letters are still too short.
+        assert!(Crypto::set_up(&root, &secrets, "v", "ééüü").is_err());
+        assert!(!root.join(CONFIG_PATH).exists(), "nothing written for a refused passphrase");
+
+        std::fs::create_dir_all(root.join(".wandika")).unwrap();
+        std::fs::write(root.join(CONFIG_PATH), "{}").unwrap();
+        let again = Crypto::set_up(&root, &secrets, "v", "long enough").err().unwrap();
+        assert!(message(again).starts_with("Encryption is already set up"));
+        cleanup(&root);
+    }
+
+    #[test]
+    fn unlock_without_set_up_says_so() {
+        let (root, secrets) = vault("unset");
+        let e = Crypto::unlock(&root, &secrets, "v", "whatever passphrase").err().unwrap();
+        assert_eq!(message(e), "Encryption isn't set up for this vault.");
+        let none = Crypto::load(&root, &secrets, "v");
+        assert!(!none.status().set_up && !none.unlocked());
+        assert_eq!(message(none.encrypt(b"x").unwrap_err()), "Set up encryption first.");
+        assert!(matches!(none.decrypt(b"x"), Err(Error::Locked)));
+        cleanup(&root);
+    }
+
+    #[test]
+    fn damaged_or_foreign_files_are_refused() {
+        let (root, _) = vault("tamper");
+        let a = Crypto { config: None, identity: Some(age::x25519::Identity::generate()) };
+        let recipient = a.identity.as_ref().unwrap().to_public();
+        let sealed = encrypt_to(&recipient, b"secret plans").unwrap();
+        assert_eq!(a.decrypt(&sealed).unwrap(), b"secret plans");
+
+        assert_eq!(message(a.decrypt(b"# Just a note\n").unwrap_err()), "This file is damaged, or isn't an encrypted note.");
+
+        // One changed character in the body: the armor or the authentication catches it.
+        let mut tampered = String::from_utf8(sealed.clone()).unwrap();
+        let at = tampered.len() / 2;
+        let c = tampered.as_bytes()[at];
+        let swap = if c == b'A' { "B" } else { "A" };
+        tampered.replace_range(at..at + 1, swap);
+        assert!(a.decrypt(tampered.as_bytes()).is_err(), "a tampered note never decrypts");
+
+        // Cut short.
+        assert!(a.decrypt(&sealed[..sealed.len() / 2]).is_err());
+
+        let b = Crypto { config: None, identity: Some(age::x25519::Identity::generate()) };
+        assert_eq!(
+            message(b.decrypt(&sealed).unwrap_err()),
+            "This note was encrypted with a different key, so this vault's passphrase can't open it."
+        );
+        cleanup(&root);
+    }
+
+    #[test]
+    fn damaged_config_and_stored_key_read_as_not_set_up_or_locked() {
+        let (root, secrets) = vault("damaged");
+        std::fs::create_dir_all(root.join(".wandika")).unwrap();
+        std::fs::write(root.join(CONFIG_PATH), "not json").unwrap();
+        assert!(Crypto::load(&root, &secrets, "v").config.is_none());
+
+        let mut config = EncConfig { version: 1, recipient: "age1nope".into(), identity: String::new(), folders: vec![] };
+        save_config(&root, &config).unwrap();
+        secrets.set(&secret_key("v"), "not a key").unwrap();
+        let c = Crypto::load(&root, &secrets, "v");
+        assert!(c.status().set_up && !c.unlocked(), "a damaged stored key reads as locked");
+        assert_eq!(message(c.encrypt(b"x").unwrap_err()), "The vault's public key is damaged.");
+
+        // A stored identity whose armor holds something other than a key.
+        let scrypt = age::scrypt::Recipient::new(SecretString::from("long enough".to_string()));
+        config.identity = String::from_utf8(encrypt_to(&scrypt, b"not a key").unwrap()).unwrap();
+        save_config(&root, &config).unwrap();
+        let e = Crypto::unlock(&root, &secrets, "v", "long enough").err().unwrap();
+        assert_eq!(message(e), "The stored key is damaged.");
+        cleanup(&root);
+    }
+
+    #[test]
+    fn folders_cover_their_subfolders_only() {
+        let c = Crypto {
+            config: Some(EncConfig { folders: vec!["Private".into(), "Work/HR".into()], ..Default::default() }),
+            identity: None,
+        };
+        assert!(c.folder_is_encrypted("Private"));
+        assert!(c.folder_is_encrypted("/Private/"));
+        assert!(c.folder_is_encrypted("Private/Diary/2026"));
+        assert!(c.folder_is_encrypted("Work/HR"));
+        assert!(!c.folder_is_encrypted("Work"));
+        assert!(!c.folder_is_encrypted("Private notes"), "a longer name is another folder");
+        assert!(!c.folder_is_encrypted(""));
+        assert_eq!(c.status().folders, vec!["Private", "Work/HR"]);
+        let none = Crypto { config: None, identity: None };
+        assert!(!none.folder_is_encrypted("Private"));
+    }
+
+    #[test]
+    fn age_files_are_encrypted_and_others_are_not() {
+        assert!(is_encrypted("Private/Diary.md.age"));
+        assert!(is_encrypted("photo.png.age"));
+        assert!(!is_encrypted("Plan.md"));
+        assert!(!is_encrypted("age"));
+        assert!(!is_encrypted("Notes/page.agenda.md"));
+    }
+
+    #[test]
+    fn save_config_creates_its_folder() {
+        let (root, _) = vault("save");
+        let config = EncConfig { version: 1, recipient: "r".into(), identity: "i".into(), folders: vec!["Ünïcode/日記".into()] };
+        save_config(&root, &config).unwrap();
+        let back: EncConfig = serde_json::from_slice(&std::fs::read(root.join(CONFIG_PATH)).unwrap()).unwrap();
+        assert_eq!(back.folders, vec!["Ünïcode/日記"]);
+        // Older configs without a folder list still load.
+        let old: EncConfig = serde_json::from_str(r#"{"version":1,"recipient":"r","identity":"i"}"#).unwrap();
+        assert!(old.folders.is_empty());
+        cleanup(&root);
+    }
+}
