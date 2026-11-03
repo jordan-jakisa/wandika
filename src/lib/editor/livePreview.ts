@@ -119,6 +119,7 @@ function build(view: EditorView): DecorationSet {
   const isActive = (pos: number) => active.has(state.doc.lineAt(pos).number);
   const out: Range<Decoration>[] = [];
   const fmEnd = frontmatterEnd(state);
+  const fmTo = fmEnd ? state.doc.line(fmEnd).to : -1;
 
   for (let n = 1; n <= fmEnd; n++) {
     out.push(Decoration.line({ class: "cm-frontmatter" }).range(state.doc.line(n).from));
@@ -130,11 +131,11 @@ function build(view: EditorView): DecorationSet {
       to,
       enter: (node) => {
         const name = node.name;
+        // CommonMark reads frontmatter as a rule and a heading; it stays as typed.
+        if (name !== "Document" && node.from <= fmTo) return false;
         const heading = /^ATXHeading(\d)$/.exec(name);
         if (heading) {
-          const line = state.doc.lineAt(node.from);
-          if (line.number <= fmEnd) return false;
-          out.push(Decoration.line({ class: `cm-h cm-h${heading[1]}` }).range(line.from));
+          out.push(Decoration.line({ class: `cm-h cm-h${heading[1]}` }).range(state.doc.lineAt(node.from).from));
           return;
         }
         if (name === "HeaderMark" && !isActive(node.from)) {

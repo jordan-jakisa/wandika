@@ -251,6 +251,29 @@ test("a heading's own # is not a tag, but a tag in a heading is", () => {
   assert.deepEqual(tags.map((t) => t.dataset.tag), ["tag"]);
 });
 
+test("frontmatter is dimmed and never rendered as Markdown", async () => {
+  const doc = "---\ntitle: *x* [[Plan]] #tag\n---\n‸Body";
+  const { view } = setup(doc);
+  await focus(view);
+  select(view, "---\ntitle: *x* [[Plan]] #tag\n---\nBody‸");
+  const decos = decorations(view);
+  const frontmatter = decos.filter((d) => d.from < view.state.doc.line(4).from);
+  assert.deepEqual(seen(frontmatter), ["cm-frontmatter:", "cm-frontmatter:", "cm-frontmatter:"]);
+});
+
+test("frontmatter stays as typed while the cursor is inside it", async () => {
+  const { view } = setup("---\nti‸tle: x\n---\nBody");
+  await focus(view);
+  assert.ok(!view.dom.querySelector(".cm-hr-line"));
+  assert.deepEqual(hidden(decorations(view)), []);
+});
+
+test("Markdown right after the frontmatter renders as usual", () => {
+  const { view } = setup("---\na: 1\n---\n# Title **b**‸");
+  assert.deepEqual(lineClasses(decorations(view)), ["cm-frontmatter", "cm-frontmatter", "cm-frontmatter", "cm-h cm-h1"]);
+  assert.deepEqual(hidden(decorations(view)), ["# ", "**", "**"]);
+});
+
 test("a note that starts with --- but never closes it has no frontmatter", () => {
   const { view } = setup("---\n‸Body");
   assert.ok(!decorations(view).some((d) => d.kind === "cm-frontmatter"));
