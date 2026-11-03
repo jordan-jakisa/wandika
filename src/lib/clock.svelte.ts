@@ -1,7 +1,9 @@
 // Today's date for screens that stay open overnight: it moves on at midnight and whenever the app
 // comes back to the front.
 
-const iso = (d: Date) => d.toLocaleDateString("en-CA");
+// Built by hand: the "en-CA" locale trick for YYYY-MM-DD has changed format between ICU releases.
+const iso = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 class Clock {
   /** YYYY-MM-DD in local time. */
