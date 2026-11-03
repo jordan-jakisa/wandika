@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { newCard, parse, serialize, TEMPLATE, tokens } from "./kanban.ts";
 
 test("a new board round-trips unchanged", () => {

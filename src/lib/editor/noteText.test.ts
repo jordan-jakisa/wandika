@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { parseProperties, renderLite, section } from "./noteText.ts";
 
 const note = "---\ntags: [a]\n---\n# Plan\nIntro\n## Goals\n- Ship\n### Detail\nmore\n## Risks\nRain ^r1\n";

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { alignOf, inline, splitRow } from "./tableText.ts";
 
 test("rows split on pipes outside code and escapes", () => {

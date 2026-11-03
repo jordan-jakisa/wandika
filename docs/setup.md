@@ -76,7 +76,7 @@ export RANLIB_aarch64_linux_android="$T/llvm-ranlib" AR_aarch64_linux_android="$
 npm run tauri android build -- --debug --apk --target aarch64
 ```
 
-Checks: `npm run check`, `npm test`, and `cargo test` in `src-tauri`.
+Checks: `npm run check`, `npm test` (Vitest: unit and component tests in jsdom), and `cargo test` in `src-tauri`.
 
 The interface also runs in a plain browser with a stand-in backend, for design work:
 `npm run dev`, then open `http://localhost:1420/?mock=vault`.
