@@ -9,9 +9,15 @@ export interface Position {
 const KEY = "wandika.positions";
 const LIMIT = 200;
 
+const isPosition = (p: unknown): p is Position =>
+  !!p && typeof p === "object" && ["top", "anchor", "head"].every((k) => typeof (p as Record<string, unknown>)[k] === "number");
+
 function load(): Map<string, Position> {
   try {
-    return new Map(JSON.parse(localStorage.getItem(KEY) ?? "[]"));
+    const saved: unknown = JSON.parse(localStorage.getItem(KEY) ?? "[]");
+    if (!Array.isArray(saved)) return new Map();
+    // Anything but [path, position] pairs (an older format, a hand edit) is dropped, not trusted.
+    return new Map(saved.filter((e): e is [string, Position] => Array.isArray(e) && typeof e[0] === "string" && isPosition(e[1])));
   } catch {
     return new Map();
   }
