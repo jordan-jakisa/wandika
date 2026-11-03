@@ -66,7 +66,7 @@
   </header>
   <div class="stage">
     {#if failed}
-      <p class="muted">This image couldn't be opened.</p>
+      <p class="muted">This image couldn't be opened. It may still be on its way from another device; try again after the next sync.</p>
     {:else if src}
       <img {src} alt={name} class:shown={loaded} onload={() => (loaded = true)} />
     {/if}

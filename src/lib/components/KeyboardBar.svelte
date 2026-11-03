@@ -94,7 +94,7 @@
     align-items: center;
     height: calc(48px + var(--safe-bottom));
     padding: 0 max(4px, var(--safe-right)) var(--safe-bottom) max(4px, var(--safe-left));
-    border-top: 1px solid var(--hairline, var(--rule));
+    border-top: 1px solid var(--hairline);
     background: var(--paper);
   }
   .kbar.lifted {
@@ -122,10 +122,10 @@
     color: var(--ink);
   }
   button:active {
-    background: var(--press, var(--rule));
+    background: var(--press);
   }
   .hide {
-    border-left: 1px solid var(--hairline, var(--rule));
+    border-left: 1px solid var(--hairline);
     border-radius: 0;
     width: 52px;
     color: var(--graphite);

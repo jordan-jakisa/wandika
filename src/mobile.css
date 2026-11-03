@@ -157,8 +157,8 @@
       padding: 12px 20px 6px;
     }
     .settings.embedded .nav-head h2 {
-      font-size: var(--text-2xl);
-      font-weight: 700;
+      font-size: var(--view-title-size);
+      font-weight: var(--view-title-weight);
       text-align: left;
     }
 
@@ -247,6 +247,53 @@
       border: 1px solid var(--rule);
     }
 
+    /* Every tab and sub-screen starts its title where Notes does. */
+    .view > .today,
+    .view > .tasks,
+    .view > .projects {
+      padding-top: var(--space-3);
+    }
+    .settings .row {
+      padding-block: 10px;
+    }
+
+    /* Search fields are filled, never outlined, wherever they are. */
+    .tasks .find .field {
+      border: 0;
+      background: var(--press);
+    }
+
+    /* 44px to tap, whatever the control looks like. */
+    .tree .more,
+    .toast-action,
+    .graph select {
+      min-height: var(--target);
+    }
+    .task .where,
+    .cm-drawing-edit {
+      position: relative;
+    }
+    .task .where::after,
+    .cm-drawing-edit::after {
+      content: "";
+      position: absolute;
+      inset: -8px -4px;
+    }
+    .card input[type="checkbox"] {
+      width: 22px;
+      height: 22px;
+    }
+
+    /* Rows that answer a tap. */
+    .open-mail:active,
+    .task .text.edit:active,
+    .sketch .tool:active {
+      opacity: 0.6;
+    }
+    .sketch .bar-btn:active {
+      opacity: 0.5;
+    }
+
     /* One icon size per job on phones: menu items and list rows 18, whatever the call site says. */
     .menu .list [role="menuitem"] svg {
       width: 18px;
@@ -286,8 +333,8 @@
       padding: 12px 20px 6px;
     }
     .settings.embedded .nav-head h2 {
-      font-size: var(--text-2xl);
-      font-weight: 700;
+      font-size: var(--view-title-size);
+      font-weight: var(--view-title-weight);
       text-align: left;
     }
     .settings.embedded .pane-head {
@@ -390,6 +437,51 @@
     }
     .settings .footer-actions .btn.danger {
       color: var(--alarm);
+    }
+
+    /* Back is tinted, like Cancel and Done. */
+    .back {
+      color: var(--papyrus);
+    }
+
+    /* Checkboxes are round, as in Reminders and Notes. */
+    .task .box input,
+    .cm-task,
+    .card input[type="checkbox"] {
+      -webkit-appearance: none;
+      appearance: none;
+      position: relative;
+      width: 22px;
+      height: 22px;
+      margin: 0;
+      border: 1.5px solid color-mix(in srgb, var(--graphite) 70%, transparent);
+      border-radius: 50%;
+      background: none;
+      flex: none;
+    }
+    .cm-task {
+      width: 1.15em;
+      height: 1.15em;
+      margin: 0 0.35em 0 0;
+    }
+    .task .box input:checked,
+    .cm-task:checked,
+    .card input[type="checkbox"]:checked {
+      border-color: var(--papyrus);
+      background: var(--papyrus);
+    }
+    .task .box input:checked::after,
+    .cm-task:checked::after,
+    .card input[type="checkbox"]:checked::after {
+      content: "";
+      position: absolute;
+      left: 34%;
+      top: 18%;
+      width: 24%;
+      height: 46%;
+      border: solid var(--on-papyrus);
+      border-width: 0 2px 2px 0;
+      transform: rotate(45deg);
     }
   }
 

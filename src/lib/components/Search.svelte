@@ -107,6 +107,9 @@
 </script>
 
 <div class="search {mode}" class:ios={isIOS}>
+  <!-- iOS: the Search tab has its large title above the field, like the other tabs. Android's
+       search view keeps the field at the top with its back arrow. -->
+  {#if mode === "page" && isIOS}<h2 class="page-title">Search</h2>{/if}
   <div class="input-row">
     {#if onExit && !isIOS}
       <!-- Android's search view: a back arrow on the left leaves search. -->
@@ -190,6 +193,14 @@
     display: flex;
     flex-direction: column;
     min-height: 0;
+  }
+  .page-title {
+    margin: 0;
+    padding: 12px 20px 4px;
+    font-size: var(--view-title-size);
+    font-weight: var(--view-title-weight);
+    letter-spacing: var(--view-title-tracking);
+    line-height: var(--view-title-line);
   }
   .input-row {
     display: flex;

@@ -208,7 +208,7 @@ export const embedTheme = EditorView.theme({
     fontWeight: "600",
     cursor: "pointer",
   },
-  ".cm-embed img": { display: "block", maxWidth: "100%", height: "auto", borderRadius: "8px" },
+  ".cm-embed img": { display: "block", maxWidth: "100%", height: "auto", borderRadius: "var(--radius-sm)" },
   ".cm-embed-loading": { minHeight: "120px", borderRadius: "var(--radius-sm)", background: "var(--press)" },
   ".cm-embed-missing": { color: "var(--graphite)", fontSize: "var(--small)" },
   // An embedded note reads as part of this one: a quiet panel, its title a link to the source.
@@ -216,7 +216,7 @@ export const embedTheme = EditorView.theme({
     display: "block",
     margin: "6px 0",
     padding: "10px 14px 12px",
-    borderRadius: "10px",
+    borderRadius: "var(--radius)",
     background: "color-mix(in srgb, var(--ink) 4%, transparent)",
     whiteSpace: "normal",
   },

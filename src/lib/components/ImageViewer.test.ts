@@ -58,7 +58,7 @@ test("says so when the image can't be read", async () => {
   vi.mocked(api.attachmentRead).mockRejectedValue(new Error("gone"));
   render(ImageViewer);
   view("attachments/Missing.png");
-  expect(await screen.findByText("This image couldn't be opened.")).toBeInTheDocument();
+  expect(await screen.findByText(/This image couldn't be opened\./)).toBeInTheDocument();
   expect(screen.queryByRole("img")).not.toBeInTheDocument();
 });
 
@@ -94,11 +94,11 @@ test("opening again shows the new image, not the last one's error", async () => 
   vi.mocked(api.attachmentRead).mockRejectedValueOnce(new Error("gone"));
   render(ImageViewer);
   view("attachments/Missing.png");
-  await screen.findByText("This image couldn't be opened.");
+  await screen.findByText(/This image couldn't be opened\./);
   view(null as unknown as string);
   view("attachments/Photo.jpg");
   await waitFor(() => expect(screen.getByRole("img", { name: "Photo.jpg" })).toBeInTheDocument());
-  expect(screen.queryByText("This image couldn't be opened.")).not.toBeInTheDocument();
+  expect(screen.queryByText(/This image couldn't be opened\./)).not.toBeInTheDocument();
 });
 
 test("a slow failure for an image already closed doesn't spoil the next one", async () => {
@@ -112,7 +112,7 @@ test("a slow failure for an image already closed doesn't spoil the next one", as
   fail(new Error("timed out"));
   await new Promise((r) => setTimeout(r));
   expect(screen.getByRole("img", { name: "Photo.jpg" })).toBeInTheDocument();
-  expect(screen.queryByText("This image couldn't be opened.")).not.toBeInTheDocument();
+  expect(screen.queryByText(/This image couldn't be opened\./)).not.toBeInTheDocument();
 });
 
 test("a drawing made in Wandika offers Edit drawing, which opens it on the pad", async () => {

@@ -522,6 +522,7 @@
     font-size: var(--view-title-size);
     font-weight: var(--view-title-weight);
     letter-spacing: var(--view-title-tracking);
+    line-height: var(--view-title-line);
   }
   header .field {
     width: 200px;

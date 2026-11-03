@@ -133,6 +133,7 @@
   --view-title-size: 1.45rem;
   --view-title-weight: 650;
   --view-title-tracking: -0.01em;
+  --view-title-line: 1.2;
 }
 @media (max-width: 899px) {
   :root {

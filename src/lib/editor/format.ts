@@ -154,7 +154,7 @@ export const formatTheme = EditorView.theme({
   ".cm-format button:active": { background: "var(--press)" },
   ".cm-format-sep": { width: "1px", height: "20px", margin: "0 4px", background: "var(--rule)" },
   "@media (pointer: coarse)": {
-    ".cm-format button": { width: "40px", height: "40px" },
+    ".cm-format button": { width: "var(--target)", height: "var(--target)" },
   },
 });
 

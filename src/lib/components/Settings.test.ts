@@ -791,7 +791,7 @@ describe("on a phone, as the Settings tab", () => {
       ["Encryption", "Unlocked on this device"],
       ["Connections", "Mail, calendars and reminders"],
       ["Account", "GitHub: jordan-jakisa"],
-      ["About", "Version 0.1.0 beta, feedback, keyboard shortcuts"],
+      ["About", "Version 0.1.0 beta, feedback"],
     ]);
     expect(sections().getByRole("button", { name: /Vault/ })).not.toHaveAttribute("aria-current");
     expect(screen.queryByRole("button", { name: "Done" })).not.toBeInTheDocument();

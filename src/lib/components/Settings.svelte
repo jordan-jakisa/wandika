@@ -122,7 +122,7 @@
       case "account":
         return st?.user ? `GitHub: ${st.user.login}` : "Not signed in";
       case "about":
-        return "Version 0.1.0 beta, feedback, keyboard shortcuts";
+        return phone ? "Version 0.1.0 beta, feedback" : "Version 0.1.0 beta, feedback, keyboard shortcuts";
     }
   };
 
@@ -631,6 +631,7 @@
               <button class="link-btn" onclick={() => openUrl("https://github.com/jordan-jakisa/wandika")}>github.com/jordan-jakisa/wandika</button>
             </div>
           </div>
+          {#if !phone}
           <h4>Keyboard shortcuts</h4>
           <div class="group">
             {#each SHORTCUTS as [keys, what] (keys)}
@@ -640,6 +641,7 @@
               </div>
             {/each}
           </div>
+          {/if}
         {/if}
       </div>
     </div>
@@ -710,8 +712,10 @@
     padding-top: 4px;
   }
   h2.large {
-    font-size: var(--text-2xl);
-    font-weight: 700;
+    font-size: var(--view-title-size);
+    font-weight: var(--view-title-weight);
+    letter-spacing: var(--view-title-tracking);
+    line-height: var(--view-title-line);
   }
 
   .sections {

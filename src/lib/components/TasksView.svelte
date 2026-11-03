@@ -107,7 +107,7 @@
         ? "Couldn't gather your tasks."
         : open
           ? `${open} open ${open === 1 ? "task" : "tasks"} in your notes.`
-          : "No open tasks. Write - [ ] in any note to add one."}
+          : "No open tasks. In any note, tap Checklist on the writing bar to add one."}
   </p>
 
   {#if tasks.length || remote.length}
@@ -216,6 +216,7 @@
     font-size: var(--view-title-size);
     font-weight: var(--view-title-weight);
     letter-spacing: var(--view-title-tracking);
+    line-height: var(--view-title-line);
   }
   .more {
     min-height: var(--target);

@@ -90,6 +90,7 @@
     font-size: var(--view-title-size);
     font-weight: var(--view-title-weight);
     letter-spacing: var(--view-title-tracking);
+    line-height: var(--view-title-line);
   }
   h3 {
     margin: 0 0 8px;

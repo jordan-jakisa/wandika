@@ -264,7 +264,7 @@ describe("calendar", () => {
 describe("tasks", () => {
   test("nothing due says how to give a task a date", async () => {
     await setup();
-    expect(within(section("Due today")).getByText("Nothing due today. Add 📅 and a date to a task to see it here.")).toBeInTheDocument();
+    expect(within(section("Due today")).getByText("Nothing due today. Give a task a due date and it shows here.")).toBeInTheDocument();
   });
 
   test("shows tasks due today and earlier, not later ones", async () => {

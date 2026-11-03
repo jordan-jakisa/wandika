@@ -478,7 +478,7 @@
         {@render conflictsBanner()}
         {#if subView}
           <button class="back up" onclick={() => (app.tab = subView.parent)}>
-            <ChevronLeft size={22} /> {subView.parentLabel}
+            <ChevronLeft size={22} />{subView.parentLabel}
           </button>
         {/if}
         <!-- A screen inside a tab (Tasks, Projects, Graph) slides in; switching tabs is instant. -->
@@ -884,7 +884,7 @@
   }
   .note-host.swiping {
     transition: none;
-    box-shadow: -8px 0 24px rgb(0 0 0 / 0.15); /* the edge of the page being swiped away */
+    box-shadow: var(--shadow-pop); /* the edge of the page being swiped away */
   }
   .note-host > :global(.note) {
     flex: 1;
@@ -920,6 +920,7 @@
     font-size: var(--view-title-size);
     font-weight: var(--view-title-weight);
     letter-spacing: var(--view-title-tracking);
+    line-height: var(--view-title-line);
     line-height: 1.2;
     overflow: hidden;
     text-overflow: ellipsis;

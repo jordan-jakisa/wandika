@@ -9,6 +9,9 @@
 
   /** One email, read in Wandika. Its HTML shows in a frame that runs no scripts and loads nothing
    *  from the web until you ask for images, so opening it tells no one you read it. */
+  /** The phone's text size setting, so the email follows it like the rest of Wandika. */
+  const textScale = () =>
+    typeof document === "undefined" ? 1 : Number(getComputedStyle(document.documentElement).getPropertyValue("--text-scale")) || 1;
   let dialogEl: HTMLDialogElement;
   /** Gives back the sheet's place in history when it closes (phones). */
   let release = () => {};
@@ -57,7 +60,7 @@
   function page(html: string, allowImages: boolean) {
     const img = allowImages ? "data: cid: https: http:" : "data: cid:";
     const csp = `default-src 'none'; img-src ${img}; style-src 'unsafe-inline'; font-src data:`;
-    return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><base target="_blank"><style>body{margin:0;padding:16px;font:15px/1.5 system-ui,sans-serif;color:#1c2320;background:#fff;overflow-wrap:anywhere}img{max-width:100%;height:auto}table{max-width:100%}</style></head><body>${html}</body></html>`;
+    return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><base target="_blank"><style>body{margin:0;padding:16px;font:${Math.round(15 * textScale())}px/1.5 system-ui,sans-serif;color:#1c2320;background:#fff;overflow-wrap:anywhere}img{max-width:100%;height:auto}table{max-width:100%}</style></head><body>${html}</body></html>`;
   }
 
   /** Links inside the email open like any link in Wandika; the frame grows to fit, so the sheet scrolls once. */
@@ -291,7 +294,7 @@
     height: 14px;
     margin: 10px 0;
     border-radius: var(--radius-xs);
-    background: var(--rule);
+    background: var(--press);
   }
   .skeleton.short {
     width: 60%;

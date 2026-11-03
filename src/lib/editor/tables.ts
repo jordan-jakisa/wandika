@@ -138,7 +138,7 @@ export const tableTheme = EditorView.theme({
     fontFamily: "var(--font-code)",
     fontSize: "0.88em",
     background: "var(--papyrus-wash)",
-    borderRadius: "4px",
+    borderRadius: "var(--radius-xs)",
     padding: "0.1em 0.3em",
     whiteSpace: "nowrap",
   },

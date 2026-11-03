@@ -249,7 +249,7 @@
     {:else if clearedToday}
       <p class="all-done" role="status"><CircleCheck size={20} /> All done for today.</p>
     {:else}
-      <p class="muted">Nothing due today. Add 📅 and a date to a task to see it here.</p>
+      <p class="muted">Nothing due today. Give a task a due date and it shows here.</p>
     {/if}
   </section>
 
@@ -349,6 +349,7 @@
     font-size: var(--view-title-size);
     font-weight: var(--view-title-weight);
     letter-spacing: var(--view-title-tracking);
+    line-height: var(--view-title-line);
     line-height: 1.2;
   }
   header .btn {
@@ -427,7 +428,7 @@
     padding: 10px 0;
   }
   .mail li + li {
-    border-top: 1px solid var(--rule);
+    border-top: 1px solid var(--hairline);
   }
   /* The subject and preview open the email in Wandika. */
   .open-mail {
