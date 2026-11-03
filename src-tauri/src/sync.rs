@@ -554,12 +554,13 @@ pub fn restore_held(p: &Paths, paths: &[String]) -> Result<()> {
 
 pub fn conflict_path(rel: &str, stamp: &str) -> String {
     let (dir, name) = rel.rsplit_once('/').map(|(d, n)| (format!("{d}/"), n)).unwrap_or((String::new(), rel));
-    // Keep compound extensions like `.md.age` intact.
-    let (stem, ext) = match name.find('.') {
-        Some(i) if i > 0 => (&name[..i], &name[i..]),
-        _ => (name, ""),
+    // Keep `.md.age` intact; any other dot belongs to the name ("Standup 3.11.md").
+    let (base, age) = name.strip_suffix(crate::crypto::EXT).map_or((name, ""), |b| (b, crate::crypto::EXT));
+    let (stem, ext) = match base.rfind('.') {
+        Some(i) if i > 0 => (&base[..i], &base[i..]),
+        _ => (base, ""),
     };
-    format!("{dir}{stem} (conflict {stamp}){ext}")
+    format!("{dir}{stem} (conflict {stamp}){ext}{age}")
 }
 
 #[cfg(test)]
@@ -721,5 +722,12 @@ mod tests {
     fn conflict_names_keep_extensions() {
         let c = conflict_path("Private/Diary.md.age", "2026-11-03 0930");
         assert_eq!(c, "Private/Diary (conflict 2026-11-03 0930).md.age");
+        // A dot inside the name is part of the name.
+        assert_eq!(conflict_path("Meetings/Standup 3.11.md", "S"), "Meetings/Standup 3.11 (conflict S).md");
+        assert_eq!(conflict_path("v1.2 notes.md.age", "S"), "v1.2 notes (conflict S).md.age");
+        assert_eq!(conflict_path("img/photo.png", "S"), "img/photo (conflict S).png");
+        assert_eq!(conflict_path("README", "S"), "README (conflict S)");
+        assert_eq!(conflict_path(".gitignore", "S"), ".gitignore (conflict S)");
+        assert_eq!(conflict_path("a/b/c/Café 日本.md", "S"), "a/b/c/Café 日本 (conflict S).md");
     }
 }
