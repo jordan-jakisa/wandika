@@ -1,9 +1,10 @@
-import { api, codeOf, listen } from "./api";
+import { api, codeOf, listen, openUrl } from "./api";
+import { mailRef, type MailRef } from "./mailLinks";
 import { forgetImages } from "./attachments";
 import { forgetNoteEmbeds } from "./editor/embeds";
 import { tip, touch } from "./tips";
 import { TEMPLATE } from "./kanban";
-import type { Entry, NoteMeta, Snippet, Status, SyncReport, Today } from "./types";
+import type { Entry, NoteMeta, Snippet, Status, SyncReport, Today, VaultTask } from "./types";
 
 export type Tab = "notes" | "today" | "tasks" | "projects" | "graph" | "search";
 const TABS: Tab[] = ["notes", "today", "tasks", "projects", "graph", "search"];
@@ -50,6 +51,12 @@ class AppState {
   openCount = $state(0);
   /** Vault path of the image open in the viewer. */
   viewing = $state<string | null>(null);
+  /** The email open in the reader; `url` opens it in the mail app on the web. */
+  reading = $state<(MailRef & { url: string | null }) | null>(null);
+  /** The task open in the task editor. */
+  editingTask = $state<VaultTask | null>(null);
+  /** Mac: Today fills the window, for a while of working only from it. */
+  todayFull = $state(false);
   settingsOpen = $state(false);
   settingsSection = $state<SettingsSection>("vault");
   /** True when Settings was opened for one section, so phones skip the section list. */
@@ -349,7 +356,7 @@ class AppState {
     const paths = this.heldDeletions;
     if (del) {
       const ok = await this.ask({
-        title: `Delete ${paths.length} files everywhere?`,
+        title: paths.length === 1 ? "Delete 1 file everywhere?" : `Delete ${paths.length} files everywhere?`,
         message: "They go from GitHub and from every device on its next sync. GitHub's history still has them.",
         confirm: "Delete everywhere",
         danger: true,
@@ -362,7 +369,7 @@ class AppState {
       if (del) await this.sync(true);
       else {
         await this.refreshFiles();
-        this.say(`${paths.length} files are back.`);
+        this.say(paths.length === 1 ? "1 file is back." : `${paths.length} files are back.`);
       }
     } catch (e) {
       this.say((e as Error).message);
@@ -519,6 +526,29 @@ class AppState {
   }
 
   /** A short message at the bottom. With `action`, it carries one button (Undo) and stays longer. */
+  /** A link from a note or Today: an email from a connected mailbox opens in Wandika, the rest in the browser. */
+  openLink(url: string) {
+    const ref = mailRef(url);
+    const c = this.status?.connectors;
+    if (ref && c && (ref.source === "google" ? c.google : c.microsoft)) {
+      this.reading = { ...ref, url };
+      return;
+    }
+    void openUrl(url);
+  }
+
+  /** Adds a task to today's note and says where it went. */
+  async addTask(text: string) {
+    try {
+      const path = await api.taskAdd(text);
+      this.edited();
+      this.changed = { paths: [path], at: Date.now() };
+      this.say("Added to today's note.", { label: "Open", run: () => this.open(path) });
+    } catch (e) {
+      this.say((e as Error).message);
+    }
+  }
+
   say(message: string, action?: { label: string; run: () => void }) {
     this.toast = message;
     this.toastAction = action ?? null;

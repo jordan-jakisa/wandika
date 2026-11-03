@@ -108,6 +108,8 @@ export interface VaultTask {
   text: string;
   done: boolean;
   due: string | null;
+  /** The indented lines under the task: its notes. */
+  details: string;
 }
 
 export interface CalEvent {
@@ -132,6 +134,16 @@ export interface MailItem {
   snippet: string;
   url: string | null;
   unread: boolean;
+}
+
+export interface MailBody {
+  subject: string;
+  from: string;
+  to: string;
+  date: string;
+  text: string;
+  html: string | null;
+  url: string | null;
 }
 
 export interface RemoteTask {

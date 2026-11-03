@@ -805,6 +805,17 @@ describe("held deletions", () => {
     expect(app.dialog).toBeNull();
   });
 
+  test("one file reads as one file", async () => {
+    const { app } = await started();
+    app.apply(report({ held_deletions: ["a.md"] }));
+    const done = app.resolveHeld(true);
+    expect(app.dialog).toMatchObject({ title: "Delete 1 file everywhere?" });
+    answer(app, null);
+    await settle(done);
+    await settle(app.resolveHeld(false));
+    expect(app.toast).toBe("1 file is back.");
+  });
+
   test("deleting them everywhere asks first, then syncs", async () => {
     const { app } = await started();
     app.apply(report({ held_deletions: ["a.md", "b.md", "c.md"] }));
@@ -1006,5 +1017,37 @@ describe("Today", () => {
     await settle(app.loadToday(true));
     expect(calls("today")).toBe(3);
     expect(app.today).not.toBe(before);
+  });
+});
+
+describe("links and tasks from Today", () => {
+  test("an email link from a connected mailbox opens in the reader; other links go to the browser", async () => {
+    const { app } = await started();
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    app.openLink("https://mail.google.com/mail/u/0/#all/18c2f0a1b2c3");
+    expect(app.reading).toEqual({ source: "google", id: "18c2f0a1b2c3", url: "https://mail.google.com/mail/u/0/#all/18c2f0a1b2c3" });
+    expect(open).not.toHaveBeenCalled();
+    app.reading = null;
+    // Outlook isn't connected in the mock, so its link stays a web link.
+    app.openLink("https://outlook.office365.com/owa/?ItemID=AAMk&viewmodel=ReadMessageItem");
+    app.openLink("https://example.com");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(app.reading).toBeNull();
+    expect(open.mock.calls.map((c) => c[0])).toEqual(["https://outlook.office365.com/owa/?ItemID=AAMk&viewmodel=ReadMessageItem", "https://example.com"]);
+    open.mockRestore();
+  });
+
+  test("adding a task puts it in today's note and offers to open it", async () => {
+    const { app, api } = await started();
+    await settle(app.addTask("Reply to Amina"));
+    expect(app.toast).toBe("Added to today's note.");
+    const path = (await settle(api.dailyNote())) as string;
+    expect(await settle(api.noteRead(path))).toContain("- [ ] Reply to Amina");
+    expect(app.changed.paths).toEqual([path]);
+    app.toastAction!.run();
+    expect(app.current).toBe(path);
+    faults.set("task_add", "Give the task a name.");
+    await settle(app.addTask(" "));
+    expect(app.toast).toBe("Give the task a name.");
   });
 });

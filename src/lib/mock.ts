@@ -106,7 +106,12 @@ const cleanName = (name: string) => {
 };
 /** The path itself and everything inside it, when it is a folder. */
 const within = (path: string) => (k: string) => k === path || k.startsWith(path + "/");
-const LOCKED = "Encrypted notes are locked. Unlock them with your passphrase.";
+// Thrown the way the core sends it, so the interface sees code "locked" and shows the passphrase form.
+const LOCKED = {
+  code: "locked",
+  message: "Encrypted notes are locked. Unlock them with your passphrase.",
+  detail: "Encrypted notes are locked. Unlock them with your passphrase.",
+};
 const locked = (path: string) => path.endsWith(".age") && !encryption.unlocked;
 
 /**
@@ -172,9 +177,17 @@ function tasks(): VaultTask[] {
   const out: VaultTask[] = [];
   for (const [path, text] of notes) {
     if ((path.endsWith(".age") && !encryption.unlocked) || path.startsWith("Templates/")) continue;
-    text.split("\n").forEach((line, i) => {
-      const m = line.match(/^\s*[-*+] \[([ xX])\] (.*)$/);
-      if (m) out.push({ path, title: titleOf(path), line: i, text: m[2], done: m[1] !== " ", due: m[2].match(/📅\s?(\d{4}-\d{2}-\d{2})/)?.[1] ?? null });
+    const lines = text.split("\n");
+    lines.forEach((line, i) => {
+      const m = line.match(/^(\s*)[-*+] \[([ xX])\] (.*)$/);
+      if (!m) return;
+      const details: string[] = [];
+      for (const next of lines.slice(i + 1)) {
+        const indent = next.length - next.trimStart().length;
+        if (!next.trim() || indent <= m[1].length || /^\s*[-*+] \[[ xX]\] /.test(next)) break;
+        details.push(next.trim());
+      }
+      out.push({ path, title: titleOf(path), line: i, text: m[3], done: m[2] !== " ", due: m[3].match(/📅\s?(\d{4}-\d{2}-\d{2})/)?.[1] ?? null, details: details.join("\n") });
     });
   }
   return out;
@@ -420,6 +433,37 @@ const handlers: Record<string, (a: Args) => unknown> = {
     notes.set(path, lines.join("\n"));
     return done;
   },
+  task_edit: ({ path, line, expected, text, details }) => {
+    if (locked(path)) throw LOCKED;
+    const lines = (notes.get(path) ?? "").split("\n");
+    const m = lines[line]?.match(/^(\s*)([-*+] \[[ xX]\] )(.*)$/);
+    if (!m) throw "That task moved. Refresh and try again.";
+    if (m[3].trim() !== String(expected).trim()) throw "That task changed. Refresh and try again.";
+    if (!String(text).trim()) throw "Give the task a name.";
+    let old = 0;
+    for (const next of lines.slice(line + 1)) {
+      if (!next.trim() || next.length - next.trimStart().length <= m[1].length || /^\s*[-*+] \[[ xX]\] /.test(next)) break;
+      old++;
+    }
+    const notesUnder = String(details).split("\n").map((l) => l.trim()).filter(Boolean).map((l) => `${m[1]}  ${l}`);
+    lines.splice(line, 1 + old, `${m[1]}${m[2]}${String(text).trim()}`, ...notesUnder);
+    notes.set(path, lines.join("\n"));
+  },
+  task_add: ({ text }) => {
+    const path = daily(undefined);
+    const body = (notes.get(path) ?? "").replace(/\n*$/, "");
+    notes.set(path, body.includes("## Tasks") ? body.replace("## Tasks", `## Tasks\n\n- [ ] ${text}`) : `${body}\n\n## Tasks\n\n- [ ] ${text}\n`);
+    return path;
+  },
+  mail_read: ({ id }) => ({
+    subject: id === "a" ? "Your flight to Nairobi is confirmed" : "Re: Wandika sync design",
+    from: id === "a" ? "Uganda Airlines <bookings@ugandaairlines.com>" : "Amina Okello <amina@example.com>",
+    to: "jordan@example.com",
+    date: at(7, 12),
+    text: "Booking reference UR8K2.\n\nCheck-in opens 24 hours before departure.",
+    html: id === "a" ? '<h1>You are going to Nairobi</h1><p>Booking reference <b>UR8K2</b>.</p><p><a href="https://example.com/checkin">Check in</a></p><img src="https://tracker.example.com/pixel.gif" alt="">' : null,
+    url: `https://mail.google.com/mail/u/0/#all/${id}0000000000`,
+  }),
   daily_note: ({ date }) => daily(date),
   encryption_setup: () => (encryption = { ...encryption, set_up: true, unlocked: true }),
   encryption_unlock: ({ passphrase }) => {
@@ -446,7 +490,7 @@ const handlers: Record<string, (a: Args) => unknown> = {
     return {
       events,
       mail: [
-        { id: "a", source: "google", subject: "Your flight to Nairobi is confirmed", from: "Uganda Airlines", date: at(7, 12), snippet: "Booking reference UR8K2. Check-in opens 24 hours before departure.", url: null, unread: true },
+        { id: "a", source: "google", subject: "Your flight to Nairobi is confirmed", from: "Uganda Airlines", date: at(7, 12), snippet: "Booking reference UR8K2. Check-in opens 24 hours before departure.", url: "https://mail.google.com/mail/u/0/#inbox/a0000000000", unread: true },
         { id: "b", source: "google", subject: "Re: Wandika sync design", from: "Amina Okello", date: at(6, 40), snippet: "Three-way merge sounds right. What happens when both sides edit the same line?", url: null, unread: false },
       ],
       tasks: tasks().filter((t) => !t.done),

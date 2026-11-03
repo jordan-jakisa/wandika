@@ -216,6 +216,7 @@ export const task = (path: string, line: number, text: string, over: Partial<Vau
   text,
   done: false,
   due: null,
+  details: "",
   ...over,
 });
 

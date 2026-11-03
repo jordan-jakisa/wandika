@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { settle } from "../test/lib";
-import type { CalEvent, Entry, MailItem, NoteMeta, RemoteTask, SearchHit, Snippet, Status, SyncReport, Today, VaultTask } from "./types";
+import type { CalEvent, Entry, MailBody, MailItem, NoteMeta, RemoteTask, SearchHit, Snippet, Status, SyncReport, Today, VaultTask } from "./types";
 
 // types.ts has no code of its own; these tests hold the browser mock to its shapes. Each key list
 // is checked by TypeScript against the interface, so adding a field there fails here until the
@@ -12,7 +12,8 @@ const REPORT = keys<SyncReport>({ pulled: true, pushed: true, removed: true, mer
 const ENTRY = keys<Entry>({ path: true, name: true, kind: true, encrypted: true, modified: true });
 const META = keys<NoteMeta>({ path: true, title: true, links: true, tags: true, encrypted: true, locked: true, board: true, modified: true });
 const HIT = keys<SearchHit>({ path: true, title: true, snippet: true, encrypted: true });
-const TASK = keys<VaultTask>({ path: true, title: true, line: true, text: true, done: true, due: true });
+const TASK = keys<VaultTask>({ path: true, title: true, line: true, text: true, done: true, due: true, details: true });
+const BODY = keys<MailBody>({ subject: true, from: true, to: true, date: true, text: true, html: true, url: true });
 const EVENT = keys<CalEvent>({ id: true, source: true, calendar: true, title: true, start: true, end: true, all_day: true, location: true, url: true, attendees: true });
 const MAIL = keys<MailItem>({ id: true, source: true, subject: true, from: true, date: true, snippet: true, url: true, unread: true });
 const REMOTE = keys<RemoteTask>({ id: true, source: true, list_id: true, list: true, title: true, done: true, due: true });
@@ -70,4 +71,10 @@ test("Today and everything in it have every field", async () => {
   for (const m of t.mail) expect(Object.keys(m).sort()).toEqual(MAIL);
   for (const r of t.remote_tasks) expect(Object.keys(r).sort()).toEqual(REMOTE);
   for (const r of t.tasks) expect(Object.keys(r).sort()).toEqual(TASK);
+});
+
+test("a whole email has every field", async () => {
+  const run = await mock();
+  const body = await run<MailBody>("mail_read", { source: "google", id: "a" });
+  expect(Object.keys(body).sort()).toEqual(BODY);
 });

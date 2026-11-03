@@ -84,6 +84,8 @@ const calls: [string, (a: Api["api"]) => Promise<unknown>, string, Record<string
   ["resolveLink", (a) => a.resolveLink("Plan"), "resolve_link", { target: "Plan" }],
   ["tasksVault", (a) => a.tasksVault(), "tasks_vault", undefined],
   ["taskToggle", (a) => a.taskToggle("Plan.md", 3, "Ship it"), "task_toggle", { path: "Plan.md", line: 3, text: "Ship it" }],
+  ["taskEdit", (a) => a.taskEdit("Plan.md", 3, "Ship it", "Ship it 📌", "notes"), "task_edit", { path: "Plan.md", line: 3, expected: "Ship it", text: "Ship it 📌", details: "notes" }],
+  ["taskAdd", (a) => a.taskAdd("Reply to Amina"), "task_add", { text: "Reply to Amina" }],
   ["dailyNote", (a) => a.dailyNote("2026-11-03"), "daily_note", { date: "2026-11-03" }],
   ["dailyNote for today", (a) => a.dailyNote(), "daily_note", { date: undefined }],
   ["snippetsList", (a) => a.snippetsList(), "snippets_list", undefined],
@@ -99,6 +101,7 @@ const calls: [string, (a: Api["api"]) => Promise<unknown>, string, Record<string
   ["today without date", (a) => a.today(), "today", { date: undefined }],
   ["remoteTaskToggle", (a) => a.remoteTaskToggle("google", "list", "t1", true), "remote_task_toggle", { source: "google", listId: "list", id: "t1", done: true }],
   ["mailToNote", (a) => a.mailToNote("google", "m1"), "mail_to_note", { source: "google", id: "m1" }],
+  ["mailRead", (a) => a.mailRead("google", "m1"), "mail_read", { source: "google", id: "m1" }],
   ["eventToNote", (a) => a.eventToNote(event), "event_to_note", { event }],
   ["agendaToDaily", (a) => a.agendaToDaily([event], "2026-11-03"), "agenda_to_daily", { events: [event], date: "2026-11-03" }],
 ];

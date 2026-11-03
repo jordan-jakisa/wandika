@@ -3,7 +3,7 @@
   import { EditorView } from "@codemirror/view";
   import { ChevronLeft, Code, ImagePlus, LayoutTemplate, Columns3, Lock, LockOpen, Network, Trash2, Link2 } from "@lucide/svelte";
   import { onDestroy, untrack } from "svelte";
-  import { api, codeOf, openUrl } from "../api";
+  import { api, codeOf } from "../api";
   import { app, titleOf } from "../app.svelte";
   import { pastedName } from "../attachments";
   import { positions, remember } from "../positions";
@@ -320,7 +320,7 @@
 
   function onUrl(e: Event) {
     const href = (e as CustomEvent<string>).detail;
-    if (/^https?:|^mailto:/.test(href)) void openUrl(href);
+    if (/^https?:|^mailto:/.test(href)) app.openLink(href);
   }
 
   $effect(() => {

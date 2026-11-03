@@ -4,6 +4,7 @@ import type {
   CryptoStatus,
   DeviceCode,
   Entry,
+  MailBody,
   NoteMeta,
   Repo,
   SearchHit,
@@ -149,6 +150,10 @@ export const api = {
   tasksVault: () => call<VaultTask[]>("tasks_vault"),
   taskToggle: (path: string, line: number, text: string) =>
     call<boolean>("task_toggle", { path, line, text }),
+  taskEdit: (path: string, line: number, expected: string, text: string, details: string) =>
+    call<void>("task_edit", { path, line, expected, text, details }),
+  /** Adds a task to today's note; returns the note's path. */
+  taskAdd: (text: string) => call<string>("task_add", { text }),
   dailyNote: (date?: string) => call<string>("daily_note", { date }),
 
   snippetsList: () => call<Snippet[]>("snippets_list"),
@@ -165,6 +170,7 @@ export const api = {
   remoteTaskToggle: (source: string, listId: string, id: string, done: boolean) =>
     call<void>("remote_task_toggle", { source, listId, id, done }),
   mailToNote: (source: string, id: string) => call<string>("mail_to_note", { source, id }),
+  mailRead: (source: string, id: string) => call<MailBody>("mail_read", { source, id }),
   eventToNote: (event: CalEvent) => call<string>("event_to_note", { event }),
   agendaToDaily: (events: CalEvent[], date?: string) =>
     call<string>("agenda_to_daily", { events, date }),

@@ -239,13 +239,14 @@ describe("notes", () => {
   test("encrypted notes are locked until unlocked", async () => {
     const { run } = await fresh();
     const path = "Private/Passport renewal.md.age";
-    await expect(run("note_read", { path })).rejects.toMatch(/locked/);
-    await expect(run("note_write", { path, content: "x" })).rejects.toMatch(/locked/);
+    // Thrown as the core sends it: code "locked" is what brings up the passphrase form.
+    await expect(run("note_read", { path })).rejects.toMatchObject({ code: "locked", message: expect.stringMatching(/locked/) });
+    await expect(run("note_write", { path, content: "x" })).rejects.toMatchObject({ code: "locked" });
     await expect(run("encryption_unlock", { passphrase: "short" })).rejects.toMatch(/Wrong passphrase/);
     expect(await run("encryption_unlock", { passphrase: "long enough" })).toMatchObject({ unlocked: true });
     expect(await run("note_read", { path })).toMatch(/^# Passport renewal/);
     expect(await run("encryption_lock")).toMatchObject({ unlocked: false });
-    await expect(run("note_read", { path })).rejects.toMatch(/locked/);
+    await expect(run("note_read", { path })).rejects.toMatchObject({ code: "locked" });
     expect(await run("encryption_setup", { passphrase: "new one" })).toEqual({ set_up: true, unlocked: true, folders: ["Private"] });
   });
 
