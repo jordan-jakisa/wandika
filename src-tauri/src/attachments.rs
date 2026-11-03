@@ -29,7 +29,7 @@ pub fn folder_for(root: &Path, note: &str) -> String {
     if setting.is_empty() || setting == "/" {
         String::new()
     } else if let Some(sub) = setting.strip_prefix("./") {
-        join(folder_of(note), sub)
+        join(folder_of(note), sub).trim_end_matches('/').to_string()
     } else if setting == "." {
         folder_of(note).to_string()
     } else {
@@ -200,6 +200,11 @@ mod tests {
         set(".");
         assert_eq!(folder_for(&dir, "Projects/Plan.md"), "Projects");
         assert_eq!(folder_for(&dir, "Top.md"), "");
+        set("./");
+        assert_eq!(folder_for(&dir, "Projects/Plan.md"), "Projects");
+        assert_eq!(folder_for(&dir, "Top.md"), "");
+        set("./img/");
+        assert_eq!(folder_for(&dir, "Projects/Plan.md"), "Projects/img");
         set("./img/2026");
         assert_eq!(folder_for(&dir, "a/b/Plan.md"), "a/b/img/2026");
         assert_eq!(folder_for(&dir, "Top.md"), "img/2026");
