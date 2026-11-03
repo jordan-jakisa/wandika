@@ -584,7 +584,13 @@ pub async fn connector_connect(handle: AppHandle, app: S<'_>, provider: String) 
                 handle.opener().open_url(url, None::<&str>).map_err(|_| msg("Couldn't open the browser. Try again."))?;
                 let h = handle.clone();
                 tauri::async_runtime::spawn(async move {
-                    match google::await_code(listener, &state).await {
+                    let code = google::await_code(listener, &state).await;
+                    // Back to Wandika, where the result shows, instead of leaving you on the browser tab.
+                    if let Some(w) = h.get_webview_window("main") {
+                        let _ = w.unminimize();
+                        let _ = w.set_focus();
+                    }
+                    match code {
                         Ok(code) => finish_google(&h, &code, &pkce.verifier, &redirect).await,
                         Err(e) => {
                             let _ = h.emit("connectors-changed", json!({ "provider": "google", "error": e.friendly().1 }));

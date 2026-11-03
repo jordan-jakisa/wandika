@@ -108,6 +108,30 @@ pub async fn loopback() -> Result<(tokio::net::TcpListener, String)> {
     Ok((listener, format!("http://127.0.0.1:{port}")))
 }
 
+/// The page the browser shows when Google sends it back: Wandika's colours, light or dark.
+#[cfg(desktop)]
+fn done_page(ok: bool) -> String {
+    let (title, line, mark) = if ok {
+        ("Google is connected", "Wandika is showing your mail, calendar and tasks. You can close this tab.", "<path d=\"M7 12.5l3.2 3.2L17 9\"/>")
+    } else {
+        ("Google wasn't connected", "Nothing was shared. Go back to Wandika and try again.", "<path d=\"M9 9l6 6M15 9l-6 6\"/>")
+    };
+    format!(
+        r#"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{title} · Wandika</title>
+<style>
+:root{{--paper:#f2f3ef;--ink:#1c2320;--graphite:#59635e;--rule:#d6dad4;--accent:#2e6a4e;color-scheme:light dark}}
+@media (prefers-color-scheme:dark){{:root{{--paper:#151917;--ink:#e3e7e2;--graphite:#9aa49e;--rule:#2c332f;--accent:#7fc19c}}}}
+html,body{{height:100%;margin:0}}
+body{{display:grid;place-items:center;background:var(--paper);color:var(--ink);font:17px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:24px;box-sizing:border-box}}
+main{{max-width:30rem;text-align:center}}
+svg{{width:56px;height:56px;fill:none;stroke:var(--accent);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}}
+circle{{stroke:var(--rule)}}
+h1{{font-size:1.6rem;font-weight:650;letter-spacing:-0.01em;margin:20px 0 8px}}
+p{{color:var(--graphite);margin:0}}
+</style></head><body><main><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10.5"/>{mark}</svg><h1>{title}</h1><p>{line}</p></main></body></html>"#
+    )
+}
+
 #[cfg(desktop)]
 pub async fn await_code(listener: tokio::net::TcpListener, state: &str) -> Result<String> {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -126,11 +150,7 @@ pub async fn await_code(listener: tokio::net::TcpListener, state: &str) -> Resul
                 continue;
             }
             let ok = q.get("state").map(String::as_str) == Some(state) && q.contains_key("code");
-            let body = if ok {
-                "<html><body style=\"font-family:system-ui;padding:3rem\"><h1>Google is connected</h1><p>Go back to Wandika. You can close this tab.</p></body></html>"
-            } else {
-                "<html><body style=\"font-family:system-ui;padding:3rem\"><h1>Google wasn't connected</h1><p>Go back to Wandika and try again.</p></body></html>"
-            };
+            let body = done_page(ok);
             let resp = format!(
                 "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
                 body.len()
@@ -557,6 +577,17 @@ mod tests {
             assert!(pages[0].starts_with("HTTP/1.1 404"));
             assert!(pages[1].starts_with("HTTP/1.1 200") && pages[1].contains("Google is connected"));
         });
+    }
+
+    #[test]
+    fn the_return_page_is_a_whole_page_in_wandika_colours_both_ways() {
+        let ok = done_page(true);
+        assert!(ok.starts_with("<!doctype html>") && ok.contains("<meta name=\"viewport\""));
+        assert!(ok.contains("prefers-color-scheme:dark") && ok.contains("#2e6a4e") && ok.contains("#7fc19c"));
+        assert!(ok.contains("<h1>Google is connected</h1>") && ok.contains("You can close this tab."));
+        let failed = done_page(false);
+        assert!(failed.contains("<h1>Google wasn't connected</h1>") && failed.contains("try again"));
+        assert!(!ok.contains('—') && !failed.contains('—'), "no em dashes");
     }
 
     #[test]
