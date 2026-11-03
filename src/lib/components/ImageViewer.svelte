@@ -18,7 +18,7 @@
       loaded = false;
       imageUrl(path, "").then(
         (url) => app.viewing === path && (src = url),
-        () => (failed = true),
+        () => app.viewing === path && (failed = true),
       );
       dialogEl.showModal();
     } else if (!path && dialogEl.open) {
