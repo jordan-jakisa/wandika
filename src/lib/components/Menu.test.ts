@@ -134,6 +134,35 @@ describe("keyboard", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
+  test("Tab out of the menu closes it", async () => {
+    const user = userEvent.setup();
+    const { trigger } = setup();
+    const next = document.body.appendChild(Object.assign(document.createElement("button"), { textContent: "Next" }));
+    trigger.focus();
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(screen.getByRole("menuitem", { name: "Rename" })).toHaveFocus());
+    await user.tab();
+    await user.tab();
+    await user.tab();
+    expect(next).toHaveFocus();
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    next.remove();
+  });
+
+  test("moving between items keeps it open", async () => {
+    const user = userEvent.setup();
+    const { trigger } = setup();
+    trigger.focus();
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(screen.getByRole("menuitem", { name: "Rename" })).toHaveFocus());
+    await user.tab();
+    expect(screen.getByRole("menuitem", { name: "Move" })).toHaveFocus();
+    await user.tab({ shift: true });
+    await user.tab({ shift: true });
+    expect(trigger).toHaveFocus();
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+  });
+
   test("keys on a closed menu do nothing", async () => {
     const user = userEvent.setup();
     const { trigger } = setup();
