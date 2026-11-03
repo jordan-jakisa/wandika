@@ -762,6 +762,434 @@ mod tests {
     }
 
     #[test]
+    fn the_vault_gitignore_and_device_files_stay_on_the_device() {
+        let (base, url) = setup("ignore");
+        let mac = device(&base, "mac", &url);
+        write(&mac, ".gitignore", "drafts/\n*.log\n");
+        write(&mac, "Plan.md", "plan");
+        write(&mac, "drafts/secret.md", "not yet");
+        write(&mac, "build.log", "noise");
+        write(&mac, ".DS_Store", "x");
+        write(&mac, "Projects/.DS_Store", "x");
+        write(&mac, ".obsidian/workspace-mobile.json", "{}");
+        write(&mac, ".obsidian/app.json", "{}");
+        write(&mac, "Plan.md.wandika-tmp", "half written");
+        write(&mac, ".Photo.png.icloud", "placeholder");
+        sync(&mac.p, &mac.r, &ctl()).unwrap();
+        assert_eq!(files_on_hub(&base), [".gitignore", ".obsidian/app.json", "Plan.md"], "shared Obsidian settings do sync");
+        let phone = device(&base, "phone", &url);
+        sync(&phone.p, &phone.r, &ctl()).unwrap();
+        assert_eq!(read(&phone, "Plan.md").as_deref(), Some("plan"));
+        assert_eq!(read(&phone, "drafts/secret.md"), None);
+        let exclude = std::fs::read_to_string(mac.p.git.join("info/exclude")).unwrap();
+        assert!(exclude.contains(".DS_Store\n") && exclude.contains("*.wandika-tmp\n") && exclude.contains(".*.icloud\n"));
+        assert!(!mac.p.files.join(".git").exists(), "the vault folder gets no .git");
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn files_over_50_mb_stay_on_this_device_and_are_named() {
+        let (base, url) = setup("big");
+        let mac = device(&base, "mac", &url);
+        write(&mac, "Plan.md", "plan");
+        std::fs::create_dir_all(mac.p.files.join("video")).unwrap();
+        // Sparse: takes no real space.
+        std::fs::File::create(mac.p.files.join("video/talk.mov")).unwrap().set_len(MAX_FILE + 1).unwrap();
+        let r = sync(&mac.p, &mac.r, &ctl()).unwrap();
+        assert_eq!(r.too_big, ["video/talk.mov"]);
+        assert_eq!(files_on_hub(&base), ["Plan.md"]);
+        assert_eq!(r.vault_bytes, 4, "only what syncs is counted");
+        let again = sync(&mac.p, &mac.r, &ctl()).unwrap();
+        assert_eq!(again.too_big, ["video/talk.mov"], "named on every sync");
+        assert!(again.pushed.is_empty());
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn confirmed_deletions_go_everywhere_once() {
+        let (base, url) = setup("confirm");
+        let mac = device(&base, "mac", &url);
+        for i in 0..30 {
+            write(&mac, &format!("notes/n{i}.md"), "note\n");
+        }
+        sync(&mac.p, &mac.r, &ctl()).unwrap();
+        let phone = device(&base, "phone", &url);
+        sync(&phone.p, &phone.r, &ctl()).unwrap();
+
+        std::fs::remove_dir_all(mac.p.files.join("notes")).unwrap();
+        write(&mac, "New.md", "kept going\n");
+        let r = sync(&mac.p, &mac.r, &ctl()).unwrap();
+        assert_eq!(r.held_deletions.len(), 30);
+        assert_eq!(r.held_deletions[0], "notes/n0.md");
+        assert!(files_on_hub(&base).contains(&"New.md".to_string()), "other changes still sync while deletions wait");
+        assert_eq!(files_on_hub(&base).len(), 31);
+
+        confirm_deletions(&mac.p).unwrap();
+        assert!(load_state(&mac.p).confirm_deletions);
+        let r = sync(&mac.p, &mac.r, &ctl()).unwrap();
+        assert!(r.held_deletions.is_empty());
+        assert_eq!(files_on_hub(&base), ["New.md"]);
+        assert!(!load_state(&mac.p).confirm_deletions, "the confirmation is used once");
+        let r = sync(&phone.p, &phone.r, &ctl()).unwrap();
+        assert_eq!(read(&phone, "notes/n3.md"), None);
+        assert_eq!(r.removed.len(), 30);
+        assert!(r.removed.contains(&"notes/n3.md".to_string()));
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn deletions_are_held_only_when_many_and_a_large_share() {
+        let (base, url) = setup("threshold");
+        let mac = device(&base, "mac", &url);
+        for i in 0..200 {
+            write(&mac, &format!("n{i:03}.md"), "x");
+        }
+        sync(&mac.p, &mac.r, &ctl()).unwrap();
+        // 26 of 200 is over 25 files but under a fifth: they go.
+        for i in 0..26 {
+            std::fs::remove_file(mac.p.files.join(format!("n{i:03}.md"))).unwrap();
+        }
+        let r = sync(&mac.p, &mac.r, &ctl()).unwrap();
+        assert!(r.held_deletions.is_empty());
+        assert_eq!(files_on_hub(&base).len(), 174);
+        // 25 at once is never held, whatever the share.
+        let (base2, url2) = setup("threshold-small");
+        let small = device(&base2, "mac", &url2);
+        for i in 0..25 {
+            write(&small, &format!("n{i}.md"), "x");
+        }
+        sync(&small.p, &small.r, &ctl()).unwrap();
+        std::fs::remove_dir_all(&small.p.files).unwrap();
+        std::fs::create_dir_all(&small.p.files).unwrap();
+        let r = sync(&small.p, &small.r, &ctl()).unwrap();
+        assert!(r.held_deletions.is_empty());
+        let _ = std::fs::remove_dir_all(&base);
+        let _ = std::fs::remove_dir_all(&base2);
+    }
+
+    #[test]
+    fn an_edit_beats_a_deletion_from_either_side() {
+        let (base, url) = setup("edit-wins");
+        let mac = device(&base, "mac", &url);
+        let phone = device(&base, "phone", &url);
+        write(&mac, "A.md", "a\n");
+        write(&mac, "B.md", "b\n");
+        sync(&mac.p, &mac.r, &ctl()).unwrap();
+        sync(&phone.p, &phone.r, &ctl()).unwrap();
+
+        std::fs::remove_file(mac.p.files.join("A.md")).unwrap();
+        write(&mac, "B.md", "b edited on the mac\n");
+        write(&phone, "A.md", "a edited on the phone\n");
+        std::fs::remove_file(phone.p.files.join("B.md")).unwrap();
+        sync(&mac.p, &mac.r, &ctl()).unwrap();
+        let r = sync(&phone.p, &phone.r, &ctl()).unwrap();
+        assert!(r.conflicts.is_empty());
+        sync(&mac.p, &mac.r, &ctl()).unwrap();
+        for d in [&mac, &phone] {
+            assert_eq!(read(d, "A.md").as_deref(), Some("a edited on the phone\n"));
+            assert_eq!(read(d, "B.md").as_deref(), Some("b edited on the mac\n"));
+        }
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn files_that_cannot_merge_keep_both_versions() {
+        let (base, url) = setup("binary");
+        let mac = device(&base, "mac", &url);
+        let phone = device(&base, "phone", &url);
+        std::fs::create_dir_all(mac.p.files.join("img")).unwrap();
+        std::fs::write(mac.p.files.join("img/pic.png"), b"\x89PNG\0base").unwrap();
+        sync(&mac.p, &mac.r, &ctl()).unwrap();
+        sync(&phone.p, &phone.r, &ctl()).unwrap();
+        std::fs::write(mac.p.files.join("img/pic.png"), b"\x89PNG\0mac").unwrap();
+        std::fs::write(phone.p.files.join("img/pic.png"), b"\x89PNG\0phone").unwrap();
+        sync(&mac.p, &mac.r, &ctl()).unwrap();
+        let r = sync(&phone.p, &phone.r, &ctl()).unwrap();
+        assert_eq!(r.conflicts.len(), 1);
+        let copy = &r.conflicts[0];
+        assert!(copy.starts_with("img/pic (conflict ") && copy.ends_with(").png"), "{copy}");
+        assert_eq!(std::fs::read(phone.p.files.join("img/pic.png")).unwrap(), b"\x89PNG\0phone");
+        assert_eq!(std::fs::read(phone.p.files.join(copy)).unwrap(), b"\x89PNG\0mac");
+        assert!(r.merged.contains(copy));
+        // The other device gets both after its next sync.
+        sync(&mac.p, &mac.r, &ctl()).unwrap();
+        assert_eq!(std::fs::read(mac.p.files.join("img/pic.png")).unwrap(), b"\x89PNG\0phone");
+        assert_eq!(std::fs::read(mac.p.files.join(copy)).unwrap(), b"\x89PNG\0mac");
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn unicode_and_nested_paths_travel_intact() {
+        let (base, url) = setup("unicode");
+        let mac = device(&base, "mac", &url);
+        let phone = device(&base, "phone", &url);
+        write(&mac, "Safari/Café ñ/日本語 ノート.md", "Habari\r\nza asubuhi\r\n");
+        write(&mac, "a/b/c/d/e/Deep.md", "deep");
+        write(&mac, "Emoji 🌍.md", "🌍");
+        sync(&mac.p, &mac.r, &ctl()).unwrap();
+        sync(&phone.p, &phone.r, &ctl()).unwrap();
+        assert_eq!(read(&phone, "Safari/Café ñ/日本語 ノート.md").as_deref(), Some("Habari\r\nza asubuhi\r\n"), "line endings kept");
+        assert_eq!(read(&phone, "a/b/c/d/e/Deep.md").as_deref(), Some("deep"));
+        assert_eq!(read(&phone, "Emoji 🌍.md").as_deref(), Some("🌍"));
+        // A rename is a deletion and an addition.
+        std::fs::rename(phone.p.files.join("Emoji 🌍.md"), phone.p.files.join("Dunia.md")).unwrap();
+        sync(&phone.p, &phone.r, &ctl()).unwrap();
+        let r = sync(&mac.p, &mac.r, &ctl()).unwrap();
+        assert_eq!(read(&mac, "Dunia.md").as_deref(), Some("🌍"));
+        assert_eq!(read(&mac, "Emoji 🌍.md"), None);
+        assert_eq!(r.removed, ["Emoji 🌍.md"]);
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn an_empty_repository_and_vault_start_with_the_welcome_note() {
+        let (base, url) = setup("welcome");
+        let mac = device(&base, "mac", &url);
+        let r = sync(&mac.p, &mac.r, &ctl()).unwrap();
+        assert_eq!(read(&mac, "Welcome.md").as_deref(), Some(WELCOME));
+        assert_eq!(files_on_hub(&base), ["Welcome.md"]);
+        assert_eq!(r.pushed, ["Welcome.md"]);
+        let hub = Repository::open_bare(base.join("hub.git")).unwrap();
+        let head = hub.find_reference("refs/heads/main").unwrap().peel_to_commit().unwrap();
+        assert_eq!(head.message(), Some("Update 1 file from Wandika on mac"));
+        assert_eq!(head.author().email(), Some("test@example.com"));
+        assert_eq!(r.head.as_deref(), Some(head.id().to_string().as_str()));
+        // A vault with files of its own gets no Welcome note.
+        let (base2, url2) = setup("welcome-not");
+        let other = device(&base2, "mac", &url2);
+        write(&other, "Mine.md", "mine");
+        sync(&other.p, &other.r, &ctl()).unwrap();
+        assert_eq!(files_on_hub(&base2), ["Mine.md"]);
+        let _ = std::fs::remove_dir_all(&base);
+        let _ = std::fs::remove_dir_all(&base2);
+    }
+
+    #[test]
+    fn nothing_changed_means_nothing_pushed_and_the_state_is_saved() {
+        let (base, url) = setup("idle");
+        let mac = device(&base, "mac", &url);
+        assert!(load_state(&mac.p).last_sync.is_none());
+        write(&mac, "Plan.md", "plan");
+        let first = sync(&mac.p, &mac.r, &ctl()).unwrap();
+        assert_eq!(first.pushed, ["Plan.md"]);
+        let second = sync(&mac.p, &mac.r, &ctl()).unwrap();
+        assert!(second.pushed.is_empty() && second.pulled.is_empty() && second.conflicts.is_empty());
+        assert_eq!(second.head, first.head);
+        assert_eq!(load_state(&mac.p).last_sync, Some(second.at));
+        assert!(second.at >= first.at);
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn only_github_moved_is_a_fast_forward() {
+        let (base, url) = setup("ff");
+        let mac = device(&base, "mac", &url);
+        let phone = device(&base, "phone", &url);
+        write(&mac, "A.md", "a");
+        sync(&mac.p, &mac.r, &ctl()).unwrap();
+        sync(&phone.p, &phone.r, &ctl()).unwrap();
+        write(&mac, "B.md", "b");
+        write(&mac, "A.md", "a2");
+        sync(&mac.p, &mac.r, &ctl()).unwrap();
+        let r = sync(&phone.p, &phone.r, &ctl()).unwrap();
+        let mut pulled = r.pulled.clone();
+        pulled.sort();
+        assert_eq!(pulled, ["A.md", "B.md"]);
+        assert!(r.merged.is_empty(), "no merge commit");
+        assert!(r.pushed.is_empty());
+        let repo = Repository::open(&phone.p.git).unwrap();
+        assert_eq!(repo.head().unwrap().peel_to_commit().unwrap().parent_count(), 1);
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_stopped_sync_changes_nothing_on_github() {
+        let (base, url) = setup("cancel");
+        let mac = device(&base, "mac", &url);
+        write(&mac, "Plan.md", "plan");
+        let stop = ctl();
+        stop.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+        assert!(matches!(sync(&mac.p, &mac.r, &stop), Err(Error::Cancelled)));
+        let hub = Repository::open_bare(base.join("hub.git")).unwrap();
+        assert!(hub.find_reference("refs/heads/main").is_err(), "GitHub still empty");
+        assert!(load_state(&mac.p).last_sync.is_none());
+        // The next sync carries on.
+        sync(&mac.p, &mac.r, &ctl()).unwrap();
+        assert_eq!(files_on_hub(&base), ["Plan.md"]);
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn progress_starts_checking_and_ends_saving() {
+        let (base, url) = setup("progress");
+        let mac = device(&base, "mac", &url);
+        for i in 0..4 {
+            write(&mac, &format!("img/{i}.png"), &"x".repeat(400));
+        }
+        let seen = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let log = seen.clone();
+        let c = Ctl { cancel: Arc::new(AtomicBool::new(false)), progress: Box::new(move |phase, _, _| log.lock().unwrap().push(phase.into())) };
+        sync(&mac.p, &mac.r, &c).unwrap();
+        let seen = seen.lock().unwrap();
+        assert_eq!(seen.first().map(String::as_str), Some("checking"));
+        assert_eq!(seen.last().map(String::as_str), Some("saving"));
+        assert!(seen.iter().any(|p| p == "uploading"), "parts report their upload");
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn big_uploads_send_deletions_first_then_smallest_files_and_big_files_alone() {
+        let (base, url) = setup("order");
+        let mac = device(&base, "mac", &url);
+        write(&mac, "old1.md", "x");
+        write(&mac, "old2.md", "x");
+        sync(&mac.p, &mac.r, &ctl()).unwrap();
+        std::fs::remove_file(mac.p.files.join("old1.md")).unwrap();
+        std::fs::remove_file(mac.p.files.join("old2.md")).unwrap();
+        write(&mac, "huge.png", &"h".repeat(1500));
+        write(&mac, "tiny.md", "t");
+        write(&mac, "mid.png", &"m".repeat(600));
+        write(&mac, "mid2.png", &"n".repeat(600));
+        let r = sync(&mac.p, &mac.r, &ctl()).unwrap();
+        assert_eq!(r.pushed.len(), 6);
+
+        let hub = Repository::open_bare(base.join("hub.git")).unwrap();
+        let mut walk = hub.revwalk().unwrap();
+        walk.push_ref("refs/heads/main").unwrap();
+        walk.set_sorting(git2::Sort::TOPOLOGICAL | git2::Sort::REVERSE).unwrap();
+        let parts: Vec<git2::Commit> = walk.skip(1).map(|id| hub.find_commit(id.unwrap()).unwrap()).collect();
+        let files = |c: &git2::Commit| {
+            let mut v: Vec<String> = c.tree().unwrap().iter().map(|e| e.name().unwrap().to_string()).collect();
+            v.sort();
+            v
+        };
+        assert_eq!(parts.len(), 3, "{:?}", parts.iter().map(|c| c.message().unwrap().to_string()).collect::<Vec<_>>());
+        assert_eq!(parts[0].message(), Some("Add files from Wandika on mac (part 1 of 3)"));
+        assert_eq!(files(&parts[0]), ["mid.png", "tiny.md"], "deletions, then the smallest files, up to 1000 bytes");
+        assert_eq!(files(&parts[1]), ["mid.png", "mid2.png", "tiny.md"]);
+        assert_eq!(files(&parts[2]), ["huge.png", "mid.png", "mid2.png", "tiny.md"], "a file over the part size goes alone");
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn when_github_moves_during_a_sync_it_merges_and_pushes_again() {
+        let (base, url) = setup("race");
+        let mac = device(&base, "mac", &url);
+        let phone = device(&base, "phone", &url);
+        write(&mac, "Plan.md", "one\n");
+        sync(&mac.p, &mac.r, &ctl()).unwrap();
+        sync(&phone.p, &phone.r, &ctl()).unwrap();
+        write(&mac, "FromMac.md", "mac\n");
+        sync(&mac.p, &mac.r, &ctl()).unwrap();
+
+        // While the phone downloads, the Mac pushes again; the phone's first push is then refused.
+        write(&phone, "FromPhone.md", "phone\n");
+        let ran = Arc::new(AtomicBool::new(false));
+        let (flag, b, u) = (ran.clone(), base.clone(), url.clone());
+        let c = Ctl {
+            cancel: Arc::new(AtomicBool::new(false)),
+            progress: Box::new(move |phase, _, _| {
+                if phase == "downloading" && !flag.swap(true, std::sync::atomic::Ordering::SeqCst) {
+                    let mac = device(&b, "mac", &u);
+                    write(&mac, "Meanwhile.md", "meanwhile\n");
+                    sync(&mac.p, &mac.r, &ctl()).unwrap();
+                }
+            }),
+        };
+        sync(&phone.p, &phone.r, &c).unwrap();
+        assert!(ran.load(std::sync::atomic::Ordering::SeqCst), "the Mac pushed during the phone's sync");
+        assert_eq!(files_on_hub(&base), ["FromMac.md", "FromPhone.md", "Meanwhile.md", "Plan.md"]);
+        assert_eq!(read(&phone, "Meanwhile.md").as_deref(), Some("meanwhile\n"));
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_push_github_refuses_reports_false() {
+        let (base, url) = setup("refused");
+        let mac = device(&base, "mac", &url);
+        let phone = device(&base, "phone", &url);
+        write(&mac, "A.md", "a");
+        sync(&mac.p, &mac.r, &ctl()).unwrap();
+        write(&phone, "B.md", "b");
+        // The phone commits on its own history, unrelated to GitHub's, and pushes without merging.
+        let repo = open(&phone.p, &phone.r).unwrap();
+        commit_local(&repo, &phone.p, &phone.r, &SyncState::default(), &mut SyncReport::default()).unwrap();
+        let head = head_commit(&repo).unwrap();
+        assert!(!push(&repo, &phone.r, &ctl(), head).unwrap());
+        assert_eq!(files_on_hub(&base), ["A.md"]);
+        assert!(repo.find_reference("refs/wandika/push").is_err(), "the temporary ref is cleaned up");
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn typing_during_a_sync_is_not_overwritten() {
+        let (base, url) = setup("typing");
+        let mac = device(&base, "mac", &url);
+        let phone = device(&base, "phone", &url);
+        write(&mac, "Plan.md", "one\n");
+        sync(&mac.p, &mac.r, &ctl()).unwrap();
+        sync(&phone.p, &phone.r, &ctl()).unwrap();
+        write(&mac, "Plan.md", "from the mac\n");
+        write(&mac, "Other.md", "other\n");
+        sync(&mac.p, &mac.r, &ctl()).unwrap();
+
+        // The phone has committed, then the person types before GitHub's files are brought in.
+        let repo = open(&phone.p, &phone.r).unwrap();
+        let theirs = fetch(&repo, &phone.r, &ctl()).unwrap().unwrap();
+        write(&phone, "Plan.md", "typed just now\n");
+        integrate(&repo, &phone.r, theirs, &mut SyncReport::default()).unwrap();
+        assert_eq!(read(&phone, "Plan.md").as_deref(), Some("typed just now\n"));
+        assert_eq!(read(&phone, "Other.md").as_deref(), Some("other\n"), "everything else came in");
+        drop(repo);
+        // The next sync takes the typing in.
+        sync(&phone.p, &phone.r, &ctl()).unwrap();
+        sync(&mac.p, &mac.r, &ctl()).unwrap();
+        assert_eq!(read(&mac, "Plan.md").as_deref(), Some("typed just now\n"));
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn bring_back_restores_only_the_named_files() {
+        let (base, url) = setup("bring-back");
+        let mac = device(&base, "mac", &url);
+        write(&mac, "A.md", "a");
+        write(&mac, "B.md", "b");
+        write(&mac, "Ünï/C.md", "c");
+        sync(&mac.p, &mac.r, &ctl()).unwrap();
+        std::fs::remove_file(mac.p.files.join("A.md")).unwrap();
+        std::fs::remove_file(mac.p.files.join("B.md")).unwrap();
+        std::fs::remove_dir_all(mac.p.files.join("Ünï")).unwrap();
+        restore_held(&mac.p, &["A.md".into(), "Ünï/C.md".into()]).unwrap();
+        assert_eq!(read(&mac, "A.md").as_deref(), Some("a"));
+        assert_eq!(read(&mac, "Ünï/C.md").as_deref(), Some("c"));
+        assert_eq!(read(&mac, "B.md"), None);
+        let none = device(&base, "never-synced", &url);
+        assert!(restore_held(&none.p, &["A.md".into()]).is_err(), "no repository yet");
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn opening_follows_a_new_remote_address_and_keeps_line_endings() {
+        let (base, url) = setup("open");
+        let mut mac = device(&base, "mac", &url);
+        let repo = open(&mac.p, &mac.r).unwrap();
+        assert_eq!(repo.find_remote("origin").unwrap().url(), Some(url.as_str()));
+        assert!(!repo.is_bare() && repo.workdir().is_some());
+        let cfg = repo.config().unwrap().snapshot().unwrap();
+        assert!(!cfg.get_bool("core.autocrlf").unwrap());
+        assert!(cfg.get_bool("core.precomposeunicode").unwrap());
+        drop(repo);
+        mac.r.url = format!("{url}-renamed");
+        let repo = open(&mac.p, &mac.r).unwrap();
+        assert_eq!(repo.find_remote("origin").unwrap().url(), Some(mac.r.url.as_str()));
+        // A folder vault that moved: the repository follows it.
+        mac.p.files = base.join("moved-files");
+        let repo = open(&mac.p, &mac.r).unwrap();
+        assert_eq!(repo.workdir().unwrap().canonicalize().unwrap(), mac.p.files.canonicalize().unwrap());
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
     fn a_vault_folder_that_is_a_git_repo_keeps_its_own_git() {
         let (base, url) = setup("own-git");
         let mac = device(&base, "mac", &url);
@@ -790,5 +1218,41 @@ mod tests {
         sync(&mac.p, &mac.r, &ctl()).unwrap();
         assert!(mac.p.files.join(".git").is_file());
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn sync_state_reads_missing_or_damaged_files_as_new() {
+        let (base, url) = setup("state");
+        let mac = device(&base, "mac", &url);
+        let s = load_state(&mac.p);
+        assert!(s.last_sync.is_none() && !s.confirm_deletions);
+        save_state(&mac.p, &SyncState { last_sync: Some(42), confirm_deletions: true }).unwrap();
+        let s = load_state(&mac.p);
+        assert_eq!((s.last_sync, s.confirm_deletions), (Some(42), true));
+        std::fs::write(&mac.p.state, "{broken").unwrap();
+        assert!(load_state(&mac.p).last_sync.is_none());
+        std::fs::write(&mac.p.state, r#"{"last_sync":7}"#).unwrap();
+        assert_eq!(load_state(&mac.p).last_sync, Some(7), "older files without confirm_deletions still read");
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn git_errors_become_plain_sentences() {
+        use git2::{ErrorClass, ErrorCode};
+        let e = |code, m: &str| Error::from(git2::Error::new(code, ErrorClass::Net, m));
+        assert!(matches!(e(ErrorCode::User, "callback returned"), Error::Cancelled));
+        for m in ["unexpected http status code: 401", "authentication required"] {
+            assert!(e(ErrorCode::GenericError, m).to_string().starts_with("Your GitHub sign-in expired"), "{m}");
+        }
+        assert!(e(ErrorCode::Auth, "x").to_string().starts_with("Your GitHub sign-in expired"));
+        for m in ["unexpected http status code: 403", "Permission to x denied"] {
+            assert!(e(ErrorCode::GenericError, m).to_string().starts_with("GitHub didn't let this account write"), "{m}");
+        }
+        for m in ["failed to resolve address for github.com", "Operation timed out", "network is unreachable", "could not connect to server", "offline"] {
+            assert!(matches!(e(ErrorCode::GenericError, m), Error::Offline), "{m}");
+        }
+        let other = e(ErrorCode::GenericError, "object not found");
+        assert!(matches!(&other, Error::Git(m) if m == "object not found"));
+        assert_eq!(other.friendly().0, "git");
     }
 }
