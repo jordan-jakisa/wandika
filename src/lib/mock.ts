@@ -109,7 +109,11 @@ const within = (path: string) => (k: string) => k === path || k.startsWith(path 
 const LOCKED = "Encrypted notes are locked. Unlock them with your passphrase.";
 const locked = (path: string) => path.endsWith(".age") && !encryption.unlocked;
 
-/** The daily note for `date` (YYYY-MM-DD, today when absent), created when it doesn't exist yet. */
+/**
+ * The daily note for `date` (YYYY-MM-DD, today when absent), created when it doesn't exist yet.
+ * The mock has no .obsidian settings, so it always uses Daily/ (the core's choice for a vault
+ * without them; with Obsidian's daily-note settings and no folder, the core uses the vault root).
+ */
 function daily(date?: string | null) {
   const day = date ?? iso(new Date());
   const d = new Date(`${day}T12:00:00`);
