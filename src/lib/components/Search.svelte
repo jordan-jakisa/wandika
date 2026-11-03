@@ -1,11 +1,14 @@
 <script lang="ts">
-  import { FilePlus, FileText, Lock, Search } from "@lucide/svelte";
+  import { ArrowLeft, FilePlus, FileText, Lock, Search, X } from "@lucide/svelte";
+  import { isIOS } from "../platform";
   import { api } from "../api";
   import { app } from "../app.svelte";
   import type { SearchHit } from "../types";
 
   /** `palette`: the ⌘K overlay on the Mac. `page`: the Search tab on phones. */
-  let { mode = "palette" }: { mode?: "palette" | "page" } = $props();
+  /** `onExit`: the page's way out (back arrow on Android, Cancel on iOS). */
+  let { mode = "palette", onExit }: { mode?: "palette" | "page"; onExit?: () => void } = $props();
+  let focused = $state(false);
 
   let query = $state("");
   let hits = $state<SearchHit[]>([]);
@@ -58,6 +61,18 @@
     queueMicrotask(() => input?.focus());
   });
 
+  /** Leaves Search: the field empties and the keyboard goes down. */
+  function exit() {
+    query = "";
+    input?.blur();
+    onExit?.();
+  }
+
+  function clear() {
+    query = "";
+    input?.focus();
+  }
+
   async function choose(i: number) {
     if (i < results.length) return app.open(results[i].path);
     if (canCreate) {
@@ -84,14 +99,23 @@
       void choose(selected);
     } else if (e.key === "Escape" && mode === "palette") {
       app.switcherOpen = false;
+    } else if (e.key === "Escape" && onExit) {
+      exit();
     }
   }
 </script>
 
-<div class="search {mode}">
+<div class="search {mode}" class:ios={isIOS}>
   <div class="input-row">
-    <Search size={18} />
+    {#if onExit && !isIOS}
+      <!-- Android's search view: a back arrow on the left leaves search. -->
+      <button class="icon-btn lead" onclick={exit} aria-label="Back"><ArrowLeft size={20} /></button>
+    {:else}
+      <Search size={18} />
+    {/if}
     <input
+      onfocus={() => (focused = true)}
+      onblur={() => (focused = false)}
       bind:this={input}
       bind:value={query}
       onkeydown={onKey}
@@ -106,6 +130,13 @@
       spellcheck="false"
       type="search"
     />
+    {#if onExit && query}
+      <button class="icon-btn clear" onclick={clear} aria-label="Clear search"><X size={18} /></button>
+    {/if}
+    {#if onExit && isIOS && (focused || query)}
+      <!-- iOS: Cancel beside the field leaves search. -->
+      <button class="cancel" onclick={exit}>Cancel</button>
+    {/if}
   </div>
   <ul id="search-results" role="listbox" aria-label={query.trim() ? "Results" : "Recent notes"}>
     {#if !query.trim() && recent.length}
@@ -166,6 +197,26 @@
     padding: 0 16px;
     border-bottom: 1px solid var(--rule);
     color: var(--graphite);
+  }
+  .lead {
+    margin-left: -8px;
+    color: var(--ink);
+  }
+  .clear {
+    color: var(--graphite);
+  }
+  .cancel {
+    flex: none;
+    min-height: var(--target);
+    padding: 0 0 0 4px;
+    border: 0;
+    background: none;
+    color: var(--papyrus);
+    font: inherit;
+  }
+  /* The field's own clear button would sit beside ours. */
+  .page input::-webkit-search-cancel-button {
+    display: none;
   }
   input {
     flex: 1;

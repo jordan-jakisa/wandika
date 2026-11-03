@@ -179,3 +179,40 @@ test("Escape leaves the Search tab alone", async () => {
   await user.type(screen.getByRole("combobox"), "{Escape}");
   expect(app.switcherOpen).toBe(true);
 });
+
+test("on the Search page, the back arrow empties the field and leaves", async () => {
+  const user = userEvent.setup();
+  const onExit = vi.fn();
+  render(Search, { mode: "page", onExit });
+  const field = screen.getByRole("combobox", { name: "Search notes" });
+  await user.type(field, "plan");
+  await user.click(screen.getByRole("button", { name: "Back" }));
+  expect(onExit).toHaveBeenCalledTimes(1);
+  expect(field).toHaveValue("");
+  expect(field).not.toHaveFocus();
+});
+
+test("the clear button shows once there's text, and clears it", async () => {
+  const user = userEvent.setup();
+  render(Search, { mode: "page", onExit: vi.fn() });
+  expect(screen.queryByRole("button", { name: "Clear search" })).not.toBeInTheDocument();
+  const field = screen.getByRole("combobox", { name: "Search notes" });
+  await user.type(field, "plan");
+  await user.click(screen.getByRole("button", { name: "Clear search" }));
+  expect(field).toHaveValue("");
+  expect(field).toHaveFocus();
+});
+
+test("Escape leaves the Search page too", async () => {
+  const user = userEvent.setup();
+  const onExit = vi.fn();
+  render(Search, { mode: "page", onExit });
+  await waitFor(() => expect(screen.getByRole("combobox", { name: "Search notes" })).toHaveFocus());
+  await user.keyboard("{Escape}");
+  expect(onExit).toHaveBeenCalled();
+});
+
+test("the ⌘K palette has no back arrow; Escape closes it as before", () => {
+  render(Search);
+  expect(screen.queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
+});

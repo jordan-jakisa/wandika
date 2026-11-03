@@ -597,6 +597,31 @@ describe("on a phone", () => {
     expect(app.current).toBeNull();
   });
 
+  test("Search has a way out: the back arrow and the system back gesture return to the last tab", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(tabs().getByRole("button", { name: "Today" }));
+    await user.click(tabs().getByRole("button", { name: "Search" }));
+    expect(history.state).toEqual({ wandika: "search" });
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    expect(app.tab).toBe("today");
+    await user.click(tabs().getByRole("button", { name: "Search" }));
+    window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
+    expect(app.tab).toBe("today");
+  });
+
+  test("opening a note from Search swaps the history entry, so Back closes the note", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(tabs().getByRole("button", { name: "Search" }));
+    expect(history.state).toEqual({ wandika: "search" });
+    app.open("Welcome.md");
+    await screen.findByRole("textbox", { name: "Note title" });
+    expect(history.state).toEqual({ wandika: "note" });
+    window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
+    expect(app.current).toBeNull();
+  });
+
   test("while Settings is open, the back gesture is left to Settings", async () => {
     renderWorkspace();
     app.open("Welcome.md");

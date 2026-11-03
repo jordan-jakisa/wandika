@@ -105,26 +105,35 @@
   }
 
   // Phones: system back (Android) and swipe back (iOS) leave the note, as in native apps. Opening
-  // a note adds a history entry so the system back gesture has somewhere to go.
-  let notePushed = false;
+  // a note, or the Search tab, adds one history entry so the system back gesture has somewhere to go.
+  // One entry, replaced when a search opens a note, so a back never races a new entry.
+  let layer: "note" | "search" | null = null;
+  /** The tab to return to when Search is left. */
+  let beforeSearch: Tab = "notes";
+  $effect(() => {
+    if (app.tab !== "search") beforeSearch = app.tab;
+  });
   $effect(() => {
     if (wide) return;
-    const open = !!app.current;
-    if (open && !notePushed) {
-      history.pushState({ wandika: "note" }, "");
-      notePushed = true;
-    } else if (!open && notePushed) {
-      notePushed = false;
-      if (history.state?.wandika === "note") history.back();
-    }
+    const want = app.current ? "note" : app.tab === "search" ? "search" : null;
+    untrack(() => {
+      if (want === layer) return;
+      if (want && !layer) history.pushState({ wandika: want }, "");
+      else if (want) history.replaceState({ wandika: want }, "");
+      else if (history.state?.wandika) history.back();
+      layer = want;
+    });
   });
   function onPopState() {
     // Settings keeps its own screens in history and handles back itself.
     if (app.settingsOpen) return;
-    if (notePushed) {
-      notePushed = false;
-      app.current = null;
-    }
+    const was = layer;
+    layer = null;
+    if (was === "note") app.current = null;
+    else if (was === "search") leaveSearch();
+  }
+  function leaveSearch() {
+    app.tab = beforeSearch === "search" ? "notes" : beforeSearch;
   }
 
   // iOS: drag from the left edge to go back.
@@ -483,7 +492,7 @@
             {:else if app.tab === "graph"}
               <div class="graph-host phone-graph"><GraphView /></div>
             {:else}
-              <Search mode="page" />
+              <Search mode="page" onExit={leaveSearch} />
             {/if}
           </div>
         {/key}
