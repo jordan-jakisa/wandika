@@ -137,4 +137,102 @@ mod tests {
         let json = serde_json::to_value(Error::Offline).unwrap();
         assert_eq!(json["code"], "offline");
     }
+
+    fn code(e: Error) -> &'static str {
+        e.friendly().0
+    }
+
+    fn github(status: u16, message: &str) -> Error {
+        Error::GitHub { status, message: message.into() }
+    }
+
+    #[test]
+    fn every_github_status_gets_its_own_code() {
+        assert_eq!(code(github(429, "slow down")), "github_rate_limit", "429 is a limit whatever it says");
+        assert_eq!(code(github(403, "You have exceeded a secondary RATE LIMIT")), "github_rate_limit");
+        assert_eq!(code(github(403, "Resource not accessible by integration")), "github_forbidden");
+        assert_eq!(code(github(404, "Not Found")), "github_not_found");
+        assert_eq!(code(github(409, "Git Repository is empty.")), "github_conflict");
+        assert_eq!(code(github(422, "name already exists on this account")), "github_name_taken");
+        assert_eq!(code(github(422, "Validation Failed")), "github_invalid");
+        assert_eq!(code(github(500, "Server Error")), "github_down");
+        assert_eq!(code(github(503, "Unavailable")), "github_down");
+        assert_eq!(code(github(400, "Bad request")), "github");
+        assert_eq!(code(github(418, "teapot")), "github");
+    }
+
+    #[test]
+    fn provider_errors_name_the_provider_and_say_what_to_do() {
+        let p = |status| Error::Provider { provider: "Outlook", status, message: "invalid_grant".into() };
+        for (status, want) in [
+            (400, "provider_auth"),
+            (401, "provider_auth"),
+            (403, "provider_forbidden"),
+            (429, "provider_rate_limit"),
+            (500, "provider_down"),
+            (502, "provider_down"),
+            (404, "provider"),
+        ] {
+            let (code, text) = p(status).friendly();
+            assert_eq!(code, want, "status {status}");
+            assert!(text.starts_with("Outlook "), "{text}");
+            assert!(!text.contains("invalid_grant"), "raw provider text stays in detail");
+        }
+        assert_eq!(p(401).to_string(), "Outlook returned 401: invalid_grant");
+    }
+
+    #[test]
+    fn file_errors_say_what_happened_without_os_text() {
+        for (kind, want) in [
+            (ErrorKind::StorageFull, "disk_full"),
+            (ErrorKind::PermissionDenied, "no_access"),
+            (ErrorKind::ReadOnlyFilesystem, "no_access"),
+            (ErrorKind::NotFound, "not_found"),
+            (ErrorKind::Interrupted, "io"),
+        ] {
+            let (code, text) = Error::Io(std::io::Error::from(kind)).friendly();
+            assert_eq!(code, want, "{kind:?}");
+            assert!(!text.contains("os error"));
+        }
+    }
+
+    #[test]
+    fn plain_states_have_stable_codes() {
+        assert_eq!(msg("Give the note a name.").friendly(), ("message", "Give the note a name.".to_string()));
+        assert_eq!(code(Error::Offline), "offline");
+        assert_eq!(code(Error::Locked), "locked");
+        assert_eq!(code(Error::SyncBusy), "sync_busy");
+        let (c, text) = Error::Cancelled.friendly();
+        assert_eq!(c, "cancelled");
+        assert!(text.contains("Nothing changed on GitHub"));
+        let (c, text) = Error::Git("object not found - no match for id".into()).friendly();
+        assert_eq!(c, "git");
+        assert!(!text.contains("object not found"));
+        let bad: Error = serde_json::from_str::<serde_json::Value>("{").unwrap_err().into();
+        assert_eq!(code(bad), "bad_response");
+    }
+
+    #[test]
+    fn serializes_code_message_and_raw_detail() {
+        let json = serde_json::to_value(github(404, "Not Found")).unwrap();
+        assert_eq!(json["code"], "github_not_found");
+        assert!(json["message"].as_str().unwrap().contains("can't find that repository"));
+        assert_eq!(json["detail"], "GitHub returned 404: Not Found");
+        assert_eq!(json.as_object().unwrap().len(), 3);
+        let json = serde_json::to_value(Error::Git("bad pack".into())).unwrap();
+        assert_eq!(json["detail"], "Git: bad pack");
+    }
+
+    #[test]
+    fn a_refused_connection_reads_as_offline_and_a_bad_request_as_network() {
+        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        // Nothing listens on a port that was just freed.
+        let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        let refused = rt.block_on(reqwest::get(format!("http://127.0.0.1:{port}/"))).unwrap_err();
+        assert!(matches!(Error::from(refused), Error::Offline));
+        let bad = rt.block_on(reqwest::Client::new().get("not a url").send()).unwrap_err();
+        let e = Error::from(bad);
+        assert!(matches!(e, Error::Http(_)));
+        assert_eq!(code(e), "network");
+    }
 }
