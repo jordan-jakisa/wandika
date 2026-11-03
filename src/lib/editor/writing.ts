@@ -33,12 +33,7 @@ export function tag(view: EditorView) {
 }
 
 /** Converts the cursor's lines; with no selection the cursor stays at the end of its line. */
-export function lines(view: EditorView, kind: LineKind) {
-  const empty = view.state.selection.main.empty;
-  setLines(view, kind);
-  if (empty) view.dispatch({ selection: EditorSelection.cursor(view.state.selection.main.to) });
-  return true;
-}
+export const lines = (view: EditorView, kind: LineKind) => setLines(view, kind);
 
 export function heading(view: EditorView) {
   const line = view.state.doc.lineAt(view.state.selection.main.head);

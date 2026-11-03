@@ -16,11 +16,13 @@ export function setLines(view: EditorView, kind: LineKind) {
     return { from, to, insert: convertLines(lines, kind).join("\n") };
   });
   const tx = state.update({ changes });
-  // Keep whole converted lines selected so the next button applies to the same block.
-  const ranges = changes.map((c) => {
+  // Keep whole converted lines selected so the next button applies to the same block. A cursor
+  // (a shortcut pressed while typing) stays a cursor at the end of its line, so typing carries on
+  // instead of replacing the line.
+  const ranges = changes.map((c, i) => {
     const start = tx.changes.mapPos(c.from, -1);
     const end = tx.changes.mapPos(c.to, 1);
-    return EditorSelection.range(start, end);
+    return state.selection.ranges[i].empty ? EditorSelection.cursor(end) : EditorSelection.range(start, end);
   });
   // One spec: the selection then refers to the changed document and is not mapped a second time.
   view.dispatch({ changes, selection: EditorSelection.create(ranges) });

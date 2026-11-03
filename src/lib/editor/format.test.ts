@@ -42,6 +42,27 @@ test("each selection range converts on its own", () => {
   assert.equal(show(view.state), "«1. a»\nb\n«1. c\n2. d»");
 });
 
+test("with only a cursor, the line converts and the cursor stays at its end, ready to type", () => {
+  const view = viewOf("Mi‸lk\nEggs");
+  setLines(view, "bullet");
+  assert.equal(show(view.state), "- Milk‸\nEggs");
+});
+
+test("a list button on an empty line starts an item", () => {
+  const view = viewOf("‸");
+  setLines(view, "task");
+  assert.equal(show(view.state), "- [ ] ‸");
+});
+
+test("list buttons work at the very start and end of a note", () => {
+  const start = viewOf("‸first\nlast");
+  setLines(start, "quote");
+  assert.equal(show(start.state), "> first‸\nlast");
+  const end = viewOf("first\nlast‸");
+  setLines(end, "quote");
+  assert.equal(show(end.state), "first\n> last‸");
+});
+
 test("wrapping toggles a mark around the selection and keeps it selected", () => {
   const view = viewOf("a «word» here");
   wrap(view, "**");
