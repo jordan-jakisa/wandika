@@ -429,8 +429,10 @@ pub struct Index {
 
 fn parse(rel: &str, text: &str, modified: i64, encrypted: bool, locked: bool) -> NoteMeta {
     let body = strip_code(text);
-    let mut links: Vec<String> = WIKILINK.captures_iter(&body).map(|c| c[1].trim().to_string()).collect();
-    links.dedup();
+    // Each link once, in the order written.
+    let mut seen = std::collections::HashSet::new();
+    let links: Vec<String> =
+        WIKILINK.captures_iter(&body).map(|c| c[1].trim().to_string()).filter(|l| seen.insert(l.clone())).collect();
     let mut tags: Vec<String> = TAG.captures_iter(&body).map(|c| c[1].to_string()).collect();
     tags.sort();
     tags.dedup();
@@ -1340,8 +1342,8 @@ mod tests {
         let m = parse("a.md", "#area/home and #Idea, #idea again\nemail a#b, #1 and # heading\n#idea", 7, true, true);
         assert_eq!(m.tags, vec!["Idea", "area/home", "idea"]);
         assert_eq!((m.modified, m.encrypted, m.locked), (7, true, true));
-        let m = parse("a.md", "[[A]] [[A]] [[ B |x]] [[C#Head]]", 0, false, false);
-        assert_eq!(m.links, vec!["A", "B", "C"], "repeats next to each other collapse; names are trimmed");
+        let m = parse("a.md", "[[A]] [[A]] [[ B |x]] [[C#Head]] [[A|again]] [[B]]", 0, false, false);
+        assert_eq!(m.links, vec!["A", "B", "C"], "each link once, in order; names are trimmed");
         assert!(!parse("a.md", "plain", 0, false, false).board);
     }
 
