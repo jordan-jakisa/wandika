@@ -9,9 +9,12 @@ const heard = vi.hoisted(() => new Map<string, (p: unknown) => void>());
 // Mocked modules survive vi.resetModules, so this stand-in forwards to a fresh real mock per test.
 const real = vi.hoisted(() => ({ mock: null as null | typeof import("./mock") }));
 const tried = vi.hoisted(() => new Map<string, number>());
+/** Commands that never answer, like a request stuck on a dead connection. */
+const hangs = vi.hoisted(() => new Set<string>());
 vi.mock("./mock", () => ({
   invoke: (cmd: string, args?: Record<string, unknown>) => {
     tried.set(cmd, (tried.get(cmd) ?? 0) + 1);
+    if (hangs.has(cmd)) return new Promise(() => {});
     return faults.has(cmd) ? Promise.reject(faults.get(cmd)) : real.mock!.invoke(cmd, args);
   },
   on: (event: string, fn: (p: unknown) => void) => (heard.set(event, fn), real.mock!.on(event, fn)),
@@ -71,6 +74,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date(2026, 10, 3, 10, 0));
   localStorage.clear();
   faults.clear();
+  hangs.clear();
   heard.clear();
   embeds.forgetNoteEmbeds.mockClear();
   tips.tip.mockClear();
@@ -950,6 +954,43 @@ describe("Today", () => {
     await settle(Promise.all([app.loadToday(), app.loadToday(true)]));
     expect(calls("tasks_vault")).toBe(1);
     expect(calls("today")).toBe(2);
+  });
+
+  test("a load that never answers is given up after 30 seconds, and the next one works", async () => {
+    const { app } = await started();
+    hangs.add("today");
+    const stuck = app.loadToday();
+    await vi.advanceTimersByTimeAsync(29_000);
+    expect(app.toast).not.toBe("Today is taking too long to load. Try again in a moment.");
+    await vi.advanceTimersByTimeAsync(1_000);
+    await stuck;
+    expect(app.toast).toBe("Today is taking too long to load. Try again in a moment.");
+    expect(app.today).toBeNull();
+    hangs.clear();
+    await settle(app.loadToday());
+    expect(app.today?.events).toHaveLength(4);
+  });
+
+  test("a stuck tasks-only refresh doesn't hold the next refresh", async () => {
+    const { app } = await started();
+    await settle(app.loadToday());
+    hangs.add("tasks_vault");
+    const stuck = app.loadToday();
+    await vi.advanceTimersByTimeAsync(30_000);
+    await stuck;
+    hangs.clear();
+    await settle(app.loadToday());
+    expect(calls("tasks_vault")).toBe(2);
+    await settle(app.loadToday(true));
+    expect(calls("today")).toBe(2);
+  });
+
+  test("a load that answers in time says nothing later", async () => {
+    const { app } = await started();
+    await settle(app.loadToday());
+    app.toast = null;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(app.toast).toBeNull();
   });
 
   test("a failure says why and keeps what was there", async () => {
