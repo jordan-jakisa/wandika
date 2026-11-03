@@ -84,7 +84,9 @@ impl Crypto {
         Self { config, identity }
     }
 
-    /// The vault's encryption settings without its key: encrypted notes stay locked.
+    /// The vault's encryption settings without its key: encrypted notes stay locked. Used by the
+    /// Mac's MCP server.
+    #[cfg(desktop)]
     pub fn locked(root: &Path) -> Self {
         let config = std::fs::read(config_file(root)).ok().and_then(|b| serde_json::from_slice::<EncConfig>(&b).ok());
         Self { config, identity: None }

@@ -3,6 +3,7 @@
 
 fn main() {
     // `wandika mcp`: the MCP server for Claude Code, on stdin and stdout, with no window.
+    #[cfg(desktop)]
     if std::env::args().nth(1).as_deref() == Some("mcp") {
         std::process::exit(wandika_lib::mcp_main());
     }

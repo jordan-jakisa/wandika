@@ -742,8 +742,8 @@ fn yaml(s: &str) -> String {
 
 /// Notes Claude Code changed through `wandika mcp` in the last two minutes, for the app to reload.
 #[tauri::command]
-pub async fn external_changes(app: S<'_>) -> Result<Vec<crate::mcp::Change>> {
-    let list = crate::mcp::read_changes(&crate::mcp::changes_file(&app)?);
+pub async fn external_changes(app: S<'_>) -> Result<Vec<crate::outside::Change>> {
+    let list = crate::outside::read_changes(&crate::outside::changes_file(&app)?);
     if !list.is_empty() {
         changed(&app);
     }
@@ -952,9 +952,9 @@ mod tests {
         let (a, dir) = app("external");
         block_on(vault_create_local(a.state(), "Notes".into(), None)).unwrap();
         assert!(block_on(external_changes(a.state())).unwrap().is_empty());
-        let file = crate::mcp::changes_file(&a.state()).unwrap();
+        let file = crate::outside::changes_file(&a.state()).unwrap();
         std::fs::write(&file, r#"[{"path":"Ideas.md","at":5}]"#).unwrap();
-        assert_eq!(block_on(external_changes(a.state())).unwrap(), vec![crate::mcp::Change { path: "Ideas.md".into(), at: 5 }]);
+        assert_eq!(block_on(external_changes(a.state())).unwrap(), vec![crate::outside::Change { path: "Ideas.md".into(), at: 5 }]);
         std::fs::write(&file, "broken").unwrap();
         assert!(block_on(external_changes(a.state())).unwrap().is_empty(), "an unreadable list is no changes");
         let _ = std::fs::remove_dir_all(&dir);

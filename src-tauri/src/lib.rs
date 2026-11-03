@@ -5,7 +5,9 @@ mod connectors;
 mod crypto;
 mod error;
 mod github;
+#[cfg(desktop)]
 mod mcp;
+mod outside;
 mod secrets;
 mod state;
 mod sync;
@@ -16,7 +18,8 @@ mod vault;
 use tauri::Manager;
 use tauri_plugin_deep_link::DeepLinkExt;
 
-/// `wandika mcp`: serves Claude Code over stdin and stdout until it disconnects.
+/// `wandika mcp`: serves Claude Code over stdin and stdout until it disconnects. Mac only.
+#[cfg(desktop)]
 pub fn mcp_main() -> i32 {
     mcp::run()
 }

@@ -4,18 +4,17 @@
 //! Every change is noted in the vault's data folder, so a running Wandika reloads what changed.
 
 use crate::crypto::Crypto;
-use crate::error::{msg, Error, Result};
+use crate::error::{msg, Result};
+use crate::outside::{changes_file, record_change};
 use crate::state::App;
 use crate::vault::{self, VaultTask};
 use chrono::{Local, NaiveDate};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::{json, Value};
 use std::io::{BufRead, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 const PROTOCOL: &str = "2025-06-18";
-/// How long a change stays in the list a running app reads.
-const KEEP_MS: i64 = 120_000;
 
 /// Where the app keeps its settings: the same folder Tauri gives the app.
 pub fn data_dir() -> PathBuf {
@@ -258,35 +257,6 @@ pub fn task_matches(t: &VaultTask, query: &str) -> bool {
     })
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct Change {
-    pub path: String,
-    pub at: i64,
-}
-
-/// The file a running Wandika reads to learn what changed outside it.
-pub fn changes_file(app: &App) -> Result<PathBuf> {
-    let state = app.paths()?.state;
-    Ok(state.parent().ok_or_else(|| msg("No data folder for this vault."))?.join("external.json"))
-}
-
-pub fn read_changes(file: &Path) -> Vec<Change> {
-    std::fs::read(file).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
-}
-
-fn record_change(file: &Path, paths: &[String]) -> Result<()> {
-    let now = chrono::Utc::now().timestamp_millis();
-    let mut list: Vec<Change> = read_changes(file).into_iter().filter(|c| now - c.at < KEEP_MS).collect();
-    list.extend(paths.iter().map(|p| Change { path: p.clone(), at: now }));
-    if let Some(dir) = file.parent() {
-        std::fs::create_dir_all(dir)?;
-    }
-    let tmp = file.with_extension("json.tmp");
-    std::fs::write(&tmp, serde_json::to_vec(&list).map_err(Error::from)?)?;
-    std::fs::rename(&tmp, file)?;
-    Ok(())
-}
-
 fn tools() -> Value {
     let path = json!({ "type": "string", "description": "The note's path in the vault, like \"Projects/Launch.md\"." });
     let task_ref = |extra: Value| {
@@ -339,6 +309,7 @@ fn tools() -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::outside::read_changes;
     use crate::state::VaultConfig;
 
     fn server(tag: &str) -> (Server, PathBuf, PathBuf) {
