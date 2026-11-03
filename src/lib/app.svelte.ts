@@ -6,8 +6,10 @@ import { TEMPLATE } from "./kanban";
 import type { Entry, NoteMeta, Snippet, Status, SyncReport, Today } from "./types";
 
 export type Tab = "notes" | "today" | "tasks" | "projects" | "graph" | "search";
+const TABS: Tab[] = ["notes", "today", "tasks", "projects", "graph", "search"];
 
 export type SettingsSection = "vault" | "appearance" | "editor" | "encryption" | "connections" | "account" | "about";
+const SECTIONS: SettingsSection[] = ["vault", "appearance", "editor", "encryption", "connections", "account", "about"];
 
 export interface Ask {
   title: string;
@@ -114,16 +116,18 @@ class AppState {
   }
 
   #restore(vaultId: string) {
-    let s: { current?: string | null; tab?: Tab; showToday?: boolean; settingsSection?: SettingsSection } = {};
+    let s: { current?: unknown; tab?: unknown; showToday?: unknown; settingsSection?: unknown };
     try {
       s = JSON.parse(localStorage.getItem(`${SESSION_KEY}:${vaultId}`) ?? "{}");
     } catch {
       return;
     }
-    if (s.tab) this.tab = s.tab;
+    // Saved by an older version, edited by hand or cut short: take only what is still valid.
+    if (!s || typeof s !== "object") return;
+    if (TABS.includes(s.tab as Tab)) this.tab = s.tab as Tab;
     if (typeof s.showToday === "boolean") this.showToday = s.showToday;
-    if (s.settingsSection) this.settingsSection = s.settingsSection;
-    if (s.current && this.tree.some((e) => e.path === s.current)) {
+    if (SECTIONS.includes(s.settingsSection as SettingsSection)) this.settingsSection = s.settingsSection as SettingsSection;
+    if (typeof s.current === "string" && this.tree.some((e) => e.path === s.current)) {
       this.openCount++;
       this.current = s.current;
     }
