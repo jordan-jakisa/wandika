@@ -47,7 +47,7 @@ test("a table with only a header row renders an empty body", () => {
 
 test("text that only looks like a table stays text", () => {
   const { view } = setup("x‸\n\n| a | b |\nno delimiter row");
-  assert.equal(tableIn(view), null);
+  assert.ok(!tableIn(view));
 });
 
 test("each body row knows where its source line starts", () => {
@@ -63,7 +63,7 @@ test("the source shows while the focused cursor is in the table", async () => {
   await focus(view);
   assert.ok(tableIn(view));
   view.dispatch({ selection: { anchor: view.state.doc.toString().indexOf("Ann") } });
-  assert.equal(tableIn(view), null);
+  assert.ok(!tableIn(view));
   assert.equal(decorations(view).filter((d) => d.kind === "Table").length, 0);
   select(view, `Intro‸\n\n${TABLE}\n\nAfter`);
   assert.ok(tableIn(view));
@@ -73,7 +73,7 @@ test("the table renders again when the editor loses focus with the cursor inside
   const { view } = setup(doc);
   await focus(view);
   view.dispatch({ selection: { anchor: view.state.doc.toString().indexOf("Ann") } });
-  assert.equal(tableIn(view), null);
+  assert.ok(!tableIn(view));
   await blur(view);
   assert.ok(tableIn(view));
 });
@@ -86,7 +86,7 @@ test("an unfocused editor renders the table even with the cursor in it", () => {
 test("selecting across the table from outside shows its source", async () => {
   const { view } = setup(`«Intro\n\n| Name»${TABLE.slice(6)}`);
   await focus(view);
-  assert.equal(tableIn(view), null);
+  assert.ok(!tableIn(view));
 });
 
 test("clicking a row puts the cursor at the start of that row's source", async () => {
@@ -96,7 +96,7 @@ test("clicking a row puts the cursor at the start of that row's source", async (
   const e = mousedown(row.cells[1]);
   assert.ok(e.defaultPrevented);
   assert.equal(view.state.selection.main.head, view.state.doc.toString().indexOf("| **Ann**"));
-  assert.equal(tableIn(view), null);
+  assert.ok(!tableIn(view));
 });
 
 test("clicking the header puts the cursor at the start of the table", async () => {

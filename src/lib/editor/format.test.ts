@@ -137,13 +137,13 @@ test("shortcuts: checklist, bullets and numbers", () => {
 
 test("the format bar appears only while text is selected", () => {
   const view = viewOf("a ‸word", formatting);
-  assert.equal(toolbarOf(view), null);
+  assert.ok(!toolbarOf(view));
   select(view, "a «word»");
   const bar = toolbarOf(view)!;
   assert.equal(bar.getAttribute("role"), "toolbar");
   assert.equal(bar.getAttribute("aria-label"), "Format selection");
   select(view, "a word‸");
-  assert.equal(toolbarOf(view), null);
+  assert.ok(!toolbarOf(view));
 });
 
 test("the format bar has the list buttons, a divider, then the text buttons", () => {
