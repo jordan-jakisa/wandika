@@ -17,10 +17,10 @@ fi
 printf 'WANDIKA_PUBLIC=1\n' > .env.release
 trap 'rm -f .env.release' EXIT
 
-# Refuses a binary that still asks for Gmail: the public build must not.
+# Refuses a binary that isn't stamped as the public build (src-tauri/src/config.rs, BUILD_MARK).
 check_public() {
-  if strings "$1" | grep -q "gmail.readonly"; then
-    echo "This build still asks for Gmail, so it isn't the public build. Not released: $1"
+  if ! strings "$1" | grep -q "wandika-build=public"; then
+    echo "This isn't the public build (no Gmail, Google after review). Not released: $1"
     exit 1
   fi
 }

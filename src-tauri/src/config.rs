@@ -18,7 +18,7 @@ pub fn github_client_id() -> Result<&'static str> {
 /// the app; until then a public build doesn't offer Google. WANDIKA_GOOGLE_REVIEWED=1 turns it on.
 /// https://developers.google.com/identity/protocols/oauth2/policies
 fn google_allowed() -> Result<()> {
-    if public(option_env!("WANDIKA_PUBLIC")) && !public(option_env!("WANDIKA_GOOGLE_REVIEWED")) {
+    if PUBLIC && !public(option_env!("WANDIKA_GOOGLE_REVIEWED")) {
         return Err(msg("Google Calendar and Tasks come to this version once Google has reviewed Wandika."));
     }
     Ok(())
@@ -46,11 +46,35 @@ pub fn google_mobile_client_id() -> Result<&'static str> {
 /// Public builds (the downloads on the website, TestFlight) leave Gmail out: reading mail is a
 /// restricted Google scope, so only Jordan's own builds ask for it. Set WANDIKA_PUBLIC=1 to build one.
 pub fn gmail() -> bool {
-    !public(option_env!("WANDIKA_PUBLIC"))
+    !PUBLIC
 }
 
-fn public(flag: Option<&str>) -> bool {
-    flag.is_some_and(|v| !matches!(v.trim(), "" | "0" | "false"))
+/// Set at build time from WANDIKA_PUBLIC (the release scripts write it to .env.release).
+const PUBLIC: bool = public(option_env!("WANDIKA_PUBLIC"));
+
+/// Stamped into every binary, so the release scripts can prove a build is the public one.
+#[used]
+pub static BUILD_MARK: &str = if PUBLIC { "wandika-build=public" } else { "wandika-build=own" };
+
+/// True for a set flag: anything but empty, "0" or "false".
+const fn public(flag: Option<&str>) -> bool {
+    let Some(v) = flag else { return false };
+    let b = v.as_bytes();
+    let (mut start, mut end) = (0, b.len());
+    while start < end && b[start].is_ascii_whitespace() {
+        start += 1;
+    }
+    while end > start && b[end - 1].is_ascii_whitespace() {
+        end -= 1;
+    }
+    let n = end - start;
+    if n == 0 {
+        return false;
+    }
+    if n == 1 && b[start] == b'0' {
+        return false;
+    }
+    !(n == 5 && b[start] == b'f' && b[start + 1] == b'a' && b[start + 2] == b'l' && b[start + 3] == b's' && b[start + 4] == b'e')
 }
 
 pub fn microsoft_client_id() -> Result<&'static str> {
@@ -73,7 +97,7 @@ mod tests {
 
     #[test]
     fn a_public_build_offers_google_only_after_google_has_reviewed_it() {
-        let public_unreviewed = public(option_env!("WANDIKA_PUBLIC")) && !public(option_env!("WANDIKA_GOOGLE_REVIEWED"));
+        let public_unreviewed = PUBLIC && !public(option_env!("WANDIKA_GOOGLE_REVIEWED"));
         match google_desktop() {
             Err(e) if public_unreviewed => assert!(e.to_string().contains("once Google has reviewed Wandika"), "{e}"),
             _ => assert!(!public_unreviewed),
@@ -82,9 +106,10 @@ mod tests {
 
     #[test]
     fn a_public_build_is_marked_by_a_set_flag() {
-        for (flag, is) in [(None, false), (Some(""), false), (Some("0"), false), (Some("false"), false), (Some("1"), true), (Some("yes"), true)] {
+        for (flag, is) in [(None, false), (Some(""), false), (Some(" 0 "), false), (Some("false"), false), (Some("1"), true), (Some("yes"), true), (Some("falsey"), true)] {
             assert_eq!(public(flag), is, "{flag:?}");
         }
+        assert_eq!(BUILD_MARK, if PUBLIC { "wandika-build=public" } else { "wandika-build=own" });
         assert_eq!(configured()["gmail"], gmail());
     }
 
