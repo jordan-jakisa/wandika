@@ -1,6 +1,6 @@
 //! Everything the interface can ask the Rust core to do.
 
-use crate::connectors::{apple, google, microsoft, oauth, CalEvent, MailItem, RemoteTask};
+use crate::connectors::{apple, google, microsoft, oauth, CalEvent, MailBody, MailItem, RemoteTask};
 use crate::crypto::{Crypto, CryptoStatus};
 use crate::error::{msg, Result};
 use crate::github::{self, DeviceCode, Repo, User};
@@ -408,6 +408,24 @@ pub async fn task_toggle(app: S<'_>, path: String, line: usize, text: String) ->
     Ok(done)
 }
 
+/// Changes a task's text (name, tags, pin, priority, due date) and the notes under it.
+#[tauri::command]
+pub async fn task_edit(app: S<'_>, path: String, line: usize, expected: String, text: String, details: String) -> Result<()> {
+    vault::edit_task(&app.root()?, &path, line, &expected, &text, &details, &app.crypto()?)?;
+    changed(&app);
+    Ok(())
+}
+
+/// Adds a task to today's note, in its Tasks section. Returns the note's path.
+#[tauri::command]
+pub async fn task_add(app: S<'_>, text: String) -> Result<String> {
+    let (root, crypto) = (app.root()?, app.crypto()?);
+    let path = vault::daily_note(&root, Local::now().date_naive(), &crypto)?;
+    vault::add_task(&root, &path, &text, &crypto)?;
+    changed(&app);
+    Ok(path)
+}
+
 fn parse_date(date: Option<String>) -> Result<NaiveDate> {
     match date {
         Some(d) => NaiveDate::parse_from_str(&d, "%Y-%m-%d").map_err(|_| msg("Dates look like 2026-11-02.")),
@@ -713,11 +731,21 @@ fn yaml(s: &str) -> String {
     format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
+/// One email, whole, to read in the app.
+#[tauri::command]
+pub async fn mail_read(app: S<'_>, source: String, id: String) -> Result<MailBody> {
+    match source.as_str() {
+        "google" => google::mail_body(&app.http, &app.secrets, &id).await,
+        "microsoft" => microsoft::mail_body(&app.http, &app.secrets, &id, true).await,
+        _ => Err(msg("Unknown mailbox.")),
+    }
+}
+
 #[tauri::command]
 pub async fn mail_to_note(app: S<'_>, source: String, id: String) -> Result<String> {
     let m = match source.as_str() {
         "google" => google::mail_body(&app.http, &app.secrets, &id).await?,
-        "microsoft" => microsoft::mail_body(&app.http, &app.secrets, &id).await?,
+        "microsoft" => microsoft::mail_body(&app.http, &app.secrets, &id, false).await?,
         _ => return Err(msg("Unknown mailbox.")),
     };
     let mut body = format!("---\nfrom: {}\nto: {}\ndate: {}\n", yaml(&m.from), yaml(&m.to), yaml(&m.date));
@@ -998,6 +1026,15 @@ mod tests {
         assert_eq!((tasks.len(), tasks[0].line), (1, 1));
         assert!(block_on(task_toggle(a.state(), "Projects/Plan.md".into(), 1, tasks[0].text.clone())).unwrap());
         assert!(block_on(tasks_vault(a.state())).unwrap()[0].done);
+        let text = block_on(tasks_vault(a.state())).unwrap()[0].text.clone();
+        block_on(task_edit(a.state(), "Projects/Plan.md".into(), 1, text, "Ship it 📌 📅 2026-11-05".into(), "with notes".into())).unwrap();
+        let edited = &block_on(tasks_vault(a.state())).unwrap()[0];
+        assert_eq!((edited.text.as_str(), edited.details.as_str(), edited.due.as_deref()), ("Ship it 📌 📅 2026-11-05", "with notes", Some("2026-11-05")));
+        let daily = block_on(task_add(a.state(), "Reply to Amina [email](https://mail.google.com/mail/u/0/#inbox/abc)".into())).unwrap();
+        assert!(block_on(note_read(a.state(), daily.clone())).unwrap().contains("## Tasks\n\n- [ ] Reply to Amina [email]"));
+        assert!(block_on(tasks_vault(a.state())).unwrap().iter().any(|t| t.path == daily && t.text.starts_with("Reply to Amina")));
+        block_on(note_write(a.state(), "Projects/Plan.md".into(), block_on(note_read(a.state(), "Projects/Plan.md".into())).unwrap().replace("Ship it 📌 📅 2026-11-05\n  with notes", "Ship it"))).unwrap();
+        std::fs::remove_file(root.join(&daily)).unwrap();
 
         assert_eq!(block_on(entry_rename(a.state(), "Projects/Plan.md".into(), "Roadmap".into())).unwrap(), "Projects/Roadmap.md");
         assert_eq!(block_on(note_read(a.state(), "Daily.md".into())).unwrap(), "Talked about [[Roadmap]]");
@@ -1141,6 +1178,7 @@ mod tests {
         );
         assert_eq!(block_on(remote_task_toggle(a.state(), "jira".into(), "l".into(), "i".into(), true)).unwrap_err().to_string(), "Unknown task list.");
         assert_eq!(block_on(mail_to_note(a.state(), "yahoo".into(), "i".into())).unwrap_err().to_string(), "Unknown mailbox.");
+        assert_eq!(block_on(mail_read(a.state(), "yahoo".into(), "i".into())).unwrap_err().to_string(), "Unknown mailbox.");
         assert_eq!(
             block_on(remote_task_toggle(a.state(), "google".into(), "l".into(), "i".into(), true)).unwrap_err().to_string(),
             "Connect Google in Settings first.",

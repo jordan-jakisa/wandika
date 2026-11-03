@@ -41,6 +41,8 @@ pub struct MailBody {
     pub to: String,
     pub date: String,
     pub text: String,
+    /// The HTML version, for reading the email in the app. The text is what goes into notes.
+    pub html: Option<String>,
     pub url: Option<String>,
 }
 
@@ -93,7 +95,9 @@ mod tests {
             serde_json::to_value(task).unwrap(),
             json!({ "id": "t", "source": "apple", "list_id": "l", "list": "Reminders", "title": "Pay", "done": false, "due": "2026-11-05" })
         );
-        let body = MailBody { subject: "s".into(), from: "f".into(), to: "t".into(), date: "d".into(), text: "x".into(), url: None };
-        assert_eq!(serde_json::to_value(body).unwrap().as_object().unwrap().len(), 6);
+        let body = MailBody { subject: "s".into(), from: "f".into(), to: "t".into(), date: "d".into(), text: "x".into(), html: Some("<p>x</p>".into()), url: None };
+        let v = serde_json::to_value(body).unwrap();
+        assert_eq!(v.as_object().unwrap().len(), 7);
+        assert_eq!(v["html"], "<p>x</p>");
     }
 }

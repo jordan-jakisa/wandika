@@ -186,15 +186,16 @@ fn mail_item(m: &Value) -> MailItem {
     }
 }
 
-pub async fn mail_body(http: &reqwest::Client, secrets: &Secrets, id: &str) -> Result<MailBody> {
-    let m = get(
-        http,
-        secrets,
-        &format!("{GRAPH}/me/messages/{id}?$select=subject,from,toRecipients,receivedDateTime,body,webLink"),
-        "outlook.body-content-type=\"text\"",
-    )
-    .await?;
-    Ok(mail_body_of(&m))
+/// The text version for notes; with `html`, also the HTML version for reading in the app.
+pub async fn mail_body(http: &reqwest::Client, secrets: &Secrets, id: &str, html: bool) -> Result<MailBody> {
+    let url = format!("{GRAPH}/me/messages/{id}?$select=subject,from,toRecipients,receivedDateTime,body,webLink");
+    let m = get(http, secrets, &url, "outlook.body-content-type=\"text\"").await?;
+    let mut body = mail_body_of(&m);
+    if html {
+        let h = get(http, secrets, &url, "outlook.body-content-type=\"html\"").await?;
+        body.html = h["body"]["content"].as_str().map(str::to_string);
+    }
+    Ok(body)
 }
 
 fn mail_body_of(m: &Value) -> MailBody {
@@ -207,6 +208,7 @@ fn mail_body_of(m: &Value) -> MailBody {
             .unwrap_or_default(),
         date: m["receivedDateTime"].as_str().unwrap_or_default().to_string(),
         text: m["body"]["content"].as_str().unwrap_or_default().trim().to_string(),
+        html: None,
         url: m["webLink"].as_str().map(str::to_string),
     }
 }

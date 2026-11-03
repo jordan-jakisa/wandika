@@ -61,6 +61,8 @@ pub struct VaultTask {
     pub text: String,
     pub done: bool,
     pub due: Option<String>,
+    /// The indented lines under the task, without their indent: its notes.
+    pub details: String,
 }
 
 /// Rejects anything that could leave the vault folder.
@@ -481,7 +483,8 @@ fn snippet(text: &str, needle: &str) -> String {
 fn tasks_in(rel: &str, title: &str, text: &str) -> Vec<VaultTask> {
     let mut out = Vec::new();
     let mut fenced = false;
-    for (i, line) in text.lines().enumerate() {
+    let text_lines: Vec<&str> = text.lines().collect();
+    for (i, line) in text_lines.iter().enumerate() {
         if line.trim_start().starts_with("```") {
             fenced = !fenced;
         }
@@ -490,15 +493,36 @@ fn tasks_in(rel: &str, title: &str, text: &str) -> Vec<VaultTask> {
         }
         if let Some(m) = TASK.captures(line) {
             let text = m[4].to_string();
+            let lines: Vec<&str> = text_lines.get(i + 1..).unwrap_or_default().to_vec();
             out.push(VaultTask {
                 path: rel.to_string(),
                 title: title.to_string(),
                 line: i,
                 due: DUE.captures(&text).map(|d| d[1].to_string()),
                 done: &m[2] != " ",
+                details: detail_block(&lines, indent_of(&m[1])).join("\n"),
                 text,
             });
         }
+    }
+    out
+}
+
+fn indent_of(prefix: &str) -> usize {
+    prefix.len() - prefix.trim_start().len()
+}
+
+/// The lines under a task that belong to it: more indented than the task, up to a blank line or
+/// another task (a subtask is a task of its own, not a note on this one). Returned without the indent.
+fn detail_block<'a>(lines: &[&'a str], indent: usize) -> Vec<&'a str> {
+    let mut out = Vec::new();
+    for line in lines {
+        let line = line.trim_end_matches('\r');
+        let own = line.len() - line.trim_start().len();
+        if line.trim().is_empty() || own <= indent || TASK.is_match(line) {
+            break;
+        }
+        out.push(line.trim_start());
     }
     out
 }
@@ -691,6 +715,76 @@ pub fn toggle_task(root: &Path, rel: &str, line: usize, expected: &str, crypto: 
     lines[line] = format!("{}{mark}{}{rest}{cr}", &caps[1], &caps[3]);
     write_note(root, rel, &lines.join("\n"), crypto)?;
     Ok(done)
+}
+
+/// Rewrites the task on `line`: its text (with the markers the app composed) and the notes under it.
+/// The checkbox and the list marker stay as they are.
+pub fn edit_task(root: &Path, rel: &str, line: usize, expected: &str, text: &str, details: &str, crypto: &Crypto) -> Result<()> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Err(msg("Give the task a name."));
+    }
+    if text.contains('\n') {
+        return Err(msg("A task is one line. Put the rest in its notes."));
+    }
+    let note = read_note(root, rel, crypto)?;
+    let mut lines: Vec<String> = note.split('\n').map(str::to_string).collect();
+    let current = lines.get(line).ok_or_else(|| msg("That task moved. Refresh and try again."))?.clone();
+    let caps = TASK.captures(&current).ok_or_else(|| msg("That task moved. Refresh and try again."))?;
+    if caps[4].trim() != expected.trim() {
+        return Err(msg("That task changed. Refresh and try again."));
+    }
+    let cr = if current.ends_with('\r') { "\r" } else { "" };
+    let indent = indent_of(&caps[1]);
+    let below: Vec<&str> = lines[line + 1..].iter().map(String::as_str).collect();
+    let old_details = detail_block(&below, indent).len();
+    let pad = format!("{}  ", &caps[1][..indent]);
+    let new_details: Vec<String> =
+        details.lines().map(str::trim_end).filter(|l| !l.trim().is_empty()).map(|l| format!("{pad}{}{cr}", l.trim_start())).collect();
+    lines[line] = format!("{}{}{}{text}{cr}", &caps[1], &caps[2], &caps[3]);
+    lines.splice(line + 1..line + 1 + old_details, new_details);
+    write_note(root, rel, &lines.join("\n"), crypto)
+}
+
+/// Adds `- [ ] text` to the end of the Tasks section of the note at `rel`, or a new Tasks section.
+pub fn add_task(root: &Path, rel: &str, text: &str, crypto: &Crypto) -> Result<()> {
+    let text = text.trim();
+    if text.is_empty() || text.contains('\n') {
+        return Err(msg("Give the task a name."));
+    }
+    let note = read_note(root, rel, crypto)?;
+    let task = format!("- [ ] {text}");
+    let mut lines: Vec<&str> = note.lines().collect();
+    let at = match lines.iter().position(|l| l.trim().eq_ignore_ascii_case("## Tasks")) {
+        Some(h) => {
+            // After the section's last non-blank line, before the next heading.
+            let end = lines[h + 1..].iter().position(|l| l.starts_with('#')).map_or(lines.len(), |p| h + 1 + p);
+            let mut at = end;
+            while at > h + 1 && lines[at - 1].trim().is_empty() {
+                at -= 1;
+            }
+            if at == h + 1 {
+                lines.insert(at, "");
+                at += 1;
+            }
+            at
+        }
+        None => {
+            while lines.last().is_some_and(|l| l.trim().is_empty()) {
+                lines.pop();
+            }
+            if !lines.is_empty() {
+                lines.push("");
+            }
+            lines.push("## Tasks");
+            lines.push("");
+            lines.len()
+        }
+    };
+    lines.insert(at, &task);
+    let mut out = lines.join("\n");
+    out.push('\n');
+    write_note(root, rel, &out, crypto)
 }
 
 /// Today's note, following Obsidian's Daily notes settings when the vault has them.
@@ -1397,6 +1491,59 @@ mod tests {
         assert_eq!(toggle_task(&root, "T.md", 3, "plain", &crypto).unwrap_err().to_string(), moved);
         assert_eq!(toggle_task(&root, "T.md", 1, "Something else", &crypto).unwrap_err().to_string(), "That task changed. Refresh and try again.");
         assert!(toggle_task(&root, "Missing.md", 0, "x", &crypto).is_err());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_task_carries_the_indented_lines_under_it_as_details() {
+        let t = tasks_in("a.md", "A", "- [ ] Call Amina\n  ask about the lease\n\tand the keys\n  - [ ] subtask\n- [ ] Next\nplain\n  - [ ] Nested\n    its note\n\n    after a blank");
+        assert_eq!(t[0].details, "ask about the lease\nand the keys");
+        assert_eq!(t[1].details, "", "a subtask is its own task, not a note");
+        assert_eq!(t[2].details, "");
+        assert_eq!(t[3].details, "its note", "a blank line ends the notes");
+    }
+
+    #[test]
+    fn edit_task_rewrites_the_line_and_its_notes_and_refuses_stale_lines() {
+        let (root, crypto) = temp_vault("edit");
+        put(&root, "T.md", "# T\n  * [x] Call Amina\n    old note\n    second\n  * [ ] Next\nend");
+        edit_task(&root, "T.md", 1, "Call Amina", "Call Amina #home 📌 ⏫ 📅 2026-11-05", "Ask about the lease\n\n  bring keys ", &crypto).unwrap();
+        assert_eq!(get(&root, "T.md"), "# T\n  * [x] Call Amina #home 📌 ⏫ 📅 2026-11-05\n    Ask about the lease\n    bring keys\n  * [ ] Next\nend");
+        edit_task(&root, "T.md", 1, "Call Amina #home 📌 ⏫ 📅 2026-11-05", "Call Amina", "", &crypto).unwrap();
+        assert_eq!(get(&root, "T.md"), "# T\n  * [x] Call Amina\n  * [ ] Next\nend", "clearing the notes removes their lines");
+        let said = |r: Result<()>| r.unwrap_err().to_string();
+        assert_eq!(said(edit_task(&root, "T.md", 1, "Something else", "x", "", &crypto)), "That task changed. Refresh and try again.");
+        assert_eq!(said(edit_task(&root, "T.md", 3, "end", "x", "", &crypto)), "That task moved. Refresh and try again.");
+        assert_eq!(said(edit_task(&root, "T.md", 1, "Call Amina", "  ", "", &crypto)), "Give the task a name.");
+        assert_eq!(said(edit_task(&root, "T.md", 1, "Call Amina", "a\nb", "", &crypto)), "A task is one line. Put the rest in its notes.");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn edit_task_keeps_windows_line_endings() {
+        let (root, crypto) = temp_vault("edit-crlf");
+        put(&root, "T.md", "- [ ] One\r\n  note\r\nnext\r\n");
+        edit_task(&root, "T.md", 0, "One", "One 📌", "new note", &crypto).unwrap();
+        assert_eq!(get(&root, "T.md"), "- [ ] One 📌\r\n  new note\r\nnext\r\n");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn add_task_goes_to_the_end_of_the_tasks_section() {
+        let (root, crypto) = temp_vault("add");
+        put(&root, "D.md", "# Day\n\n## Tasks\n\n- [ ] First\n\n## Notes\nhello\n");
+        add_task(&root, "D.md", "Reply to Amina", &crypto).unwrap();
+        assert_eq!(get(&root, "D.md"), "# Day\n\n## Tasks\n\n- [ ] First\n- [ ] Reply to Amina\n\n## Notes\nhello\n");
+        put(&root, "E.md", "# Day\n\n## Tasks\n\n## Notes\n");
+        add_task(&root, "E.md", "One", &crypto).unwrap();
+        assert_eq!(get(&root, "E.md"), "# Day\n\n## Tasks\n\n- [ ] One\n\n## Notes\n", "an empty section gets its first task");
+        put(&root, "F.md", "# Day\ntext\n\n");
+        add_task(&root, "F.md", "One", &crypto).unwrap();
+        assert_eq!(get(&root, "F.md"), "# Day\ntext\n\n## Tasks\n\n- [ ] One\n", "no section yet: one is added");
+        put(&root, "G.md", "## Tasks");
+        add_task(&root, "G.md", "Last", &crypto).unwrap();
+        assert_eq!(get(&root, "G.md"), "## Tasks\n\n- [ ] Last\n");
+        assert_eq!(add_task(&root, "G.md", " ", &crypto).unwrap_err().to_string(), "Give the task a name.");
         let _ = std::fs::remove_dir_all(&root);
     }
 

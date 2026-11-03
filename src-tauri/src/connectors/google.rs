@@ -300,6 +300,7 @@ fn mail_body_of(m: &Value) -> MailBody {
         to: header(m, "To"),
         date: header(m, "Date"),
         text,
+        html: find_part(&m["payload"], "text/html"),
         url: thread_url(m),
     }
 }
@@ -483,12 +484,14 @@ mod tests {
         ]}});
         let body = mail_body_of(&nested);
         assert_eq!(body.text, "plain ✓ text");
+        assert_eq!(body.html.as_deref(), Some("<p>html</p>"), "the HTML part is kept for reading in the app");
         assert_eq!((body.subject.as_str(), body.to.as_str(), body.date.as_str()), ("Hi", "me@x", "Mon, 3 Nov 2026"));
         assert_eq!(body.url.as_deref(), Some("https://mail.google.com/mail/u/0/#inbox/t"));
 
         let padded = format!("{}==", b64("<div>Only</div><div>html</div>"));
         let html_only = json!({ "payload": { "mimeType": "text/html", "body": { "data": padded } } });
         assert_eq!(mail_body_of(&html_only).text, "Only\nhtml");
+        assert!(mail_body_of(&json!({ "payload": { "mimeType": "text/plain", "body": { "data": b64("x") } } })).html.is_none());
 
         let empty = json!({ "snippet": "Just the &quot;snippet&quot;", "payload": { "mimeType": "text/plain", "body": { "size": 0 } } });
         assert_eq!(mail_body_of(&empty).text, "Just the \"snippet\"");
