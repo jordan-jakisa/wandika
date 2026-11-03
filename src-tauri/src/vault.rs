@@ -663,14 +663,16 @@ pub fn toggle_task(root: &Path, rel: &str, line: usize, expected: &str, crypto: 
     }
     let done = &caps[2] == " ";
     let mark = if done { "x" } else { " " };
-    let mut rest = caps[4].to_string();
+    // A note written with Windows line endings keeps its `\r` at the end of the line.
+    let (rest, cr) = caps[4].strip_suffix('\r').map_or((&caps[4], ""), |r| (r, "\r"));
+    let mut rest = rest.to_string();
     // Obsidian Tasks style completion date.
     let done_re = Regex::new(r"\s*✅ \d{4}-\d{2}-\d{2}").unwrap();
     rest = done_re.replace_all(&rest, "").to_string();
     if done {
         rest = format!("{rest} ✅ {}", Local::now().format("%Y-%m-%d"));
     }
-    lines[line] = format!("{}{mark}{}{rest}", &caps[1], &caps[3]);
+    lines[line] = format!("{}{mark}{}{rest}{cr}", &caps[1], &caps[3]);
     write_note(root, rel, &lines.join("\n"), crypto)?;
     Ok(done)
 }
@@ -944,6 +946,24 @@ mod tests {
         restore(&root, "Projects/Plan.md").unwrap();
         assert_eq!(std::fs::read_to_string(root.join("Projects/Plan.md")).unwrap(), "Plan");
         assert!(restore(&root, "Projects/Plan.md").is_err(), "nothing left to restore");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn toggling_a_task_keeps_windows_line_endings() {
+        let root = std::env::temp_dir().join(format!("wandika-crlf-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("Tasks.md"), "- [ ] Call Amina\r\nnext line\r\n").unwrap();
+        let crypto = Crypto::load(&root, &crate::secrets::Secrets::new(root.clone()), "test/crlf");
+        assert!(toggle_task(&root, "Tasks.md", 0, "Call Amina", &crypto).unwrap());
+        let today = Local::now().format("%Y-%m-%d");
+        assert_eq!(
+            std::fs::read_to_string(root.join("Tasks.md")).unwrap(),
+            format!("- [x] Call Amina ✅ {today}\r\nnext line\r\n")
+        );
+        assert!(!toggle_task(&root, "Tasks.md", 0, &format!("Call Amina ✅ {today}"), &crypto).unwrap());
+        assert_eq!(std::fs::read_to_string(root.join("Tasks.md")).unwrap(), "- [ ] Call Amina\r\nnext line\r\n");
         let _ = std::fs::remove_dir_all(&root);
     }
 
