@@ -58,6 +58,18 @@ for now. Outlook connects on every platform.
 
 Nothing to register. Wandika asks for access the first time you connect them in Settings.
 
+## 5. Claude Code (Mac)
+
+Wandika's app binary is also an MCP server. Register it once:
+
+```bash
+claude mcp add --scope user wandika -- /Applications/Wandika.app/Contents/MacOS/wandika mcp
+```
+
+Claude can then search, read, write and create notes, open today's note, and list, add, tick and edit
+tasks in the vault open in Wandika. Encrypted notes stay locked; mail and calendars aren't offered. A
+running Wandika reloads what Claude changed within a few seconds, and sync takes it to GitHub.
+
 ## Build and run
 
 ```bash
