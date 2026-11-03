@@ -1,6 +1,7 @@
 <script lang="ts">
   import { app, type Ask } from "../app.svelte";
   import { sheetOpened } from "../backstack";
+  import { closeSheet } from "../motion";
 
   let dialogEl: HTMLDialogElement;
   /** Gives back the sheet's place in history when it closes (phones). */
@@ -17,7 +18,7 @@
       dialogEl.showModal();
       release = sheetOpened(() => app.dialog?.resolve(null));
     } else if (!d && dialogEl.open) {
-      dialogEl.close();
+      closeSheet(dialogEl);
       release();
       release = () => {};
     }

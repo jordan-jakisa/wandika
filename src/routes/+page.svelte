@@ -13,6 +13,14 @@
   import { prefs } from "$lib/prefs.svelte";
   import { onMount } from "svelte";
 
+  let lastToast = $state("");
+  let lastAction = $state<string | null>(null);
+  $effect(() => {
+    if (!app.toast) return;
+    lastToast = app.toast;
+    lastAction = app.toastAction?.label ?? null;
+  });
+
   // Before the first screen draws, so it opens in the chosen colours.
   prefs.apply();
 
@@ -42,18 +50,21 @@
 <TaskEditor />
 <FocusSession />
 
-<!-- Always in the page, so screen readers announce each new message. -->
+<!-- Always in the page, so screen readers announce each new message. The last message stays
+     drawn while the bar fades, so it fades with its words. -->
 <div class="toast" class:shown={!!app.toast} role="status" aria-live="polite">
-  <span>{app.toast ?? ""}</span>
-  {#if app.toast && app.toastAction}
+  <span>{app.toast ?? lastToast}</span>
+  {#if lastAction}
     <button
       class="toast-action"
+      tabindex={app.toast ? 0 : -1}
+      disabled={!app.toast}
       onclick={() => {
         const run = app.toastAction?.run;
         app.toast = null;
         app.toastAction = null;
         run?.();
-      }}>{app.toastAction.label}</button
+      }}>{lastAction}</button
     >
   {/if}
 </div>

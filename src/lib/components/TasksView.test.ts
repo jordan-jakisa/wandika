@@ -67,6 +67,17 @@ describe("states", () => {
     await vi.waitFor(() => expect(app.toast).toBe("The vault folder can't be read."));
     expect(summary()).toHaveTextContent("Couldn't gather your tasks.");
     expect(screen.queryByText(/No open tasks/)).not.toBeInTheDocument();
+    vi.mocked(api.tasksVault).mockResolvedValue([]);
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await vi.waitFor(() => expect(summary()).toHaveTextContent(/No open tasks/));
+  });
+
+  test("the last list shows at once while a fresh one loads", async () => {
+    app.vaultTasks = [task("Plan.md", 1, "Kept from before")];
+    vi.mocked(api.tasksVault).mockReturnValue(new Promise(() => {}));
+    render(TasksView);
+    expect(screen.getByText("Kept from before")).toBeInTheDocument();
+    expect(screen.queryByText("Gathering tasks from your notes…")).not.toBeInTheDocument();
   });
 
   test("vault tasks show without waiting for calendars and mail", async () => {

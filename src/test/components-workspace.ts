@@ -1,3 +1,4 @@
+import { resetSheets } from "../lib/backstack";
 // Shared set-up for the tests of the workspace screens (Workspace, Settings, Editor, FileTree,
 // Search, Start, Unlock, GitHubSignIn, RepoPicker and the routes). jsdom has no layout, no modal
 // dialogs and no media queries; these stand-ins give the components what they ask for.
@@ -82,10 +83,16 @@ export function status(patch: Partial<Status> = {}): Status {
 
 /** Puts the shared app state back as it is when the app starts, so tests don't leak into each other. */
 export function resetApp() {
+  resetSheets();
   vi.restoreAllMocks();
   app.dialog?.resolve(null);
   app.stopAutoSync();
   Object.assign(app, {
+    todayError: null,
+    vaultTasks: null,
+    notesOpened: 0,
+    drawing: null,
+    settingsPage: null,
     status: null,
     bootError: null,
     tree: [],

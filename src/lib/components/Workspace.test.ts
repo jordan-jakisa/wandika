@@ -691,7 +691,8 @@ describe("on a phone", () => {
     await fireEvent.touchMove(list, { touches: [{ clientX: 100, clientY: 160 }] });
     await fireEvent.touchEnd(list, { touches: [] });
     expect(sync).not.toHaveBeenCalled();
-    expect(screen.queryByText("Pull to sync")).not.toBeInTheDocument();
+    // The row eases away, then it's gone.
+    await waitFor(() => expect(screen.queryByText("Pull to sync")).not.toBeInTheDocument());
   });
 
   test("a vault on this device only has nothing to pull", async () => {

@@ -19,6 +19,7 @@
     X,
   } from "@lucide/svelte";
   import { untrack } from "svelte";
+  import { push } from "../transitions";
   import { api, listen, openUrl } from "../api";
   import { ago, app, type SettingsSection } from "../app.svelte";
   import { ACCENTS, FONTS, WIDTHS, prefs, type NoteFont, type Theme, type Width } from "../prefs.svelte";
@@ -346,7 +347,8 @@
   {/if}
 
   {#if section}
-    <div class="pane">
+    {#key section}
+    <div class="pane" in:push|global={{ enabled: embedded }}>
       <header class="pane-head">
         {#if phone}
           <button class="back" onclick={back}><ChevronLeft size={22} />Settings</button>
@@ -645,6 +647,7 @@
         {/if}
       </div>
     </div>
+    {/key}
   {/if}
 {/snippet}
 

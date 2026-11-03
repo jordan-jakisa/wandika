@@ -1,5 +1,6 @@
 <script lang="ts">
   import { sheetOpened } from "../backstack";
+  import { haptic } from "../haptics";
   import { Pause, Play } from "@lucide/svelte";
   import { api } from "../api";
   import { app } from "../app.svelte";
@@ -32,6 +33,7 @@
 
   // A soft two-note bell when a round ends; nothing when sound isn't available.
   focus.onEnd = () => {
+    haptic("success");
     try {
       const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!Ctx) return;

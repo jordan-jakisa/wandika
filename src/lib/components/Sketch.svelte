@@ -4,11 +4,14 @@
   import { sheetOpened } from "../backstack";
   import { app } from "../app.svelte";
   import { forgetImages } from "../attachments";
+  import { closeSheet } from "../motion";
   import { forgetNoteEmbeds } from "../editor/embeds";
   import { INKS, MUTED, PAPER, WIDTHS, drawingName, fromSvg, hits, pathOf, strokeWidth, toSvg, type Point, type Stroke } from "../sketch";
 
   /** The drawing pad: a pen, a finger or a mouse draws; Done saves the drawing as an SVG file. */
   let dialogEl: HTMLDialogElement;
+  /** The drawing on screen; it stays while the pad leaves. */
+  let shown = $state<typeof app.drawing>(null);
   /** Gives back the pad's place in history when it closes (phones). */
   let release = () => {};
   let padEl = $state<SVGSVGElement>();
@@ -31,6 +34,7 @@
   $effect(() => {
     const d = app.drawing;
     if (d && !dialogEl.open) {
+      shown = d;
       strokes = [];
       history = [];
       live = null;
@@ -40,8 +44,8 @@
       dialogEl.showModal();
       release = sheetOpened(() => void cancel());
       if (d.edit) void load(d.edit.target, d.edit.from);
-    } else if (!d && dialogEl.open) {
-      dialogEl.close();
+    } else if (!d && dialogEl.open && !dialogEl.classList.contains("closing")) {
+      closeSheet(dialogEl, () => (shown = null));
       release();
       release = () => {};
     }
@@ -173,17 +177,17 @@
 
 <dialog
   bind:this={dialogEl}
-  class="sketch"
+  class="sketch rises"
   aria-labelledby="sketch-h"
   oncancel={(e) => {
     e.preventDefault();
     void cancel();
   }}
 >
-  {#if app.drawing}
+  {#if shown}
     <header class="bar">
       <button class="bar-btn" onclick={cancel}>Cancel</button>
-      <h2 id="sketch-h">{app.drawing.edit ? "Edit drawing" : "Drawing"}</h2>
+      <h2 id="sketch-h">{shown.edit ? "Edit drawing" : "Drawing"}</h2>
       <span class="bar-end">
         <button class="tool" aria-label="Undo" disabled={!history.length} onclick={undo}><Undo2 size={20} /></button>
         <button class="bar-btn done" onclick={done} disabled={saving || loading}>Done</button>
@@ -254,7 +258,9 @@
     border: 0;
     background: var(--paper);
     color: var(--ink);
+    /* The Mac fades it in; phones raise it as a sheet (app.css). */
     animation: fade-in var(--dur-quick) var(--ease-out);
+
   }
   .bar {
     display: grid;

@@ -12,6 +12,9 @@
   import Menu from "./Menu.svelte";
   import { clock } from "../clock.svelte";
   import { duration } from "../motion";
+  import { haptic } from "../haptics";
+  import { tip, touch } from "../tips";
+  import { untrack } from "svelte";
   let {
     text,
     done,
@@ -39,10 +42,10 @@
     onPin?: () => Promise<void>;
     /** Starts a focus session on the task. */
     onFocus?: () => void;
-    /** Moves the task to the archive note (vault tasks). */
-    onArchive?: () => void;
-    /** Deletes the task and its notes (vault tasks). */
-    onDelete?: () => void;
+    /** Moves the task to the archive note (vault tasks); false when it didn't. */
+    onArchive?: () => unknown;
+    /** Deletes the task and its notes (vault tasks); false when it didn't. */
+    onDelete?: () => unknown;
     /** The notes under the task; the first line shows under it. */
     details?: string;
     /** The list hides done tasks: a ticked one shows its strike-through, then folds away. */
@@ -72,7 +75,7 @@
   async function toggle() {
     busy = true;
     shown = !checked;
-    if (shown) (navigator as { vibrate?: (ms: number) => boolean }).vibrate?.(10);
+    if (shown) haptic("tap");
     try {
       if (shown && leaves) {
         // A moment to see it done; a pause, not motion, so it stays with reduced motion too.
@@ -131,7 +134,7 @@
     const beyond = next < -full() && !!onDelete;
     if (beyond !== past) {
       past = beyond;
-      if (beyond) (navigator as { vibrate?: (ms: number) => boolean }).vibrate?.(10);
+      if (beyond) haptic("selection");
     }
     offset = next;
   }
@@ -141,7 +144,7 @@
     drag = null;
     dragging = false;
     if (!sideways) return;
-    if (offset < -full() && onDelete) return run(onDelete);
+    if (offset < -full() && onDelete) return fold(onDelete);
     if (offset > full() && onPin) return run(pinIt);
     settle(offset < -trail / 2 ? -trail : offset > lead / 2 ? lead : 0);
   }
@@ -156,7 +159,21 @@
     close();
     action();
   }
+  /** Deleting or archiving folds the row away first, as a ticked task does; a failure brings it back. */
+  async function fold(action: () => unknown) {
+    close();
+    leaving = true;
+    await wait(duration("--dur-base"));
+    if ((await action()) === false) leaving = false;
+  }
   const pinIt = () => void onPin?.().catch((e) => app.taskFailed(e));
+
+  // The first task row with swipe actions on a touch screen teaches them, once.
+  $effect(() => {
+    if (touch && (onArchive || onDelete)) {
+      untrack(() => tip("swipe-task", "Tip: swipe a task right to pin it, or left to archive or delete it.", (t) => app.say(t)));
+    }
+  });
 
   // Once the list reloads with the new state, the row follows it again.
   $effect(() => {
@@ -186,8 +203,8 @@
   {/if}
   {#if trail && offset < 0}
     <div class="swipe trail" style:width="{-offset}px" aria-hidden="true">
-      {#if onArchive}<button class="act archive" tabindex="-1" onclick={() => run(onArchive)}><Archive size={20} />Archive</button>{/if}
-      {#if onDelete}<button class="act delete" class:full={past} tabindex="-1" onclick={() => run(onDelete)}><Trash2 size={20} />Delete</button>{/if}
+      {#if onArchive}<button class="act archive" tabindex="-1" onclick={() => fold(onArchive)}><Archive size={20} />Archive</button>{/if}
+      {#if onDelete}<button class="act delete" class:full={past} tabindex="-1" onclick={() => fold(onDelete)}><Trash2 size={20} />Delete</button>{/if}
     </div>
   {/if}
   <div class="slide" class:dragging class:moved={dragging || offset !== 0} style:transform={offset ? `translateX(${offset}px)` : null} onclickcapture={tapWhileOpen}>
@@ -221,8 +238,8 @@
           {/if}
           {#if onFocus && !checked}<button role="menuitem" onclick={onFocus}><Timer size={18} /> Focus on this</button>{/if}
           {#if email}<button role="menuitem" onclick={() => app.openLink(email)}><Mail size={18} /> Open email</button>{/if}
-          {#if onArchive}<button role="menuitem" onclick={onArchive}><Archive size={18} /> Archive</button>{/if}
-          {#if onDelete}<button role="menuitem" class="danger" onclick={onDelete}><Trash2 size={18} /> Delete</button>{/if}
+          {#if onArchive}<button role="menuitem" onclick={() => fold(onArchive)}><Archive size={18} /> Archive</button>{/if}
+          {#if onDelete}<button role="menuitem" class="danger" onclick={() => fold(onDelete)}><Trash2 size={18} /> Delete</button>{/if}
         </Menu>
       </span>
     {/if}
@@ -232,11 +249,11 @@
 <style>
   .task {
     position: relative;
-    max-height: 12em;
+    display: grid;
+    grid-template-rows: 1fr;
     transition:
-      max-height var(--dur-base) var(--ease-in),
-      opacity var(--dur-base) var(--ease-in),
-      padding var(--dur-base) var(--ease-in);
+      grid-template-rows var(--dur-base) var(--ease-out),
+      opacity var(--dur-base) var(--ease-out);
     /* Vertical scrolling stays the browser's; a sideways drag is the swipe. */
     touch-action: pan-y;
   }
@@ -246,11 +263,14 @@
   }
   .slide {
     position: relative;
+    min-height: 0;
     display: flex;
     gap: 10px;
     align-items: flex-start;
     padding: 8px 0;
-    transition: transform var(--dur-base) var(--ease-out);
+    transition:
+      transform var(--dur-base) var(--ease-out),
+      padding var(--dur-base) var(--ease-out);
   }
   /* Opaque only while it slides, so the actions stay hidden behind it. Phones show lists on paper. */
   .slide.moved {
@@ -399,11 +419,14 @@
     color: var(--amber);
     font-weight: 600;
   }
+  /* A row that leaves folds to nothing over its own height. */
   .leaving {
-    max-height: 0;
-    padding-block: 0;
+    grid-template-rows: 0fr;
     opacity: 0;
+  }
+  .leaving .slide {
     overflow: hidden;
+    padding-block: 0;
   }
   .text {
     transition: color var(--dur-quick) var(--ease-out);

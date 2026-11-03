@@ -4,6 +4,7 @@ import { fireEvent, render, screen } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { app } from "../app.svelte";
+import * as haptics from "../haptics";
 import TaskRow from "./TaskRow.svelte";
 
 beforeEach(resetApp);
@@ -134,18 +135,16 @@ describe("ticking", () => {
     expect(onToggle).toHaveBeenCalledOnce();
   });
 
-  test("a buzz on tick where the phone can, none on untick", async () => {
+  test("a tap of the phone on tick, none on untick", async () => {
     const user = userEvent.setup();
-    const vibrate = vi.fn(() => true);
-    Object.defineProperty(navigator, "vibrate", { value: vibrate, configurable: true });
+    const buzz = vi.spyOn(haptics, "haptic").mockImplementation(() => {});
     const { box } = setup({ text: "Plan" });
     await user.click(box);
-    expect(vibrate).toHaveBeenCalledWith(10);
-    vibrate.mockClear();
+    expect(buzz).toHaveBeenCalledWith("tap");
+    buzz.mockClear();
     await vi.waitFor(() => expect(box).toBeEnabled());
     await user.click(box);
-    expect(vibrate).not.toHaveBeenCalled();
-    delete (navigator as { vibrate?: unknown }).vibrate;
+    expect(buzz).not.toHaveBeenCalled();
   });
 
   test("a failed save puts the box back and says why", async () => {
@@ -294,9 +293,7 @@ describe("swipe actions", () => {
     setup({ text: "Write the brief", ...a });
     await user.click(screen.getByRole("button", { name: "Actions for Write the brief" }));
     await user.click(screen.getByRole("menuitem", { name: "Archive" }));
-    await user.click(screen.getByRole("button", { name: "Actions for Write the brief" }));
-    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
-    expect([a.onArchive.mock.calls.length, a.onDelete.mock.calls.length]).toEqual([1, 1]);
+    await vi.waitFor(() => expect(a.onArchive).toHaveBeenCalledTimes(1));
   });
 
   test("a swipe left shows Archive and Delete; tapping one runs it and closes the row", async () => {
@@ -309,16 +306,17 @@ describe("swipe actions", () => {
     expect(trail).toHaveTextContent("Delete");
     expect(container.querySelector<HTMLElement>(".slide")!.style.transform).toBe("translateX(-152px)");
     await fireEvent.click(trail.querySelector(".archive")!);
-    expect(a.onArchive).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(a.onArchive).toHaveBeenCalledTimes(1));
     expect(a.onDelete).not.toHaveBeenCalled();
     expect(container.querySelector(".swipe")).toBeNull();
   });
 
-  test("a long swipe left deletes straight away", () => {
+  test("a long swipe left folds the row away and deletes it", async () => {
     const a = actions();
     const { container } = setup({ text: "Write the brief", ...a });
     swipe(container.querySelector("li")!, -300);
-    expect(a.onDelete).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(a.onDelete).toHaveBeenCalledTimes(1));
+    expect(container.querySelector("li")).toHaveClass("leaving");
   });
 
   test("a swipe right shows Pin, or Unpin on a pinned task", async () => {
@@ -368,4 +366,14 @@ describe("swipe actions", () => {
     swipe(container.querySelector("li")!, -300);
     expect(container.querySelector(".swipe")).toBeNull();
   });
+});
+
+test("a delete that fails brings the row back", async () => {
+  const user = userEvent.setup();
+  const onDelete = vi.fn(async () => false);
+  const { container } = setup({ text: "Keep me", onDelete });
+  await user.click(screen.getByRole("button", { name: "Actions for Keep me" }));
+  await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+  await vi.waitFor(() => expect(onDelete).toHaveBeenCalled());
+  await vi.waitFor(() => expect(container.querySelector("li")).not.toHaveClass("leaving"));
 });

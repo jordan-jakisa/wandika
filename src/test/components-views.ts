@@ -1,3 +1,4 @@
+import { resetSheets } from "../lib/backstack";
 // Shared set-up for the view component tests (Board, Today, Tasks, Graph, Dialog, Menu …): the
 // browser features jsdom lacks, a clean app state per test, and fixtures in the app's own shapes.
 // Importing this file installs the stubs; each test calls `resetApp()` in beforeEach.
@@ -234,8 +235,14 @@ export const TODAY = "2026-11-03";
 
 /** Puts the shared app state back to a fresh start and the clock on TODAY. */
 export function resetApp() {
+  resetSheets();
   app.dialog?.resolve(null);
   Object.assign(app, {
+    todayError: null,
+    vaultTasks: null,
+    notesOpened: 0,
+    drawing: null,
+    settingsPage: null,
     status: null,
     tree: [],
     titles: [],

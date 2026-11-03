@@ -7,6 +7,8 @@
   import { isIOS } from "../platform";
   import { sheetOpened } from "../backstack";
   import { PRIORITIES, composeTask, parseTask, type Priority } from "../taskText";
+  import { closeSheet } from "../motion";
+  import type { VaultTask } from "../types";
 
   /** Edits one task from the vault: its name and tags, due date, priority, pin and notes.
    *  Everything is written back into the note, in the Obsidian Tasks format. */
@@ -21,7 +23,8 @@
   let saving = $state(false);
   let error = $state<string | null>(null);
 
-  const task = $derived(app.editingTask);
+  /** The task on screen; it stays while the sheet leaves, after app.editingTask is cleared. */
+  let task = $state<VaultTask | null>(null);
   /** On iPhone a form sheet from the bottom, as iOS edits an item; elsewhere a centred dialog. */
   const ios = isIOS;
   let start = { name: "", due: "", priority: "" as Priority | "", pinned: false, details: "" };
@@ -39,12 +42,13 @@
       pinned = p.pinned;
       details = t.details;
       start = { name, due, priority, pinned, details };
+      task = t;
       dragY = 0;
       error = null;
       dialogEl.showModal();
       release = sheetOpened(() => void dismiss());
-    } else if (!t && dialogEl.open) {
-      dialogEl.close();
+    } else if (!t && dialogEl.open && !dialogEl.classList.contains("closing")) {
+      closeSheet(dialogEl, () => (task = null));
       release();
       release = () => {};
     }
@@ -177,6 +181,7 @@
   bind:this={dialogEl}
   class="editor"
   class:ios
+  class:rises={ios}
   class:dragging={dragY > 0}
   style={dragY ? `--drag: ${dragY}px` : undefined}
   aria-labelledby="task-editor-h"
@@ -355,14 +360,7 @@
   .editor.ios.dragging {
     transition: none;
   }
-  .editor.ios[open] {
-    animation: sheet-up var(--dur-slow) var(--ease-sheet);
-  }
-  @keyframes sheet-up {
-    from {
-      transform: translateY(100%);
-    }
-  }
+
   .ios form {
     gap: 0;
   }

@@ -24,7 +24,7 @@
   import Menu from "./Menu.svelte";
   import { isIOS } from "../platform";
   import { push } from "../transitions";
-  import { tip } from "../tips";
+  import { tip, touch } from "../tips";
   import { app, titleOf, type Tab } from "../app.svelte";
   import Editor from "./Editor.svelte";
   import FileTree from "./FileTree.svelte";
@@ -33,6 +33,8 @@
   import Search from "./Search.svelte";
   import Settings from "./Settings.svelte";
   import { sheetBack } from "../backstack";
+  import { duration } from "../motion";
+  import { haptic } from "../haptics";
   import StatusBar from "./StatusBar.svelte";
   import SyncStatus from "./SyncStatus.svelte";
   import TasksView from "./TasksView.svelte";
@@ -154,9 +156,11 @@
   // iOS: drag from the left edge to go back.
   let swipeX = $state(0);
   let swipeFrom: { x: number; y: number } | null = null;
+  /** A screen the iOS edge swipe can go back from: a note, a Settings page, Tasks, Projects, Graph. */
+  const pushed = () => !!app.current || (app.tab === "settings" && !!app.settingsPage) || !!PARENT[app.tab];
   function swipeStart(e: TouchEvent) {
     const t = e.touches[0];
-    swipeFrom = isIOS && app.current && t.clientX < 24 ? { x: t.clientX, y: t.clientY } : null;
+    swipeFrom = isIOS && pushed() && t.clientX < 24 ? { x: t.clientX, y: t.clientY } : null;
   }
   function swipeMove(e: TouchEvent) {
     if (!swipeFrom) return;
@@ -171,11 +175,21 @@
     releasedAt = 0;
     if (swipeFrom && swipeX > width * 0.33) {
       releasedAt = swipeX;
-      app.current = null;
+      // A note follows the finger out; other screens go back as the back gesture does.
+      if (app.current) app.current = null;
+      else history.back();
     }
     swipeFrom = null;
     swipeX = 0;
   }
+
+  // Back on the Notes list after a few notes, the list mentions its long-press menu, once, where
+  // the rows it talks about are on screen.
+  $effect(() => {
+    if (!wide && touch && !app.current && app.tab === "notes" && untrack(() => app.notesOpened) >= 3) {
+      untrack(() => tip("long-press", "Tip: press and hold a note in the list for rename, encrypt and more.", (t) => app.say(t)));
+    }
+  });
 
   // On a phone, the first look at a synced vault's notes mentions pull to sync, once.
   $effect(() => {
@@ -205,6 +219,17 @@
   const PULL_TRIGGER = 64;
   let phoneBody = $state<HTMLDivElement>();
 
+  // A Settings page opens at its top; going back to the list puts it where it was.
+  let settingsListScroll = 0;
+  $effect.pre(() => {
+    const page = app.settingsPage;
+    untrack(() => {
+      if (!phoneBody || app.tab !== "settings") return;
+      if (page) settingsListScroll = phoneBody.scrollTop;
+      void tick().then(() => phoneBody && (phoneBody.scrollTop = page ? 0 : settingsListScroll));
+    });
+  });
+
   // Each tab keeps its own scroll position, so Notes is where you left it after a look at Today.
   const tabScroll = new Map<Tab, number>();
   let scrollTab: Tab = app.tab;
@@ -219,21 +244,35 @@
 
   let pull = $state(0);
   let pullFrom: number | null = null;
+  /** Today can be pulled to refresh calendar and mail even when the vault doesn't sync. */
+  const canPull = () => app.synced || app.tab === "today";
   function pullStart(e: TouchEvent) {
-    pullFrom = app.synced && (phoneBody?.scrollTop ?? 1) <= 0 ? e.touches[0].clientY : null;
+    pullFrom = canPull() && (phoneBody?.scrollTop ?? 1) <= 0 ? e.touches[0].clientY : null;
   }
   function pullMove(e: TouchEvent) {
     if (pullFrom === null) return;
     const dy = e.touches[0].clientY - pullFrom;
-    pull = dy > 0 ? Math.min(96, dy * 0.5) : 0;
+    const next = dy > 0 ? Math.min(96, dy * 0.5) : 0;
+    if (next >= PULL_TRIGGER && pull < PULL_TRIGGER) haptic("selection");
+    pull = next;
   }
   /** True while a sync you pulled for runs; background syncs never push the list down. */
   let pulledSync = $state(false);
+  /** The row stays while it eases away, instead of vanishing in one frame. */
+  let pullLeaving = $state(false);
+  function settlePull() {
+    pullLeaving = true;
+    setTimeout(() => (pullLeaving = false), duration("--dur-base"));
+  }
   function pullEnd() {
     if (pull >= PULL_TRIGGER) {
       pulledSync = true;
-      void app.sync(true).finally(() => (pulledSync = false));
-    }
+      const work = [app.synced ? app.sync(true) : Promise.resolve(), app.tab === "today" ? app.loadToday(true) : Promise.resolve()];
+      void Promise.all(work).finally(() => {
+        pulledSync = false;
+        settlePull();
+      });
+    } else if (pull > 0) settlePull();
     pull = 0;
     pullFrom = null;
   }
@@ -470,9 +509,10 @@
         ontouchmove={pullMove}
         ontouchend={pullEnd}
       >
-        {#if app.synced && (pull > 0 || pulledSync)}
+        {#if canPull() && (pull > 0 || pulledSync || pullLeaving)}
+          {@const verb = app.synced ? "sync" : "refresh"}
           <div class="pull" class:settling={pull === 0} style="height: {pulledSync && !pull ? 44 : pull}px" aria-live="polite">
-            {pulledSync ? "Syncing…" : pull >= PULL_TRIGGER ? "Release to sync" : "Pull to sync"}
+            {pulledSync ? (app.synced ? "Syncing…" : "Refreshing…") : pull >= PULL_TRIGGER ? `Release to ${verb}` : `Pull to ${verb}`}
           </div>
         {/if}
         {@render conflictsBanner()}

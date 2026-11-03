@@ -9,7 +9,8 @@
   import type { RemoteTask, VaultTask } from "../types";
   import TaskRow from "./TaskRow.svelte";
 
-  let tasks = $state<VaultTask[]>([]);
+  // The last list shows at once; a fresh one replaces it when it arrives.
+  let tasks = $state<VaultTask[]>(app.vaultTasks ?? []);
   const remote = $derived<RemoteTask[]>(app.today?.remote_tasks ?? []);
   let showDone = $state(readView("tasks", { showDone: false }).showDone);
   $effect(() => saveView("tasks", { showDone }));
@@ -22,6 +23,7 @@
     void app.loadToday();
     try {
       tasks = await api.tasksVault();
+      app.vaultTasks = tasks;
       failed = false;
     } catch (e) {
       failed = true;
@@ -109,6 +111,9 @@
           ? `${open} open ${open === 1 ? "task" : "tasks"} in your notes.`
           : "No open tasks. In any note, tap Checklist on the writing bar to add one."}
   </p>
+  {#if failed && !tasks.length}
+    <button class="btn" onclick={load}>Try again</button>
+  {/if}
 
   {#if tasks.length || remote.length}
     <div class="find">

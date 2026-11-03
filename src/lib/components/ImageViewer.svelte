@@ -3,6 +3,7 @@
   import { api } from "../api";
   import { app } from "../app.svelte";
   import { sheetOpened } from "../backstack";
+  import { closeSheet } from "../motion";
   import { imageUrl } from "../attachments";
   import { MARK } from "../sketch";
 
@@ -36,7 +37,7 @@
       dialogEl.showModal();
       release = sheetOpened(() => (app.viewing = null));
     } else if (!path && dialogEl.open) {
-      dialogEl.close();
+      closeSheet(dialogEl);
       release();
       release = () => {};
     }

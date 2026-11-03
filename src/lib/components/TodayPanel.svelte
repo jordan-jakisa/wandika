@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { haptic } from "../haptics";
   import { CalendarPlus, CircleCheck, ExternalLink, FileText, ListPlus, MailOpen, Maximize2, NotebookPen } from "@lucide/svelte";
   import { untrack } from "svelte";
   import { api, openUrl } from "../api";
@@ -13,6 +14,12 @@
 
   /** `full`: Today fills the window, in columns. `expandable`: the column offers that. */
   let { full = false, expandable = false }: { full?: boolean; expandable?: boolean } = $props();
+  // The day's last task ticked off: the phone says so too, once.
+  let celebrated = false;
+  $effect(() => {
+    if (clearedToday && !celebrated) haptic("success");
+    celebrated = clearedToday;
+  });
   const data = $derived(app.today);
   let busy = $state<string | null>(null);
 

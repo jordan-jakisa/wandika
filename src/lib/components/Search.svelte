@@ -26,7 +26,8 @@
   const recent = $derived(
     app.titles.slice(0, 8).map((t) => ({ path: t.path, title: t.title, snippet: "", encrypted: t.encrypted })),
   );
-  const results = $derived(query.trim() ? hits : recent);
+  // Until the first answer for what's typed, the list keeps what it showed instead of going blank.
+  const results = $derived(query.trim() && answered ? hits : recent);
   const canCreate = $derived(
     query.trim().length > 0 &&
       answered === query.trim() &&
@@ -40,6 +41,7 @@
     selected = 0;
     if (!q.trim()) {
       hits = [];
+      answered = "";
       return;
     }
     const t = setTimeout(async () => {
@@ -142,7 +144,7 @@
       <button class="cancel" onclick={exit}>Cancel</button>
     {/if}
   </div>
-  <ul id="search-results" role="listbox" aria-label={query.trim() ? "Results" : "Recent notes"}>
+  <ul id="search-results" role="listbox" aria-label={results === recent ? "Recent notes" : "Results"}>
     {#if !query.trim() && recent.length}
       <li class="heading" role="presentation">Recent</li>
     {/if}

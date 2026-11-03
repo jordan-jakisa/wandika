@@ -47,7 +47,9 @@ test("typing shows matching notes with a snippet and folder", async () => {
   const user = userEvent.setup();
   render(Search);
   await user.type(screen.getByRole("combobox"), "three-way");
-  const found = await screen.findByRole("option", { name: /Sync design/ });
+  // Recent notes stay until the first results arrive.
+  const list = await screen.findByRole("listbox", { name: "Results" });
+  const found = within(list).getByRole("option", { name: /Sync design/ });
   expect(found).toHaveTextContent("Three-way merge");
   expect(found).toHaveTextContent("Projects");
   expect(screen.getByRole("listbox", { name: "Results" })).toBeInTheDocument();

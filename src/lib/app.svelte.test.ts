@@ -583,18 +583,13 @@ describe("notes", () => {
     expect(app.openCount).toBe(count + 1);
   });
 
-  test("the long-press tip comes up on the third note opened on a phone", async () => {
+  test("opening notes counts them, so the Notes list can teach its long-press menu later", async () => {
     const { app } = await started();
     app.open("a.md");
     app.open("b.md");
-    expect(tips.tip).not.toHaveBeenCalled();
     app.open("c.md");
-    expect(tips.tip).toHaveBeenCalledTimes(1);
-    expect(tips.tip.mock.calls[0][0]).toBe("long-press");
-    tips.tip.mock.calls[0][2]("Tip text");
-    expect(app.toast).toBe("Tip text");
-    app.open("d.md");
-    expect(tips.tip).toHaveBeenCalledTimes(1);
+    expect(app.notesOpened).toBe(3);
+    expect(tips.tip).not.toHaveBeenCalled();
   });
 
   test("today's note opens", async () => {

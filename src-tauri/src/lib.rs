@@ -31,6 +31,9 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            // Haptic feedback on phones: a tick at a swipe's or pull's point, a tap on a done task.
+            #[cfg(mobile)]
+            app.handle().plugin(tauri_plugin_haptics::init())?;
             let data = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data)?;
             app.manage(state::App::new(data));

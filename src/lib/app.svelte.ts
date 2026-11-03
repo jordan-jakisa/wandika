@@ -2,7 +2,6 @@ import { api, codeOf, listen, openUrl } from "./api";
 import { mailRef, type MailRef } from "./mailLinks";
 import { forgetImages } from "./attachments";
 import { forgetNoteEmbeds } from "./editor/embeds";
-import { tip, touch } from "./tips";
 import { TEMPLATE } from "./kanban";
 import { parseTask } from "./taskText";
 import type { Entry, NoteMeta, Snippet, Status, SyncReport, Today, VaultTask } from "./types";
@@ -99,6 +98,8 @@ class AppState {
   today = $state<Today | null>(null);
   /** Why Today couldn't load, while there's nothing loaded to show instead. */
   todayError = $state<string | null>(null);
+  /** The vault's tasks as last listed, so Tasks shows them at once and refreshes behind. */
+  vaultTasks = $state<VaultTask[] | null>(null);
   snippets = $state<Snippet[]>([]);
   /** Counts for the open note, shown in the status bar. `cards` is set for boards. */
   noteStats = $state({ words: 0, chars: 0, cards: null as number | null, backlinks: 0, encrypted: false });
@@ -220,6 +221,7 @@ class AppState {
     this.syncProgress = null;
     this.lastSync = next.last_sync;
     this.today = null;
+    this.vaultTasks = null;
     this.#todayAt = 0;
     this.#failures = 0;
     this.#retryAt = 0;
@@ -356,13 +358,12 @@ class AppState {
     }
   }
 
-  #opened = 0;
+  /** Notes opened this session; after a few, the Notes list teaches its long-press menu. */
+  notesOpened = 0;
 
   open(path: string) {
     if (path !== this.current) this.openCount++;
-    if (touch && ++this.#opened === 3) {
-      tip("long-press", "Tip: press and hold a note in the list for rename, encrypt and more.", (t) => this.say(t));
-    }
+    this.notesOpened++;
     this.current = path;
     this.graphFocus = path;
     this.switcherOpen = false;
@@ -624,7 +625,7 @@ class AppState {
   }
 
   /** Deletes a task and its notes from their note, with Undo. */
-  async deleteTask(t: VaultTask) {
+  async deleteTask(t: VaultTask): Promise<boolean> {
     try {
       const taken = await api.taskDelete(t.path, t.line, t.text);
       this.#taskChanged(t.path);
@@ -632,13 +633,15 @@ class AppState {
         label: "Undo",
         run: () => void this.#undoTask(t.path, () => api.taskRestore(t.path, t.line, taken)),
       });
+      return true;
     } catch (e) {
       this.taskFailed(e, t.path);
+      return false;
     }
   }
 
   /** Moves a task and its notes to the vault's archive note, with Undo. */
-  async archiveTask(t: VaultTask) {
+  async archiveTask(t: VaultTask): Promise<boolean> {
     try {
       const done = await api.taskArchive(t.path, t.line, t.text);
       this.#taskChanged(t.path, done.archive);
@@ -646,8 +649,10 @@ class AppState {
         label: "Undo",
         run: () => void this.#undoTask(t.path, () => api.taskUnarchive(done, t.path, t.line), done.archive),
       });
+      return true;
     } catch (e) {
       this.taskFailed(e, t.path);
+      return false;
     }
   }
 

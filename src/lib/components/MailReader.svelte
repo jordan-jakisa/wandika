@@ -3,6 +3,7 @@
   import { api, openUrl } from "../api";
   import { app } from "../app.svelte";
   import { sheetOpened } from "../backstack";
+  import { closeSheet } from "../motion";
   import { mailUrl } from "../mailLinks";
   import { emailTask } from "../taskText";
   import type { MailBody } from "../types";
@@ -49,8 +50,8 @@
       );
       dialogEl.showModal();
       release = sheetOpened(() => (app.reading = null));
-    } else if (!r && dialogEl.open) {
-      dialogEl.close();
+    } else if (!r && dialogEl.open && !dialogEl.classList.contains("closing")) {
+      closeSheet(dialogEl);
       release();
       release = () => {};
     }
@@ -106,7 +107,7 @@
 
 <dialog
   bind:this={dialogEl}
-  class="reader"
+  class="reader pushes"
   aria-label={mail?.subject || "Email"}
   onclose={() => (app.reading = null)}
   onclick={(e) => e.target === dialogEl && (app.reading = null)}

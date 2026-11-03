@@ -99,7 +99,9 @@ test("a message's action button runs it and clears the message", async () => {
   await user.click(await screen.findByRole("button", { name: "Undo" }));
   expect(undo).toHaveBeenCalledTimes(1);
   expect(app.toast).toBeNull();
-  expect(screen.queryByRole("button", { name: "Undo" })).not.toBeInTheDocument();
+  // It fades out with its words, but can't be pressed again.
+  expect(document.querySelector(".toast")).not.toHaveClass("shown");
+  expect(screen.getByRole("button", { name: "Undo" })).toBeDisabled();
 });
 
 test("the dialog for questions and the image viewer are always there to open", async () => {

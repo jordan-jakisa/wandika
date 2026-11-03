@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { haptic } from "../haptics";
   import { tick } from "svelte";
   import { ChevronRight, FileText, Folder, FolderPlus, Lock, LockOpen, Pencil, Plus, Trash2, File, Image as ImageIcon } from "@lucide/svelte";
   import { api } from "../api";
@@ -38,6 +39,7 @@
     pressTimer = setTimeout(() => {
       pressedMenu = path;
       swallowClick = true;
+      haptic("selection");
     }, 450);
   }
 

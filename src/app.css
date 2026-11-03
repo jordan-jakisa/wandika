@@ -436,6 +436,51 @@ dialog[open]::backdrop {
   animation: fade-in var(--dur-quick) var(--ease-out);
 }
 
+/* Sheets leave as they came (motion.ts closeSheet adds .closing, then closes when it ends).
+   Phone sheets rise from the bottom and go back down; a screen opened from a list (an email)
+   pushes in from the right and back out; everything else fades. */
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+@keyframes sheet-down {
+  to {
+    transform: translateY(100%);
+  }
+}
+@keyframes push-in {
+  from {
+    transform: translateX(100%);
+  }
+}
+@keyframes push-out {
+  to {
+    transform: translateX(100%);
+  }
+}
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+dialog.closing,
+dialog.closing::backdrop {
+  animation: fade-out var(--dur-base) var(--ease-in) forwards;
+}
+html:is([data-platform="ios"], [data-platform="android"]) dialog.rises[open] {
+  animation: sheet-up var(--dur-slow) var(--ease-sheet);
+}
+html:is([data-platform="ios"], [data-platform="android"]) dialog.rises.closing {
+  animation: sheet-down var(--dur-base) var(--ease-in) forwards;
+}
+html:is([data-platform="ios"], [data-platform="android"]) dialog.pushes[open] {
+  animation: push-in var(--dur-base) var(--ease-sheet);
+}
+html:is([data-platform="ios"], [data-platform="android"]) dialog.pushes.closing {
+  animation: push-out var(--dur-base) var(--ease-in) forwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
   :root {
     --dur-instant: 0ms;
