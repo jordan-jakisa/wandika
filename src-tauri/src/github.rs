@@ -18,6 +18,9 @@ const API: &str = "https://api.github.com";
 // https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api
 const WRITES_PER_MINUTE: usize = 70;
 const WRITES_PER_HOUR: usize = 450;
+/// GitHub's best practice for many writes: one at a time, at least a second apart.
+/// https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api
+const WRITE_GAP: Duration = Duration::from_secs(1);
 static WRITES: Mutex<VecDeque<Instant>> = Mutex::new(VecDeque::new());
 static BLOCKED_UNTIL: Mutex<Option<Instant>> = Mutex::new(None);
 
@@ -33,27 +36,33 @@ fn guard() -> Result<()> {
     }
 }
 
+/// How long the next write must wait, or None when it may go now (and is then counted).
+fn slot(q: &mut VecDeque<Instant>, now: Instant) -> Result<Option<Duration>> {
+    while q.front().is_some_and(|t| now.duration_since(*t) > Duration::from_secs(3600)) {
+        q.pop_front();
+    }
+    if q.len() >= WRITES_PER_HOUR {
+        return Err(limited());
+    }
+    if let Some(last) = q.back() {
+        let since = now.duration_since(*last);
+        if since < WRITE_GAP {
+            return Ok(Some(WRITE_GAP - since));
+        }
+    }
+    let in_minute: Vec<&Instant> = q.iter().filter(|t| now.duration_since(**t) < Duration::from_secs(60)).collect();
+    if in_minute.len() >= WRITES_PER_MINUTE {
+        return Ok(Some(Duration::from_secs(60).saturating_sub(now.duration_since(*in_minute[0])) + Duration::from_millis(50)));
+    }
+    q.push_back(now);
+    Ok(None)
+}
+
 /// Waits for a free slot for one content-creating request; fails when this hour's budget is spent.
 async fn pace() -> Result<()> {
     loop {
         guard()?;
-        let wait = {
-            let mut q = WRITES.lock().unwrap();
-            let now = Instant::now();
-            while q.front().is_some_and(|t| now.duration_since(*t) > Duration::from_secs(3600)) {
-                q.pop_front();
-            }
-            if q.len() >= WRITES_PER_HOUR {
-                return Err(limited());
-            }
-            let in_minute: Vec<&Instant> = q.iter().filter(|t| now.duration_since(**t) < Duration::from_secs(60)).collect();
-            if in_minute.len() >= WRITES_PER_MINUTE {
-                Some(Duration::from_secs(60).saturating_sub(now.duration_since(*in_minute[0])) + Duration::from_millis(50))
-            } else {
-                q.push_back(now);
-                None
-            }
-        };
+        let wait = slot(&mut WRITES.lock().unwrap(), Instant::now())?;
         match wait {
             Some(d) => tokio::time::sleep(d).await,
             None => return Ok(()),
@@ -364,6 +373,24 @@ mod tests {
         assert!(blocked_for().is_none(), "a plain refusal is not a rate limit");
         let e = block_on(g.user()).unwrap_err();
         assert_eq!(e.friendly().0, "bad_response");
+    }
+
+    #[test]
+    fn writes_go_one_a_second_and_stay_under_the_minute_and_hour_limits() {
+        let start = Instant::now();
+        let mut q = VecDeque::new();
+        assert_eq!(slot(&mut q, start).unwrap(), None);
+        let wait = slot(&mut q, start + Duration::from_millis(300)).unwrap().unwrap();
+        assert_eq!(wait, Duration::from_millis(700), "a second after the last write");
+        assert_eq!(q.len(), 1, "a write that waits isn't counted");
+        assert_eq!(slot(&mut q, start + WRITE_GAP).unwrap(), None);
+        // A second apart is at most 60 a minute, under the 70 a minute limit, which stays as a backstop.
+        let mut busy: VecDeque<Instant> = (0..WRITES_PER_MINUTE).map(|i| start + Duration::from_millis(i as u64 * 100)).collect();
+        let wait = slot(&mut busy, start + Duration::from_secs(10)).unwrap().unwrap();
+        assert!(wait > Duration::from_secs(49) && wait <= Duration::from_secs(51), "the minute's budget is spent: {wait:?}");
+        let mut full: VecDeque<Instant> = (0..WRITES_PER_HOUR).map(|i| start + Duration::from_secs(i as u64 * 7)).collect();
+        assert!(slot(&mut full, start + Duration::from_secs(3500)).is_err(), "the hour's budget is spent");
+        assert_eq!(slot(&mut full, start + Duration::from_secs(3_600 + 7 * 450)).unwrap(), None, "old writes age out");
     }
 
     #[test]
