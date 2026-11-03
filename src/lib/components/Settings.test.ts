@@ -402,6 +402,13 @@ describe("Encryption", () => {
 });
 
 describe("Connections", () => {
+  test("a public build waits for Google's review before offering Google", async () => {
+    app.status = { ...app.status!, configured: { ...app.status!.configured, google: false, gmail: false } };
+    await open("connections");
+    expect(row("Google").getByText("Coming once Google has reviewed Wandika.")).toBeInTheDocument();
+    expect(row("Google").queryByRole("button", { name: "Connect" })).not.toBeInTheDocument();
+  });
+
   test("a public build's Google is Calendar and Tasks, no Gmail", async () => {
     app.status = { ...app.status!, configured: { ...app.status!.configured, gmail: false } };
     await open("connections");
@@ -683,6 +690,14 @@ describe("About", () => {
     expect(row("Wandika").getByText("Version 0.1.0 beta")).toBeInTheDocument();
     await user.click(pane().getByRole("button", { name: "github.com/jordan-jakisa/wandika" }));
     expect(open_).toHaveBeenCalledWith("https://github.com/jordan-jakisa/wandika", "_blank", "noopener");
+  });
+
+  test("links the privacy policy, as the stores require", async () => {
+    const user = userEvent.setup();
+    const open_ = vi.spyOn(window, "open").mockReturnValue(null);
+    await open("about");
+    await user.click(pane().getByRole("button", { name: "Privacy policy" }));
+    expect(open_).toHaveBeenCalledWith("https://github.com/jordan-jakisa/wandika/blob/main/PRIVACY.md", "_blank", "noopener");
   });
 
   test("says it's a beta and takes feedback by email", async () => {

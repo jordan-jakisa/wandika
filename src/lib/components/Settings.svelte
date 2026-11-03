@@ -1,6 +1,8 @@
 <script lang="ts">
   /** Beta feedback goes to the same address as the privacy policy's contact. */
   const FEEDBACK = "mailto:jordan.timutic@gmail.com?subject=Wandika%20beta%20feedback";
+  /** The store rules want the privacy policy reachable inside the app. */
+  const PRIVACY = "https://github.com/jordan-jakisa/wandika/blob/main/PRIVACY.md";
   import { duration } from "../motion";
   import {
     ChevronLeft,
@@ -328,7 +330,9 @@
         {#if !configured}
           {provider === "google" && /Android/.test(navigator.userAgent)
             ? "Not available on Android yet. Connect Google on your Mac or iPhone."
-            : "Not available in this version."}
+            : provider === "google" && s?.configured.gmail === false
+              ? "Coming once Google has reviewed Wandika."
+              : "Not available in this version."}
         {:else if account}
           {account}
         {:else}
@@ -649,6 +653,10 @@
                 <span class="row-desc">Some things may not work yet. Your notes stay plain Markdown files, on this device and on GitHub.</span>
               </div>
               <button class="btn" onclick={() => openUrl(FEEDBACK)}>Send feedback</button>
+            </div>
+            <div class="row">
+              <span class="row-label">Privacy</span>
+              <button class="link-btn" onclick={() => openUrl(PRIVACY)}>Privacy policy</button>
             </div>
             <div class="row">
               <span class="row-label">Source</span>
