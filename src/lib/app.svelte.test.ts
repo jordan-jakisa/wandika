@@ -1117,6 +1117,28 @@ describe("full-screen Today on the Mac", () => {
   });
 });
 
+describe("note history", () => {
+  test("⌘[ goes back through the notes opened, ⌘] forward again; opening a new one clears forward", async () => {
+    const { app } = await started();
+    app.open("a.md");
+    app.open("b.md");
+    app.open("c.md");
+    app.goBack();
+    expect(app.current).toBe("b.md");
+    app.goBack();
+    expect(app.current).toBe("a.md");
+    app.goBack();
+    expect(app.current).toBe("a.md");
+    app.goForward();
+    expect(app.current).toBe("b.md");
+    app.open("d.md");
+    app.goForward();
+    expect(app.current).toBe("d.md");
+    app.goBack();
+    expect(app.current).toBe("b.md");
+  });
+});
+
 describe("notes changed by Claude Code", () => {
   test("a change made outside reloads the file list and the open note, once", async () => {
     const { app } = await started();

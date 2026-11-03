@@ -364,7 +364,15 @@ class AppState {
   /** Notes opened this session; after a few, the Notes list teaches its long-press menu. */
   notesOpened = 0;
 
-  open(path: string) {
+  /** Notes left behind and gone back from, for ⌘[ and ⌘]. */
+  #back: string[] = [];
+  #forward: string[] = [];
+
+  open(path: string, viaHistory = false) {
+    if (!viaHistory && this.current && path !== this.current) {
+      this.#back.push(this.current);
+      this.#forward = [];
+    }
     if (path !== this.current) this.openCount++;
     this.notesOpened++;
     // A note opened from full-screen Today shows, instead of opening behind it.
@@ -373,6 +381,22 @@ class AppState {
     this.graphFocus = path;
     this.switcherOpen = false;
     this.tab = "notes";
+  }
+
+  /** ⌘[: the note before this one. */
+  goBack() {
+    const prev = this.#back.pop();
+    if (!prev) return;
+    if (this.current) this.#forward.push(this.current);
+    this.open(prev, true);
+  }
+
+  /** ⌘]: the note gone back from. */
+  goForward() {
+    const next = this.#forward.pop();
+    if (!next) return;
+    if (this.current) this.#back.push(this.current);
+    this.open(next, true);
   }
 
   /** All tasks, in the main column: leaves the open note and full-screen Today. */

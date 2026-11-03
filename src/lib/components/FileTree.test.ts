@@ -343,3 +343,25 @@ test("a touch that moves is a scroll, not a hold", async () => {
   await vi.advanceTimersByTimeAsync(500);
   expect(screen.getByRole("button", { name: "Actions for Welcome" })).toHaveAttribute("aria-expanded", "false");
 });
+
+test("the arrow keys move between rows; Right opens a folder and Left closes it", async () => {
+  app.tree = [entry("Daily", "folder"), entry("Daily/2026-11-03.md"), entry("Welcome.md")];
+  renderTree();
+  const daily = row(/^Daily/);
+  daily.focus();
+  await fireEvent.keyDown(daily, { key: "ArrowRight" });
+  await waitFor(() => expect(row("2026-11-03")).toBeInTheDocument());
+  await fireEvent.keyDown(daily, { key: "ArrowDown" });
+  expect(row("2026-11-03")).toHaveFocus();
+  await fireEvent.keyDown(row("2026-11-03"), { key: "ArrowUp" });
+  expect(daily).toHaveFocus();
+  await fireEvent.keyDown(daily, { key: "ArrowLeft" });
+  await waitFor(() => expect(within(tree()).queryByRole("button", { name: "2026-11-03" })).not.toBeInTheDocument());
+});
+
+test("a right-click opens the row's menu", async () => {
+  app.tree = [entry("Welcome.md")];
+  renderTree();
+  await fireEvent.contextMenu(row(/^Welcome/));
+  expect(await screen.findByRole("menuitem", { name: /Rename/ })).toBeInTheDocument();
+});

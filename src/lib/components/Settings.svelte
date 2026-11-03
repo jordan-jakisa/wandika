@@ -287,7 +287,12 @@
     ["⌘S", "Sync now"],
     ["⌘,", "Settings"],
     ["⌘\\", "Show or hide the sidebar"],
+    ["⌥⌘T", "Show or hide Today"],
+    ["⌘[ and ⌘]", "Back and forward between notes"],
     ["⌘F", "Find in note"],
+    ["⌘B, ⌘I", "Bold, italic"],
+    ["⌘L", "Checklist"],
+    ["⌘⇧8, ⌘⇧7", "Bulleted list, numbered list"],
     ["[[", "Link a note"],
   ];
 

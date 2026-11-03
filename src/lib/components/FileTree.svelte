@@ -61,6 +61,19 @@
     }
   }
 
+  /** Up and Down move between rows; Right opens a folder and Left closes it, as in Finder. */
+  function treeKey(e: KeyboardEvent) {
+    const at = (e.target as HTMLElement).closest<HTMLElement>("button.item");
+    if (!at || !["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight"].includes(e.key)) return;
+    const rows = [...(e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>("button.item")];
+    const i = rows.indexOf(at);
+    const path = at.dataset.path!;
+    e.preventDefault();
+    if (e.key === "ArrowDown") rows[i + 1]?.focus();
+    else if (e.key === "ArrowUp") rows[i - 1]?.focus();
+    else if (at.dataset.kind === "folder" && (e.key === "ArrowRight") !== openFolders.has(path)) toggle(path);
+  }
+
   function toggle(path: string) {
     const next = new Set(openFolders);
     if (next.has(path)) next.delete(path);
@@ -188,6 +201,8 @@
           {:else}
             <button
               class="item"
+              data-path={e.path}
+              data-kind={e.kind}
               onclick={() => {
                 // The tap that ends a touch and hold opens the menu, not the note.
                 if (swallowClick) return void (swallowClick = false);
@@ -260,7 +275,8 @@
   </ul>
 {/snippet}
 
-<nav class="tree">
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<nav class="tree" onkeydown={treeKey}>
   <button class="new-folder" onclick={() => newFolder("")}><FolderPlus size={15} /> New folder</button>
   {#if app.tree.length}
     {@render branch(roots, 0)}

@@ -99,7 +99,14 @@
     // ⌘K still opens and closes its own palette.
     const dialogOpen = [...document.querySelectorAll("dialog[open]")].some((d) => !d.classList.contains("switcher"));
     if (dialogOpen) return;
-    if (k === "k" || k === "o") {
+    if (e.key === "[" || e.key === "]") {
+      e.preventDefault();
+      if (e.key === "[") app.goBack();
+      else app.goForward();
+    } else if (k === "t" && e.altKey) {
+      e.preventDefault();
+      app.showToday = !app.showToday;
+    } else if (k === "k" || k === "o") {
       e.preventDefault();
       app.switcherOpen = !app.switcherOpen;
     } else if (k === "n" && !e.shiftKey) {
@@ -477,7 +484,8 @@
         <button
           class="icon-btn today-toggle"
           onclick={() => (app.showToday = !app.showToday)}
-          aria-label={app.showToday ? "Hide today" : "Show today"}
+          aria-label={app.showToday ? "Hide Today" : "Show Today"}
+          title={app.showToday ? "Hide Today (⌥⌘T)" : "Show Today (⌥⌘T)"}
           aria-pressed={app.showToday}
         >
           {#if app.showToday}<PanelRightClose size={18} />{:else}<PanelRightOpen size={18} />{/if}

@@ -160,12 +160,12 @@ describe("on a desktop", () => {
     const column = screen.getByRole("complementary", { name: "Today" });
     expect(within(column).getByRole("button", { name: "Open today's note" })).toBeInTheDocument();
     expect(views().queryByRole("button", { name: "Today" })).not.toBeInTheDocument();
-    const toggle = screen.getByRole("button", { name: "Hide today" });
+    const toggle = screen.getByRole("button", { name: "Hide Today" });
     expect(toggle).toHaveAttribute("aria-pressed", "true");
     await user.click(toggle);
     expect(screen.queryByRole("complementary", { name: "Today" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Show today" })).toHaveAttribute("aria-pressed", "false");
-    await user.click(screen.getByRole("button", { name: "Show today" }));
+    expect(screen.getByRole("button", { name: "Show Today" })).toHaveAttribute("aria-pressed", "false");
+    await user.click(screen.getByRole("button", { name: "Show Today" }));
     expect(screen.getByRole("complementary", { name: "Today" })).toBeInTheDocument();
   });
 
@@ -214,7 +214,7 @@ describe("on a desktop", () => {
     setWidth(1000);
     renderWorkspace();
     expect(screen.queryByRole("complementary", { name: "Today" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Hide today" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Hide Today" })).not.toBeInTheDocument();
     await user.click(views().getByRole("button", { name: "Today" }));
     expect(main().getByRole("button", { name: "Open today's note" })).toBeInTheDocument();
     expect(views().getByRole("button", { name: "Today" })).toHaveClass("active");

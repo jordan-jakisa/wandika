@@ -755,7 +755,12 @@ describe("About", () => {
       ["Sync now", "⌘S"],
       ["Settings", "⌘,"],
       ["Show or hide the sidebar", "⌘\\"],
+      ["Show or hide Today", "⌥⌘T"],
+      ["Back and forward between notes", "⌘[ and ⌘]"],
       ["Find in note", "⌘F"],
+      ["Bold, italic", "⌘B, ⌘I"],
+      ["Checklist", "⌘L"],
+      ["Bulleted list, numbered list", "⌘⇧8, ⌘⇧7"],
       ["Link a note", "[["],
     ]);
   });
