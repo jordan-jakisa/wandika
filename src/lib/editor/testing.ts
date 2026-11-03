@@ -2,6 +2,7 @@
 // cursor and `«…»` a selected range, so a test reads as the text the user sees.
 
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
+import { ensureSyntaxTree, forceParsing } from "@codemirror/language";
 import { EditorSelection, EditorState, type Extension } from "@codemirror/state";
 import { Decoration, EditorView } from "@codemirror/view";
 import { onTestFinished } from "vitest";
@@ -42,9 +43,14 @@ export function show(state: EditorState): string {
 /** The Markdown language as the app configures it. */
 export const md = () => markdown({ base: markdownLanguage });
 
+// CodeMirror parses in time slices, so on a busy machine a fresh editor may not have parsed the
+// whole note yet. Tests parse it all up front, so what they see doesn't depend on the clock.
+
 export function stateOf(marked: string, extensions: Extension[] = []) {
   const { doc, selection } = parse(marked);
-  return EditorState.create({ doc, selection, extensions: [EditorState.allowMultipleSelections.of(true), ...extensions] });
+  const state = EditorState.create({ doc, selection, extensions: [EditorState.allowMultipleSelections.of(true), ...extensions] });
+  ensureSyntaxTree(state, state.doc.length, 5000);
+  return state;
 }
 
 /** An editor on a jsdom element, destroyed when the test ends. */
@@ -52,6 +58,7 @@ export function viewOf(marked: string, extensions: Extension[] = []) {
   const parent = document.createElement("div");
   document.body.append(parent);
   const view = new EditorView({ state: stateOf(marked, extensions), parent });
+  forceParsing(view, view.state.doc.length, 5000);
   onTestFinished(() => {
     view.destroy();
     parent.remove();
