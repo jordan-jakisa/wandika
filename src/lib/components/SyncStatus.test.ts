@@ -131,13 +131,13 @@ describe("offline", () => {
 
 describe("a failed sync", () => {
   test.each([
-    ["github_rate_limit", "GitHub is busy. Tap to retry"],
-    ["github_down", "GitHub is down. Tap to retry"],
-    ["github_not_found", "Repository not found. Tap to choose"],
-    ["github_auth", "GitHub sign-in expired. Tap to sign in"],
+    ["github_rate_limit", "GitHub is busy. Click to retry"],
+    ["github_down", "GitHub is down. Click to retry"],
+    ["github_not_found", "Repository not found. Click to choose"],
+    ["github_auth", "GitHub sign-in expired. Click to sign in"],
     ["no_access", "No access to the folder"],
     ["disk_full", "Device is out of space"],
-    ["something_new", "Couldn't sync. Tap to retry"],
+    ["something_new", "Couldn't sync. Click to retry"],
   ])("%s reads “%s”", (code, text) => {
     app.syncError = { code, message: "The full sentence." };
     render(SyncStatus);
@@ -164,7 +164,7 @@ describe("a failed sync", () => {
     const user = userEvent.setup();
     app.syncError = { code: "github_down", message: "GitHub isn't answering. Wandika will try again in a few minutes." };
     render(SyncStatus);
-    await user.click(screen.getByRole("button", { name: "GitHub is down. Tap to retry. Sync now" }));
+    await user.click(screen.getByRole("button", { name: "GitHub is down. Click to retry. Sync now" }));
     expect(app.toast).toBe("GitHub isn't answering. Wandika will try again in a few minutes.");
     expect(app.sync).toHaveBeenCalledWith(true);
   });

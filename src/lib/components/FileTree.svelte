@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { touch } from "../tips";
   import { haptic } from "../haptics";
   import { tick } from "svelte";
   import { ChevronRight, FileText, Folder, FolderPlus, Lock, LockOpen, Pencil, Plus, Trash2, File, Image as ImageIcon } from "@lucide/svelte";
@@ -198,7 +199,12 @@
               onpointermove={pressMove}
               onpointerup={pressEnd}
               onpointercancel={pressEnd}
-              oncontextmenu={(ev) => ev.preventDefault()}
+              oncontextmenu={(ev) => {
+                ev.preventDefault();
+                // A right-click or two-finger click opens the row's menu, as in Finder. Touch has
+                // its own press and hold.
+                if (!touch) pressedMenu = e.path;
+              }}
               aria-disabled={e.kind === "file" && !isImage(e.path.replace(/\.age$/, "")) ? true : undefined}
             >
               {#if e.kind === "folder"}

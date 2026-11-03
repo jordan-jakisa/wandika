@@ -7,6 +7,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { api } from "../api";
 import { app } from "../app.svelte";
 import { focus } from "../focus.svelte";
+import Dialog from "./Dialog.svelte";
 import FocusSession from "./FocusSession.svelte";
 
 beforeEach(() => {
@@ -113,6 +114,12 @@ test("End and Escape leave the room", async () => {
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   focus.start({ text: "Again" }, 15);
   flushSync();
+  render(Dialog);
+  // Mid-round, Escape asks first: Keep going stays, End round leaves.
   await user.keyboard("{Escape}");
-  expect(focus.active).toBeNull();
+  await user.click(await screen.findByRole("button", { name: "Keep going" }));
+  expect(focus.active).not.toBeNull();
+  await user.keyboard("{Escape}");
+  await user.click(await screen.findByRole("button", { name: "End round" }));
+  await vi.waitFor(() => expect(focus.active).toBeNull());
 });

@@ -5,6 +5,7 @@
 @media (max-width: 899px) {
   /* Nested under html[data-platform] so these win over each component's own scoped styles. */
   html[data-platform] {
+    --dur-close: var(--dur-base);
     /* Buttons: 44px tall, 12px corners. Primary is filled with the accent; the rest are quiet text. */
     .btn:not(.quiet) {
       min-height: var(--target);

@@ -288,6 +288,9 @@ class AppState {
     await this.refreshFiles();
     this.changed = { paths, at: Date.now() };
     this.edited();
+    // The open note changing under you says who changed it.
+    if (this.current && paths.includes(this.current)) this.say(`Claude Code changed “${titleOf(this.current)}”.`);
+    else if (paths.length) this.say(paths.length === 1 ? `Claude Code changed “${titleOf(paths[0])}”.` : `Claude Code changed ${paths.length} notes.`);
   }
 
   startAutoSync() {
@@ -364,10 +367,19 @@ class AppState {
   open(path: string) {
     if (path !== this.current) this.openCount++;
     this.notesOpened++;
+    // A note opened from full-screen Today shows, instead of opening behind it.
+    this.todayFull = false;
     this.current = path;
     this.graphFocus = path;
     this.switcherOpen = false;
     this.tab = "notes";
+  }
+
+  /** All tasks, in the main column: leaves the open note and full-screen Today. */
+  showTasks() {
+    this.current = null;
+    this.todayFull = false;
+    this.tab = "tasks";
   }
 
   async openDaily() {

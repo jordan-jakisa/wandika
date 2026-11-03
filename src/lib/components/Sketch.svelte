@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { touch } from "../tips";
   import { Eraser, Trash2, Undo2 } from "@lucide/svelte";
   import { api } from "../api";
   import { sheetOpened } from "../backstack";
@@ -214,7 +215,7 @@
       </g>
     </svg>
     {#if !strokes.length && !live && !loading}
-      <p class="hint" style:color={MUTED} aria-hidden="true">Draw with your pen, finger or mouse</p>
+      <p class="hint" style:color={MUTED} aria-hidden="true">{touch ? "Draw with your pen or finger" : "Draw with your trackpad, mouse or pen"}</p>
     {/if}
     <div class="tools" role="toolbar" aria-label="Drawing tools">
       <div class="inks" role="radiogroup" aria-label="Ink">

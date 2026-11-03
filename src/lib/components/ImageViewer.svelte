@@ -4,7 +4,7 @@
   import { app } from "../app.svelte";
   import { sheetOpened } from "../backstack";
   import { closeSheet } from "../motion";
-  import { imageUrl } from "../attachments";
+  import { forgetImages, imageUrl } from "../attachments";
   import { MARK } from "../sketch";
 
   /** An image from the vault, shown full size over everything else. */
@@ -42,6 +42,19 @@
       release = () => {};
     }
   });
+
+  /** Syncs, then reads the picture again. */
+  async function retry() {
+    const path = app.viewing;
+    if (!path) return;
+    await app.sync(true);
+    forgetImages();
+    failed = false;
+    imageUrl(path, "").then(
+      (url) => app.viewing === path && (src = url),
+      () => app.viewing === path && (failed = true),
+    );
+  }
 </script>
 
 <dialog
@@ -49,6 +62,10 @@
   class="viewer"
   aria-label={name}
   onclose={() => (app.viewing = null)}
+  oncancel={(e) => {
+    e.preventDefault();
+    app.viewing = null;
+  }}
   onclick={(e) => e.target === dialogEl && (app.viewing = null)}
 >
   <header>
@@ -67,7 +84,12 @@
   </header>
   <div class="stage">
     {#if failed}
-      <p class="muted">This image couldn't be opened. It may still be on its way from another device; try again after the next sync.</p>
+      <div class="failed">
+        <p class="muted">This image hasn't arrived yet, or it was moved.</p>
+        {#if app.synced}
+          <button class="btn" onclick={retry}>Sync and try again</button>
+        {/if}
+      </div>
     {:else if src}
       <img {src} alt={name} class:shown={loaded} onload={() => (loaded = true)} />
     {/if}
@@ -131,5 +153,10 @@
   }
   img.shown {
     opacity: 1;
+  }
+  .failed {
+    display: grid;
+    justify-items: center;
+    gap: var(--space-3);
   }
 </style>

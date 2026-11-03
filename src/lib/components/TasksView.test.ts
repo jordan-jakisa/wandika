@@ -47,7 +47,7 @@ describe("states", () => {
   test("empty: says how to add a task", async () => {
     vi.mocked(api.tasksVault).mockResolvedValue([]);
     render(TasksView);
-    expect(await screen.findByText("No open tasks. In any note, tap Checklist on the writing bar to add one.")).toBeInTheDocument();
+    expect(await screen.findByText("No open tasks. In any note, press ⌘L to start a checklist.")).toBeInTheDocument();
   });
 
   test("counts open tasks", async () => {

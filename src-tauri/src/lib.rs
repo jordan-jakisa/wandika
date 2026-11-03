@@ -70,6 +70,8 @@ pub fn run() {
             commands::note_discard_if_empty,
             commands::attachment_save,
             commands::drawing_write,
+            #[cfg(desktop)]
+            commands::claude_setup_command,
             commands::attachment_read,
             commands::new_note_folder,
             commands::new_note_location,

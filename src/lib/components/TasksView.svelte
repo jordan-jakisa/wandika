@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { touch } from "../tips";
   import { readView, saveView } from "../viewPrefs";
   import { untrack } from "svelte";
   import { Check, Search } from "@lucide/svelte";
@@ -109,7 +110,9 @@
         ? "Couldn't gather your tasks."
         : open
           ? `${open} open ${open === 1 ? "task" : "tasks"} in your notes.`
-          : "No open tasks. In any note, tap Checklist on the writing bar to add one."}
+          : touch
+            ? "No open tasks. In any note, tap Checklist on the writing bar to add one."
+            : "No open tasks. In any note, press ⌘L to start a checklist."}
   </p>
   {#if failed && !tasks.length}
     <button class="btn" onclick={load}>Try again</button>

@@ -1105,6 +1105,18 @@ describe("deleting and archiving tasks", () => {
   });
 });
 
+describe("full-screen Today on the Mac", () => {
+  test("opening a note or all tasks leaves full-screen Today, so what you opened shows", async () => {
+    const { app } = await started();
+    app.todayFull = true;
+    app.open("Welcome.md");
+    expect(app.todayFull).toBe(false);
+    app.todayFull = true;
+    app.showTasks();
+    expect([app.todayFull, app.current, app.tab]).toEqual([false, null, "tasks"]);
+  });
+});
+
 describe("notes changed by Claude Code", () => {
   test("a change made outside reloads the file list and the open note, once", async () => {
     const { app } = await started();
@@ -1121,6 +1133,17 @@ describe("notes changed by Claude Code", () => {
     const seen = app.changed.at;
     await settle(app.checkOutside());
     expect(app.changed.at).toBe(seen);
+    expect(app.toast).toBe("Claude Code changed 2 notes.");
+  });
+
+  test("the open note changing says Claude Code changed it", async () => {
+    const { app } = await started();
+    app.open("Welcome.md");
+    const { changeOutside } = real.mock!;
+    await vi.advanceTimersByTimeAsync(10);
+    changeOutside("Welcome.md", "# Welcome\n\nClaude was here.\n");
+    await settle(app.checkOutside());
+    expect(app.toast).toBe("Claude Code changed “Welcome”.");
   });
 
   test("the app looks every few seconds while it's in front", async () => {

@@ -332,6 +332,17 @@ pub async fn attachment_save(app: S<'_>, request: tauri::ipc::Request<'_>) -> Re
     Ok(rel)
 }
 
+/// The one line that connects Claude Code to this copy of Wandika (Mac only).
+#[cfg(desktop)]
+#[tauri::command]
+pub async fn claude_setup_command() -> Result<String> {
+    let exe = std::env::current_exe()?;
+    let path = exe.to_string_lossy();
+    // Quoted when the path has spaces, so the line pastes into Terminal as it is.
+    let path = if path.contains(' ') { format!("'{path}'") } else { path.into_owned() };
+    Ok(format!("claude mcp add --scope user wandika -- {path} mcp"))
+}
+
 /// Saves a changed drawing over the file an embed in `from` points at.
 #[tauri::command]
 pub async fn drawing_write(app: S<'_>, target: String, from: String, svg: String) -> Result<()> {

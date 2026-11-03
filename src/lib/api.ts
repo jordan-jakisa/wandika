@@ -130,6 +130,8 @@ export const api = {
       : call<string>("attachment_save", { note, name, bytes });
   },
   attachmentRead: (target: string, from: string) => call<ArrayBuffer>("attachment_read", { target, from }),
+  /** Mac: the Terminal line that connects Claude Code to this copy of Wandika. */
+  claudeSetupCommand: () => call<string>("claude_setup_command"),
   /** Saves a changed drawing over the file an embed in `from` points at. */
   drawingWrite: (target: string, from: string, svg: string) => call<void>("drawing_write", { target, from, svg }),
   /** Where a new note goes, following Obsidian's "Default location for new notes". */

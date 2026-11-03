@@ -24,6 +24,11 @@
   let startX = 0;
   let startW = 0;
   let dragging = $state(false);
+  // While a column edge follows the pointer, the layout's own easing stays out of the way.
+  $effect(() => {
+    document.documentElement.classList.toggle("resizing", dragging);
+    return () => document.documentElement.classList.remove("resizing");
+  });
 
   const clamp = (w: number) => Math.round(Math.min(max, Math.max(min, w)));
 

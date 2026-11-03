@@ -20,7 +20,13 @@ export const platform: Platform = detect();
 export const isIOS = platform === "ios";
 export const isAndroid = platform === "android";
 
-if (typeof document !== "undefined") document.documentElement.dataset.platform = platform;
+/** The Mac app: its window has the traffic lights over the top of the page (Overlay title bar). */
+export const isMac = platform === "desktop" && typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
+
+if (typeof document !== "undefined") {
+  document.documentElement.dataset.platform = platform;
+  if (isMac) document.documentElement.dataset.os = "mac";
+}
 
 /**
  * iOS: reads the Dynamic Type body size (17pt at the default setting) and scales the app's text

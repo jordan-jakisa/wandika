@@ -1,6 +1,7 @@
 <script lang="ts">
   import { HardDrive, RefreshCw } from "@lucide/svelte";
   import { ago, app, progressText } from "../app.svelte";
+  import { touch } from "../tips";
 
   let now = $state(Date.now());
   $effect(() => {
@@ -17,11 +18,13 @@
     return () => clearTimeout(t);
   });
   // A failure names its cause in a few words; tapping shows the full sentence and tries again.
+  /** Phones tap; the Mac clicks. */
+  const Tap = touch ? "Tap" : "Click";
   const SHORT: Record<string, string> = {
-    github_rate_limit: "GitHub is busy. Tap to retry",
-    github_down: "GitHub is down. Tap to retry",
-    github_not_found: "Repository not found. Tap to choose",
-    github_auth: "GitHub sign-in expired. Tap to sign in",
+    github_rate_limit: `GitHub is busy. ${Tap} to retry`,
+    github_down: `GitHub is down. ${Tap} to retry`,
+    github_not_found: `Repository not found. ${Tap} to choose`,
+    github_auth: `GitHub sign-in expired. ${Tap} to sign in`,
     no_access: "No access to the folder",
     disk_full: "Device is out of space",
   };
@@ -33,7 +36,7 @@
       : offline
         ? "Offline. Changes are saved here."
         : app.syncError
-          ? (SHORT[app.syncError.code] ?? "Couldn't sync. Tap to retry")
+          ? (SHORT[app.syncError.code] ?? `Couldn't sync. ${Tap} to retry`)
           : app.lastSync
             ? `Synced ${ago(app.lastSync, now)}`
             : "Not synced yet",
@@ -64,7 +67,7 @@
   class:fail={app.syncError && !offline}
   onclick={tap}
   disabled={app.syncing}
-  title={app.syncError?.message ?? "Sync now"}
+  title={app.syncError?.message ?? (touch ? "Sync now" : "Sync now (⌘S)")}
   aria-label={/[.…]$/.test(text) ? `${text} Sync now` : `${text}. Sync now`}
 >
   <span class="icon" class:spin={slow}><RefreshCw size={13} /></span>

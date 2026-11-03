@@ -101,9 +101,8 @@
     <p class="status" role="status">{stopping ? "Stopping…" : progressText(p)}</p>
     <p class="muted">
       {mode === "open"
-        ? "The first download of a large vault takes a few minutes."
-        : "Where both sides have a different file with the same name, both are kept. Nothing is deleted."}
-      You can close Settings; syncing carries on, and the status bar shows how far it is.
+        ? "The first download of a large vault takes a few minutes. Your notes open when it's done."
+        : "Where both sides have a different file with the same name, both are kept. Nothing is deleted. You can close Settings; syncing carries on, and the status bar shows how far it is."}
     </p>
     <div>
       <button class="btn quiet" onclick={stop} disabled={stopping}>Stop</button>

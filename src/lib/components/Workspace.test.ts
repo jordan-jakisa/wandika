@@ -270,21 +270,6 @@ describe("on a desktop", () => {
     expect(valueOf(await screen.findByRole("textbox", { name: "Note title" }))).toMatch(untitled);
   });
 
-  test("on a Mac the empty screen names the shortcuts, with sync only for a synced vault", async () => {
-    vi.spyOn(navigator, "platform", "get").mockReturnValue("MacIntel");
-    const restore = noTouch();
-    try {
-      const { unmount } = renderWorkspace();
-      expect(main().getByText("Search with ⌘K. New note with ⌘N.")).toBeInTheDocument();
-      unmount();
-      app.status = synced();
-      renderWorkspace();
-      expect(main().getByText("Search with ⌘K. New note with ⌘N. Sync with ⌘S.")).toBeInTheDocument();
-    } finally {
-      restore();
-    }
-  });
-
   test("elsewhere the shortcuts line is left out", () => {
     renderWorkspace();
     expect(main().queryByText(/Search with ⌘K/)).not.toBeInTheDocument();

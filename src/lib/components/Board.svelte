@@ -85,9 +85,25 @@
     commit();
   }
 
+  /** A card's first line, for messages; long ones are cut. */
+  const named = (text: string) => {
+    const first = text.split("\n")[0].replace(/\[\[([^\]|]+)(\|([^\]]*))?\]\]/g, (_, a, __, b) => b || a).trim();
+    return first.length > 40 ? `${first.slice(0, 39).trimEnd()}…` : first;
+  };
+
   function remove(lane: Lane, c: Card) {
+    const at = lane.cards.findIndex((x) => x.id === c.id);
     lane.cards = lane.cards.filter((x) => x.id !== c.id);
     commit();
+    app.say(`Deleted “${named(c.text)}”.`, {
+      label: "Undo",
+      run: () => {
+        const back = board.lanes.find((l) => l.id === lane.id);
+        if (!back) return;
+        back.cards.splice(Math.min(at, back.cards.length), 0, c);
+        commit();
+      },
+    });
   }
 
   /** Turns a card into its own note and links the card to it, so the work has room to grow. */
@@ -133,8 +149,16 @@
       });
       if (ok === null) return;
     }
+    const at = board.lanes.findIndex((l) => l.id === lane.id);
     board.lanes = board.lanes.filter((l) => l.id !== lane.id);
     commit();
+    app.say(`Deleted “${lane.title}”.`, {
+      label: "Undo",
+      run: () => {
+        board.lanes.splice(Math.min(at, board.lanes.length), 0, lane);
+        commit();
+      },
+    });
   }
 
   async function addLane() {

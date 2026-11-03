@@ -182,7 +182,7 @@ test("a note that can't be read says why and offers no writing tools", async () 
   vi.spyOn(api, "noteRead").mockRejectedValue(new AppError("That note no longer exists.", "message"));
   app.open("Gone.md");
   render(Editor, { path: "Gone.md" });
-  expect(await screen.findByText("That note no longer exists.")).toBeInTheDocument();
+  expect(await screen.findByText(/That note no longer exists\./)).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Note actions" }));
   expect(screen.queryByRole("menuitem", { name: "Add image" })).not.toBeInTheDocument();
   expect(screen.queryByRole("menuitem", { name: "Insert template" })).not.toBeInTheDocument();

@@ -22,7 +22,7 @@
   } from "@lucide/svelte";
   import { api } from "../api";
   import Menu from "./Menu.svelte";
-  import { isIOS } from "../platform";
+  import { isIOS, isMac } from "../platform";
   import { push } from "../transitions";
   import { tip, touch } from "../tips";
   import { app, titleOf, type Tab } from "../app.svelte";
@@ -33,7 +33,7 @@
   import Search from "./Search.svelte";
   import Settings from "./Settings.svelte";
   import { sheetBack } from "../backstack";
-  import { duration } from "../motion";
+  import { closeSheet, duration } from "../motion";
   import { haptic } from "../haptics";
   import StatusBar from "./StatusBar.svelte";
   import SyncStatus from "./SyncStatus.svelte";
@@ -63,13 +63,20 @@
       return { sidebar: SIDEBAR.initial, today: TODAY.initial, sidebarOpen: true };
     }
   }
+  let saveTimer: ReturnType<typeof setTimeout> | undefined;
   function setCols(patch: Partial<typeof cols>) {
     cols = { ...cols, ...patch };
-    try {
-      localStorage.setItem(LAYOUT_KEY, JSON.stringify(cols));
-    } catch {
-      /* private mode: widths reset next launch */
-    }
+    const save = () => {
+      try {
+        localStorage.setItem(LAYOUT_KEY, JSON.stringify(cols));
+      } catch {
+        /* private mode: widths reset next launch */
+      }
+    };
+    // During a drag, saved once the edge settles, not on every step.
+    clearTimeout(saveTimer);
+    if (document.documentElement.classList.contains("resizing")) saveTimer = setTimeout(save, 250);
+    else save();
   }
   // On a narrow window the sidebar gives way first, so the note always keeps room.
   const sidebarW = $derived(cols.sidebarOpen ? Math.max(SIDEBAR.min, Math.min(cols.sidebar, width - MAIN_MIN)) : 0);
@@ -77,7 +84,7 @@
   const roomForToday = $derived(
     width - sidebarW - cols.today >= MAIN_MIN && !boardOpen && !(app.tab === "graph" && !app.current),
   );
-  const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform) && !("ontouchend" in document);
+  // The Mac's window puts the traffic lights over the page; columns leave them room.
 
   function onKey(e: KeyboardEvent) {
     // Escape leaves full-screen Today, unless a dialog over it takes the key first.
@@ -88,6 +95,10 @@
     const mod = e.metaKey || e.ctrlKey;
     if (!mod) return;
     const k = e.key.toLowerCase();
+    // While a dialog is open (Settings, the task editor, a question), app-wide shortcuts wait;
+    // ⌘K still opens and closes its own palette.
+    const dialogOpen = [...document.querySelectorAll("dialog[open]")].some((d) => !d.classList.contains("switcher"));
+    if (dialogOpen) return;
     if (k === "k" || k === "o") {
       e.preventDefault();
       app.switcherOpen = !app.switcherOpen;
@@ -290,10 +301,17 @@
   }
 
   let switcherEl = $state<HTMLDialogElement>();
+  /** The palette stays drawn while it fades out. */
+  let paletteShown = $state(false);
   $effect(() => {
     if (!switcherEl) return;
-    if (app.switcherOpen && !switcherEl.open) switcherEl.showModal();
-    if (!app.switcherOpen && switcherEl.open) switcherEl.close();
+    if (app.switcherOpen && !switcherEl.open) {
+      paletteShown = true;
+      switcherEl.showModal();
+    }
+    if (!app.switcherOpen && switcherEl.open && !switcherEl.classList.contains("closing")) {
+      closeSheet(switcherEl, () => (paletteShown = false));
+    }
   });
 
   const tabs: { id: Tab; label: string; icon: typeof FolderClosed }[] = [
@@ -399,7 +417,7 @@
       />
       <div class="side-head" data-tauri-drag-region>
         <div class="vault" data-tauri-drag-region>
-          <span class="vault-name" title={app.vaultName}>{app.vault?.name}</span>
+          <span class="vault-name" title={app.vaultName} data-tauri-drag-region>{app.vault?.name}</span>
         </div>
         <button class="icon-btn" onclick={() => app.openSettings()} aria-label="Settings"><SettingsIcon size={18} /></button>
         <button class="icon-btn" onclick={toggleSidebar} aria-label="Hide the sidebar" title="Hide the sidebar (⌘\\)"><PanelLeftClose size={18} /></button>
@@ -433,6 +451,7 @@
     </aside>
 
     <main class="main">
+      {#if isMac}<div class="drag-strip" data-tauri-drag-region></div>{/if}
       {#if !cols.sidebarOpen}
         <button class="icon-btn sidebar-toggle" onclick={toggleSidebar} aria-label="Show the sidebar" title="Show the sidebar (⌘\\)">
           <PanelLeftOpen size={18} />
@@ -468,6 +487,7 @@
 
     {#if app.showToday && roomForToday}
       <aside class="today-col" aria-label="Today">
+        {#if isMac}<div class="drag-strip" data-tauri-drag-region></div>{/if}
         <Resizer
           edge="left"
           value={cols.today}
@@ -483,9 +503,6 @@
     <StatusBar />
   </div>
 
-  <dialog bind:this={switcherEl} class="switcher" oncancel={() => (app.switcherOpen = false)} onclick={(e) => { if (e.target === switcherEl) app.switcherOpen = false; }}>
-    {#if app.switcherOpen}<Search mode="palette" />{/if}
-  </dialog>
 {:else}
   <!-- Swipe back is a shortcut; the Back button does the same with a tap or a keyboard. -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -587,6 +604,23 @@
   </div>
 {/if}
 
+<!-- The ⌘K palette, over any wide layout (full-screen Today too). -->
+{#if wide}
+  <dialog
+    bind:this={switcherEl}
+    class="switcher"
+    oncancel={(e) => {
+      e.preventDefault();
+      app.switcherOpen = false;
+    }}
+    onclick={(e) => {
+      if (e.target === switcherEl) app.switcherOpen = false;
+    }}
+  >
+    {#if paletteShown}<Search mode="palette" />{/if}
+  </dialog>
+{/if}
+
 <style>
   .today-full {
     display: grid;
@@ -610,6 +644,9 @@
   .shell {
     display: grid;
     transition: grid-template-columns var(--dur-base) var(--ease-out);
+  }
+  :global(html.resizing) .shell {
+    transition: none;
     grid-template-columns: var(--sidebar) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) auto;
     height: 100dvh;
@@ -731,7 +768,14 @@
     min-height: 0;
   }
   .mac .graph-host {
-    padding-top: 20px;
+    padding-top: var(--titlebar);
+  }
+  /* Mac: the window drags from the top strip of every column, as in any Mac app. */
+  .drag-strip {
+    position: absolute;
+    inset: 0 0 auto;
+    height: var(--titlebar);
+    z-index: 2;
   }
   .phone-graph {
     height: 100%;
@@ -747,8 +791,15 @@
     top: 30px;
     left: 12px;
   }
-  .collapsed .main :global(.bar) {
+  /* The show-sidebar and Today buttons sit in the corners: every view leaves them room. */
+  .collapsed .main :global(.bar),
+  .collapsed .graph-host :global(header),
+  .collapsed .scroll {
     padding-left: 52px;
+  }
+  .scroll :global(header),
+  .graph-host :global(header) {
+    padding-right: 52px;
   }
   .sidebar[hidden] {
     display: none;
@@ -787,7 +838,7 @@
     overflow-x: hidden;
   }
   .mac .today-col {
-    padding-top: 20px;
+    padding-top: var(--titlebar);
   }
   .empty {
     flex: 1;

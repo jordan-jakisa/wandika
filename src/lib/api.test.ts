@@ -87,6 +87,7 @@ const calls: [string, (a: Api["api"]) => Promise<unknown>, string, Record<string
   ["taskEdit", (a) => a.taskEdit("Plan.md", 3, "Ship it", "Ship it 📌", "notes"), "task_edit", { path: "Plan.md", line: 3, expected: "Ship it", text: "Ship it 📌", details: "notes" }],
   ["newNoteLocation", (a) => a.newNoteLocation(), "new_note_location", undefined],
   ["newNoteLocationSet", (a) => a.newNoteLocationSet("folder", "Inbox"), "new_note_location_set", { location: "folder", folder: "Inbox" }],
+  ["claudeSetupCommand", (a) => a.claudeSetupCommand(), "claude_setup_command", undefined],
   ["drawingWrite", (a) => a.drawingWrite("Drawing.svg", "Plan.md", "<svg/>"), "drawing_write", { target: "Drawing.svg", from: "Plan.md", svg: "<svg/>" }],
   ["taskDelete", (a) => a.taskDelete("Plan.md", 3, "Ship it"), "task_delete", { path: "Plan.md", line: 3, expected: "Ship it" }],
   ["taskRestore", (a) => a.taskRestore("Plan.md", 3, ["- [ ] Ship it"]), "task_restore", { path: "Plan.md", line: 3, lines: ["- [ ] Ship it"] }],

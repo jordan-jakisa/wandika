@@ -13,6 +13,28 @@
   import { prefs } from "$lib/prefs.svelte";
   import { onMount } from "svelte";
 
+  let toastEl = $state<HTMLDivElement>();
+  // The bar lives in the top layer, above any open dialog, so its words and Undo stay readable
+  // and clickable. Each new message raises it again, over a dialog opened since.
+  // It stays open (invisible between messages), so screen readers keep the live region.
+  $effect(() => {
+    if (!toastEl) return;
+    if (typeof toastEl.showPopover !== "function") return void toastEl.removeAttribute("popover");
+    try {
+      toastEl.showPopover();
+    } catch {
+      toastEl.removeAttribute("popover");
+    }
+  });
+  $effect(() => {
+    if (!app.toast || !toastEl?.hasAttribute("popover")) return;
+    try {
+      toastEl.hidePopover();
+      toastEl.showPopover();
+    } catch {
+      /* already gone from the page */
+    }
+  });
   let lastToast = $state("");
   let lastAction = $state<string | null>(null);
   $effect(() => {
@@ -52,7 +74,7 @@
 
 <!-- Always in the page, so screen readers announce each new message. The last message stays
      drawn while the bar fades, so it fades with its words. -->
-<div class="toast" class:shown={!!app.toast} role="status" aria-live="polite">
+<div class="toast" class:shown={!!app.toast} role="status" aria-live="polite" popover="manual" bind:this={toastEl}>
   <span>{app.toast ?? lastToast}</span>
   {#if lastAction}
     <button
@@ -95,6 +117,10 @@
     text-underline-offset: 3px;
   }
   .toast {
+    inset: auto;
+    margin: 0;
+    border: 0;
+    overflow: visible;
     display: flex;
     align-items: center;
     justify-content: space-between;

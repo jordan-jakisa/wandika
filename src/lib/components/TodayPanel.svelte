@@ -207,7 +207,7 @@
   <section class="due" aria-labelledby="tasks-h">
     <div class="section-head">
       <h3 id="tasks-h">{hasOverdue ? "Due and overdue" : "Due today"}</h3>
-      <button class="link-btn" onclick={() => (app.tab = "tasks")}>All tasks</button>
+      <button class="link-btn" onclick={() => app.showTasks()}>All tasks</button>
     </div>
     {#if dueTasks.length || remoteDue.length}
       <ul class="tasks">

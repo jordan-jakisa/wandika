@@ -90,13 +90,20 @@
     }
   }
 
+  /** The highlighted result stays in view as the arrows move past the bottom of the list. */
+  function reveal() {
+    queueMicrotask(() => document.getElementById(`hit-${selected}`)?.scrollIntoView?.({ block: "nearest" }));
+  }
+
   function onKey(e: KeyboardEvent) {
     if (e.key === "ArrowDown") {
       e.preventDefault();
       selected = (selected + 1) % Math.max(count, 1);
+      reveal();
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       selected = (selected - 1 + count) % Math.max(count, 1);
+      reveal();
     } else if (e.key === "Enter") {
       e.preventDefault();
       void choose(selected);

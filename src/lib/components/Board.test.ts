@@ -359,6 +359,9 @@ describe("moving cards with the menu", () => {
     await user.click(screen.getByRole("menuitem", { name: "Delete card" }));
     expect(saved()["To do"]).toEqual(["[ ] Set up OAuth apps #setup", "[ ] Test on the phone #testing 📅 2026-11-03"]);
     expect(cardsIn("To do")).toHaveLength(2);
+    expect(app.toast).toMatch(/^Deleted “Write/);
+    app.toastAction!.run();
+    await vi.waitFor(() => expect(cardsIn("To do")).toHaveLength(3));
   });
 });
 

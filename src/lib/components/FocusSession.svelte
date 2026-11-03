@@ -1,6 +1,7 @@
 <script lang="ts">
   import { sheetOpened } from "../backstack";
   import { haptic } from "../haptics";
+  import { closeSheet } from "../motion";
   import { Pause, Play } from "@lucide/svelte";
   import { api } from "../api";
   import { app } from "../app.svelte";
@@ -23,9 +24,9 @@
     if (focus.active && !dialogEl.open) {
       dialogEl.showModal();
       // Back ends the session, as Escape does.
-      release = sheetOpened(() => focus.stop());
-    } else if (!focus.active && dialogEl.open) {
-      dialogEl.close();
+      release = sheetOpened(() => void endAsked());
+    } else if (!focus.active && dialogEl.open && !dialogEl.classList.contains("closing")) {
+      closeSheet(dialogEl);
       release();
       release = () => {};
     }
@@ -87,6 +88,13 @@
     if (focus.paused) focus.resume();
     else focus.pause();
   }
+
+  /** Esc mid-round asks first; a finished round ends at once. */
+  async function endAsked() {
+    if (focus.finished || focus.paused) return focus.stop();
+    const sure = await app.ask({ title: "End this round?", confirm: "End round", cancel: "Keep going" });
+    if (sure !== null) focus.stop();
+  }
 </script>
 
 <svelte:window onkeydown={onKey} />
@@ -98,7 +106,7 @@
   aria-labelledby="focus-task"
   oncancel={(e) => {
     e.preventDefault();
-    focus.stop();
+    void endAsked();
   }}
 >
   {#if focus.active}
@@ -209,7 +217,7 @@
   .done {
     stroke: var(--papyrus);
     stroke-linecap: round;
-    transition: stroke-dashoffset 250ms linear;
+    transition: stroke-dashoffset var(--dur-base) linear;
   }
   .on-break .done {
     stroke: var(--amber);

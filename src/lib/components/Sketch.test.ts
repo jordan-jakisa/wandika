@@ -38,7 +38,7 @@ test("stays closed until a drawing is asked for, then opens full screen with an 
   open();
   expect(screen.getByRole("dialog", { name: "Drawing" })).toBeInTheDocument();
   expect(screen.getByRole("img", { name: "Empty drawing" })).toBeInTheDocument();
-  expect(screen.getByText("Draw with your pen, finger or mouse")).toBeInTheDocument();
+  expect(screen.getByText("Draw with your trackpad, mouse or pen")).toBeInTheDocument();
 });
 
 test("a finger, a pen or a mouse draws a stroke; Undo takes it back", async () => {

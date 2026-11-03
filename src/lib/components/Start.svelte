@@ -11,11 +11,14 @@
   let name = $state("Notes");
   let busy = $state(false);
   let error = $state<string | null>(null);
+  /** Which section the failure belongs to, so it shows under what was clicked. */
+  let errorAt = $state<"vaults" | "github" | "local">("local");
   const known = $derived(app.status?.known ?? []);
 
-  async function run(fn: () => Promise<void>) {
+  async function run(fn: () => Promise<void>, at: typeof errorAt = "local") {
     busy = true;
     error = null;
+    errorAt = at;
     try {
       await fn();
     } catch (e) {
@@ -43,10 +46,14 @@
 
   const reopen = (v: VaultConfig) =>
     run(async () => {
-      await api.vaultSwitch(v.id);
-      await app.enterVault();
-      void app.sync();
-    });
+      try {
+        await api.vaultSwitch(v.id);
+        await app.enterVault();
+        void app.sync();
+      } catch (e) {
+        throw new Error(`Couldn't open “${v.name}”. ${(e as Error).message}`);
+      }
+    }, "vaults");
 
   async function forget(v: VaultConfig) {
     const ok = await app.ask({
@@ -60,14 +67,14 @@
     await run(async () => {
       await api.vaultForget(v.id);
       await app.refreshStatus();
-    });
+    }, "vaults");
   }
 
   const where = (v: VaultConfig) =>
     v.remote ? `Syncs with ${v.remote.owner}/${v.remote.repo}` : v.folder ? v.folder : "On this device only";
 </script>
 
-<main class="start">
+<main class="start" data-tauri-drag-region>
   <div class="column">
     <h1 class="wordmark"><Mark size={44} /> Wandika</h1>
     <p class="lead">Notes as plain Markdown files. Keep them on this device, or sync them through a GitHub repository.</p>
@@ -92,6 +99,7 @@
             </li>
           {/each}
         </ul>
+        {#if error && errorAt === "vaults"}<p class="error" role="alert">{error}</p>{/if}
       </section>
     {/if}
 
@@ -102,8 +110,9 @@
         <GitHubSignIn />
       {:else}
         <RepoPicker mode="open" />
-        <button class="btn quiet" onclick={() => run(() => app.signOut())} disabled={busy}>Sign out of GitHub ({app.status.user.login})</button>
+        <button class="btn quiet" onclick={() => run(() => app.signOut(), "github")} disabled={busy}>Sign out of GitHub ({app.status.user.login})</button>
       {/if}
+      {#if error && errorAt === "github"}<p class="error" role="alert">{error}</p>{/if}
     </section>
 
     <section aria-labelledby="local-h">
@@ -119,7 +128,7 @@
           <FolderOpen size={16} /> Open a folder, such as an Obsidian vault or a local git repository
         </button>
       {/if}
-      {#if error}<p class="error" role="alert">{error}</p>{/if}
+      {#if error && errorAt === "local"}<p class="error" role="alert">{error}</p>{/if}
     </section>
   </div>
 </main>

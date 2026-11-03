@@ -194,7 +194,7 @@
       loadError = null;
     } catch (e) {
       console.warn("[wandika] graph:", e);
-      loadError = "The graph couldn't load. Reload Wandika and try again.";
+      loadError = "The graph couldn't load.";
       return;
     }
     fitted = false;
@@ -468,7 +468,10 @@
       onwheel={wheel}
     ></canvas>
     {#if loadError}
-      <p class="empty error" role="alert">{loadError}</p>
+      <div class="empty" role="alert">
+        <p class="error">{loadError}</p>
+        <button class="btn" onclick={() => void rebuild()}>Try again</button>
+      </div>
     {:else if local && counts.links === 0}
       <p class="empty muted">This note has no links yet.</p>
     {:else if counts.nodes === 0}

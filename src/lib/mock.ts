@@ -361,6 +361,7 @@ const handlers: Record<string, (a: Args) => unknown> = {
     files.set(path, bytes);
     return path;
   },
+  claude_setup_command: () => "claude mcp add --scope user wandika -- /Applications/Wandika.app/Contents/MacOS/wandika mcp",
   drawing_write: ({ target, svg }) => {
     const name = String(target).split("/").pop()!.toLowerCase();
     const path = [...files.keys()].find((p) => p === target || p.split("/").pop()!.toLowerCase() === name);

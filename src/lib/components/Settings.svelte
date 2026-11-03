@@ -20,10 +20,11 @@
   } from "@lucide/svelte";
   import { untrack } from "svelte";
   import { push } from "../transitions";
+  import { closeSheet } from "../motion";
   import { api, listen, openUrl } from "../api";
   import { ago, app, type SettingsSection } from "../app.svelte";
   import { ACCENTS, FONTS, WIDTHS, prefs, type NoteFont, type Theme, type Width } from "../prefs.svelte";
-  import { isIOS } from "../platform";
+  import { isIOS, isMac } from "../platform";
   import type { AppleAccess, NewNoteLocation } from "../types";
   import GitHubSignIn from "./GitHubSignIn.svelte";
   import RepoPicker from "./RepoPicker.svelte";
@@ -79,7 +80,7 @@
   $effect(() => {
     if (embedded) return;
     if (app.settingsOpen && !dialogEl.open) dialogEl.showModal();
-    if (!app.settingsOpen && dialogEl.open) dialogEl.close();
+    if (!app.settingsOpen && dialogEl.open && !dialogEl.classList.contains("closing")) closeSheet(dialogEl);
   });
 
   function go(id: SettingsSection) {
@@ -118,7 +119,8 @@
           [st?.connectors.apple_calendar, st?.connectors.apple_reminders].filter((a) => a === "granted").length;
         const cfg = st?.configured;
         if (n) return `${n} connected`;
-        return cfg && !cfg.google && !cfg.microsoft && !cfg.apple ? "Nothing to connect yet" : "Mail, calendars and reminders";
+        if (cfg && !cfg.google && !cfg.microsoft && !cfg.apple) return isMac ? "Claude Code" : "Nothing to connect yet";
+        return isMac ? "Mail, calendars, reminders and Claude Code" : "Mail, calendars and reminders";
       }
       case "account":
         return st?.user ? `GitHub: ${st.user.login}` : "Not signed in";
@@ -232,6 +234,17 @@
   });
 
   const NAMES: Record<string, string> = { google: "Google", microsoft: "Outlook", apple_calendar: "Apple Calendar", apple_reminders: "Apple Reminders" };
+
+  /** Copies the Terminal line that connects Claude Code, run once on this Mac. */
+  async function copyClaude() {
+    try {
+      const line = await api.claudeSetupCommand();
+      await navigator.clipboard.writeText(line);
+      app.say("Copied. Paste it in Terminal and press Return, then restart Claude Code.");
+    } catch (e) {
+      app.say((e as Error).message);
+    }
+  }
 
   async function disconnect(provider: string) {
     try {
@@ -579,8 +592,20 @@
             {@render appleRow("Apple Reminders", "apple_reminders")}
           </div>
           {/if}
+          {#if isMac}
+          <h4>On this Mac</h4>
+          <div class="group">
+            <div class="row">
+              <div class="row-text">
+                <span class="row-label">Claude Code</span>
+                <span class="row-desc">Lets Claude search, read and edit this vault's notes and tasks.</span>
+              </div>
+              <button class="btn" onclick={copyClaude}>Copy setup command</button>
+            </div>
+          </div>
+          {/if}
           {#if !showGoogle && !showOutlook && !s?.configured.apple}
-            <p class="note">There's nothing to connect in this version yet.</p>
+            {#if !isMac}<p class="note">There's nothing to connect in this version yet.</p>{/if}
           {:else}
             <!-- What connecting means, kept last and quiet: the rows above are the page. -->
             <footer class="about">

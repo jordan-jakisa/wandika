@@ -52,6 +52,7 @@
     leaves?: boolean;
   } = $props();
   let leaving = $state(false);
+  let menuOpen = $state(false);
 
   let busy = $state(false);
   /** Ticks at once; a failed change puts the box back and says why. */
@@ -79,7 +80,7 @@
     try {
       if (shown && leaves) {
         // A moment to see it done; a pause, not motion, so it stays with reduced motion too.
-        await wait(600);
+        await wait(duration("--dur-hold"));
         leaving = true;
         await wait(duration("--dur-base"));
       }
@@ -207,7 +208,21 @@
       {#if onDelete}<button class="act delete" class:full={past} tabindex="-1" onclick={() => fold(onDelete)}><Trash2 size={20} />Delete</button>{/if}
     </div>
   {/if}
-  <div class="slide" class:dragging class:moved={dragging || offset !== 0} style:transform={offset ? `translateX(${offset}px)` : null} onclickcapture={tapWhileOpen}>
+  <!-- Right-click is a shortcut to the ⋯ menu, which the keyboard reaches directly. -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="slide"
+    class:dragging
+    class:moved={dragging || offset !== 0}
+    style:transform={offset ? `translateX(${offset}px)` : null}
+    onclickcapture={tapWhileOpen}
+    oncontextmenu={(e) => {
+      // Mac: a right-click opens the row's menu.
+      if (touch || !(onEdit || onPin || onFocus || onArchive || onDelete)) return;
+      e.preventDefault();
+      menuOpen = true;
+    }}
+  >
     <label class="box"><input type="checkbox" {checked} disabled={busy} onchange={toggle} aria-label={label} /></label>
     <div class="body">
       {#if onEdit}
@@ -229,7 +244,7 @@
     </div>
     {#if onEdit || onPin || onFocus || onArchive || onDelete}
       <span class="actions">
-        <Menu label={`Actions for ${label}`} size={16}>
+        <Menu label={`Actions for ${label}`} size={16} bind:open={menuOpen}>
           {#if onEdit}<button role="menuitem" onclick={onEdit}><Pencil size={18} /> Edit</button>{/if}
           {#if onPin}
             <button role="menuitem" onclick={pinIt}>

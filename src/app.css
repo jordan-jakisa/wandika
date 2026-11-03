@@ -62,6 +62,10 @@
   --ease-out: cubic-bezier(0.2, 0, 0, 1);
   --ease-in: cubic-bezier(0.4, 0, 1, 1);
   --ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
+  /* How long a dialog takes to leave: as quick as it came on the Mac, a sheet's pace on phones. */
+  --dur-close: var(--dur-quick);
+  /* The moment a ticked task stays before it folds away. */
+  --dur-hold: 600ms;
 
   /* Pressed rows and buttons on touch; hairline separators. */
   --press: color-mix(in srgb, var(--ink) 8%, transparent);
@@ -464,9 +468,16 @@ dialog[open]::backdrop {
     opacity: 0;
   }
 }
-dialog.closing,
-dialog.closing::backdrop {
-  animation: fade-out var(--dur-base) var(--ease-in) forwards;
+/* Mac: full-window sheets leave the traffic lights their space. */
+html[data-os="mac"] .sketch[open],
+html[data-os="mac"] .viewer[open] {
+  padding-top: var(--titlebar);
+}
+
+/* Weighted above each dialog's own [open] animation, so the leaving one always wins. */
+:root dialog.closing.closing,
+:root dialog.closing.closing::backdrop {
+  animation: fade-out var(--dur-close) var(--ease-in) forwards;
 }
 html:is([data-platform="ios"], [data-platform="android"]) dialog.rises[open] {
   animation: sheet-up var(--dur-slow) var(--ease-sheet);
@@ -487,6 +498,7 @@ html:is([data-platform="ios"], [data-platform="android"]) dialog.pushes.closing 
     --dur-quick: 0ms;
     --dur-base: 0ms;
     --dur-slow: 0ms;
+    --dur-hold: 0ms;
   }
   *,
   *::before,

@@ -110,6 +110,10 @@
   class="reader pushes"
   aria-label={mail?.subject || "Email"}
   onclose={() => (app.reading = null)}
+  oncancel={(e) => {
+    e.preventDefault();
+    app.reading = null;
+  }}
   onclick={(e) => e.target === dialogEl && (app.reading = null)}
 >
   <header>

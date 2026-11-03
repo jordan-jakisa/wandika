@@ -5,7 +5,7 @@ import { duration } from "./motion";
 const root = document.documentElement;
 
 afterEach(() => {
-  for (const t of ["--dur-instant", "--dur-quick", "--dur-base", "--dur-slow"]) root.style.removeProperty(t);
+  for (const t of ["--dur-instant", "--dur-quick", "--dur-base", "--dur-slow", "--dur-close"]) root.style.removeProperty(t);
 });
 
 test("reads a duration in milliseconds from CSS", () => {
@@ -54,7 +54,7 @@ describe("easing and sheet closing", () => {
     const done = vi.fn();
     closeSheet(el, done);
     expect(done).toHaveBeenCalledTimes(1);
-    document.documentElement.style.setProperty("--dur-base", "240ms");
+    document.documentElement.style.setProperty("--dur-close", "240ms");
     el.setAttribute("open", "");
     closeSheet(el, done);
     expect(el).toHaveClass("closing");
@@ -62,7 +62,7 @@ describe("easing and sheet closing", () => {
     expect(el.hasAttribute("open")).toBe(false);
     expect(el).not.toHaveClass("closing");
     expect(done).toHaveBeenCalledTimes(2);
-    document.documentElement.style.removeProperty("--dur-base");
+    document.documentElement.style.removeProperty("--dur-close");
     vi.useRealTimers();
   });
 });

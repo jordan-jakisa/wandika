@@ -38,6 +38,7 @@
   let picker: HTMLInputElement;
   /** Until the note has been tapped into, inserts go to its end rather than before its title. */
   let cursorPlaced = false;
+  let focusingSelf = false;
   const insertAt = (v: EditorView) => (cursorPlaced ? v.state.selection.main.head : v.state.doc.length);
   let pickAt = 0;
 
@@ -252,6 +253,16 @@
         input?.focus();
         input?.select();
       });
+    } else if (!compact) {
+      // Mac: an opened note takes the cursor where you left off, unless something else has focus.
+      queueMicrotask(() => {
+        const at = document.activeElement;
+        if (at && at !== document.body) return;
+        // Not a place you chose: inserts still go to the end until you click into the text.
+        focusingSelf = true;
+        view?.focus();
+        focusingSelf = false;
+      });
     }
   }
 
@@ -378,7 +389,7 @@
 </script>
 
 <article class="note" class:compact>
-  <header class="bar">
+  <header class="bar" data-tauri-drag-region>
     {#if compact}
       <button class="back" onclick={() => (app.current = null)} aria-label="Back to notes">
         <ChevronLeft size={22} /><span>Notes</span>
@@ -430,7 +441,10 @@
     />
 
     {#if error}
-      <p class="error">{error}</p>
+      <div class="load-error" role="alert">
+        <p class="error">Couldn't open this note. {error}</p>
+        <button class="btn" onclick={() => load(path)}>Try again</button>
+      </div>
     {/if}
     {#if saveError}
       <div class="save-error" role="alert">
@@ -457,7 +471,7 @@
       hidden={locked || !!error || boardText !== null}
       onfocusin={() => {
         writing = compact;
-        cursorPlaced = true;
+        if (!focusingSelf) cursorPlaced = true;
       }}
       onfocusout={() => (writing = false)}
     ></div>
@@ -639,6 +653,14 @@
   }
   .save-error p {
     flex: 1 1 16em;
+    margin: 0;
+  }
+  .load-error {
+    display: grid;
+    justify-items: start;
+    gap: var(--space-3);
+  }
+  .load-error .error {
     margin: 0;
   }
 </style>

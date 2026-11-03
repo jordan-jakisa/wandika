@@ -1,7 +1,7 @@
 // Durations live in CSS (app.css, --dur-*). Script timers read them from there, so the two never
 // drift apart, and reduced motion (every duration 0) applies to both.
 
-export function duration(token: "--dur-instant" | "--dur-quick" | "--dur-base" | "--dur-slow"): number {
+export function duration(token: "--dur-instant" | "--dur-quick" | "--dur-base" | "--dur-slow" | "--dur-close" | "--dur-hold"): number {
   if (typeof document === "undefined") return 0;
   const value = getComputedStyle(document.documentElement).getPropertyValue(token).trim();
   const n = parseFloat(value) || 0;
@@ -35,7 +35,7 @@ export function bezier(x1: number, y1: number, x2: number, y2: number) {
 
 /** Closes a dialog after its leaving animation (`.closing` in app.css); at once with reduced motion. */
 export function closeSheet(el: HTMLDialogElement, done?: () => void) {
-  const ms = duration("--dur-base");
+  const ms = duration("--dur-close");
   if (!ms || !el.open) {
     el.close();
     done?.();
@@ -43,6 +43,8 @@ export function closeSheet(el: HTMLDialogElement, done?: () => void) {
   }
   el.classList.add("closing");
   setTimeout(() => {
+    // Opened again while it was leaving: it stays.
+    if (!el.classList.contains("closing")) return;
     el.classList.remove("closing");
     el.close();
     done?.();

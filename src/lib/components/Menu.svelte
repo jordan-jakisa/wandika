@@ -70,7 +70,19 @@
   </button>
   {#if open}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <div class="list" role="menu" tabindex="-1" onclick={() => (open = false)}>
+    <div
+      class="list"
+      role="menu"
+      tabindex="-1"
+      onclick={() => {
+        open = false;
+        // Focus goes back to the ⋯ button, unless the choice moved it (a dialog, a field).
+        setTimeout(() => {
+          const at = document.activeElement;
+          if (!at || at === document.body || root?.contains(at)) root?.querySelector<HTMLElement>(".trigger")?.focus();
+        });
+      }}
+    >
       {@render children()}
     </div>
   {/if}

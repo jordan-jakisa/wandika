@@ -74,7 +74,9 @@ test("says so when the graph can't load", async () => {
   try {
     app.titles = vault();
     render(GraphView);
-    expect(await screen.findByRole("alert")).toHaveTextContent("The graph couldn't load. Reload Wandika and try again.");
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("The graph couldn't load.");
+    expect(within(alert).getByRole("button", { name: "Try again" })).toBeInTheDocument();
   } finally {
     d3.failLoad = false;
   }
