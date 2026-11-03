@@ -43,6 +43,11 @@ test("shows the wordmark and both ways to keep notes", () => {
   expect(screen.queryByRole("heading", { name: "Your vaults" })).not.toBeInTheDocument();
 });
 
+test("says it's a beta, and that the notes stay the person's own files", () => {
+  renderStart();
+  expect(screen.getByText("Wandika is in beta. Your notes are always plain files you keep.")).toBeInTheDocument();
+});
+
 test("signed out, it offers GitHub sign-in", () => {
   renderStart();
   expect(screen.getByRole("button", { name: "Sign in with GitHub" })).toBeInTheDocument();

@@ -402,6 +402,12 @@ describe("Encryption", () => {
 });
 
 describe("Connections", () => {
+  test("a public build's Google is Calendar and Tasks, no Gmail", async () => {
+    app.status = { ...app.status!, configured: { ...app.status!.configured, gmail: false } };
+    await open("connections");
+    expect(row("Google").getByText("Calendar and Tasks")).toBeInTheDocument();
+  });
+
   test("each provider not connected yet offers Connect", async () => {
     await open("connections");
     expect(row("Google").getByText("Gmail, Calendar and Tasks")).toBeInTheDocument();
@@ -603,7 +609,7 @@ describe("Connections", () => {
   });
 
   test("a provider this build can't use says so, with no button", async () => {
-    app.status = status({ configured: { github: true, google: false, microsoft: false, apple: true } });
+    app.status = status({ configured: { github: true, google: false, microsoft: false, apple: true, gmail: true } });
     await open("connections");
     expect(row("Google").getByText("Not available in this version.")).toBeInTheDocument();
     expect(row("Google").queryByRole("button")).not.toBeInTheDocument();
@@ -613,7 +619,7 @@ describe("Connections", () => {
 
   test("on Android, Google points to the Mac or iPhone", async () => {
     vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (Linux; Android 15)");
-    app.status = status({ configured: { github: true, google: false, microsoft: true, apple: false } });
+    app.status = status({ configured: { github: true, google: false, microsoft: true, apple: false, gmail: true } });
     await open("connections");
     expect(row("Google").getByText("Not available on Android yet. Connect Google on your Mac or iPhone.")).toBeInTheDocument();
     expect(row("Outlook").getByRole("button", { name: "Connect" })).toBeInTheDocument();
@@ -674,9 +680,18 @@ describe("About", () => {
     const user = userEvent.setup();
     const open_ = vi.spyOn(window, "open").mockReturnValue(null);
     await open("about");
-    expect(row("Wandika").getByText("Version 0.1.0")).toBeInTheDocument();
+    expect(row("Wandika").getByText("Version 0.1.0 beta")).toBeInTheDocument();
     await user.click(pane().getByRole("button", { name: "github.com/jordan-jakisa/wandika" }));
     expect(open_).toHaveBeenCalledWith("https://github.com/jordan-jakisa/wandika", "_blank", "noopener");
+  });
+
+  test("says it's a beta and takes feedback by email", async () => {
+    const user = userEvent.setup();
+    const open_ = vi.spyOn(window, "open").mockReturnValue(null);
+    await open("about");
+    expect(row("This is a beta").getByText(/Your notes stay plain Markdown files/)).toBeInTheDocument();
+    await user.click(pane().getByRole("button", { name: "Send feedback" }));
+    expect(open_).toHaveBeenCalledWith("mailto:jordan.timutic@gmail.com?subject=Wandika%20beta%20feedback", "_blank", "noopener");
   });
 
   test("lists the keyboard shortcuts", async () => {
@@ -710,7 +725,7 @@ describe("on a phone", () => {
       ["Encryption", "Unlocked on this device"],
       ["Connections", "Mail, calendars and reminders"],
       ["Account", "GitHub: jordan-jakisa"],
-      ["About", "Version 0.1.0, keyboard shortcuts"],
+      ["About", "Version 0.1.0 beta, feedback, keyboard shortcuts"],
     ]);
     expect(sections().getByRole("button", { name: /Vault/ })).not.toHaveAttribute("aria-current");
   });

@@ -1,4 +1,6 @@
 <script lang="ts">
+  /** Beta feedback goes to the same address as the privacy policy's contact. */
+  const FEEDBACK = "mailto:jordan.timutic@gmail.com?subject=Wandika%20beta%20feedback";
   import { duration } from "../motion";
   import {
     ChevronLeft,
@@ -160,7 +162,7 @@
       case "account":
         return st?.user ? `GitHub: ${st.user.login}` : "Not signed in";
       case "about":
-        return "Version 0.1.0, keyboard shortcuts";
+        return "Version 0.1.0 beta, feedback, keyboard shortcuts";
     }
   };
 
@@ -315,7 +317,7 @@
 <svelte:window bind:innerWidth={width} onpopstate={onPopState} />
 
 {#snippet google()}
-  {@render connRow("Google", "Gmail, Calendar and Tasks", c?.google ?? null, "google", !!s?.configured.google, true)}
+  {@render connRow("Google", s?.configured.gmail === false ? "Calendar and Tasks" : "Gmail, Calendar and Tasks", c?.google ?? null, "google", !!s?.configured.google, true)}
 {/snippet}
 
 {#snippet connRow(name: string, what: string, account: string | null, provider: string, configured: boolean, canDisconnect: boolean)}
@@ -639,7 +641,14 @@
           <div class="group">
             <div class="row">
               <span class="row-label">Wandika</span>
-              <span class="row-desc">Version 0.1.0</span>
+              <span class="row-desc">Version 0.1.0 beta</span>
+            </div>
+            <div class="row">
+              <div class="row-text">
+                <span class="row-label">This is a beta</span>
+                <span class="row-desc">Some things may not work yet. Your notes stay plain Markdown files, on this device and on GitHub.</span>
+              </div>
+              <button class="btn" onclick={() => openUrl(FEEDBACK)}>Send feedback</button>
             </div>
             <div class="row">
               <span class="row-label">Source</span>

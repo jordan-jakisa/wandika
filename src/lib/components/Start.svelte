@@ -71,6 +71,7 @@
   <div class="column">
     <h1 class="wordmark"><Mark size={44} /> Wandika</h1>
     <p class="lead">Notes as plain Markdown files. Keep them on this device, or sync them through a GitHub repository.</p>
+    <p class="beta">Wandika is in beta. Your notes are always plain files you keep.</p>
 
     {#if known.length}
       <section aria-labelledby="known-h">
@@ -145,6 +146,11 @@
     font-weight: 650;
     letter-spacing: -0.03em;
     line-height: 1;
+  }
+  .beta {
+    margin: calc(-1 * var(--space-2)) 0 0;
+    font-size: var(--small);
+    color: var(--graphite);
   }
   .lead {
     margin: 0;
