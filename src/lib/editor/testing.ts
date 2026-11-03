@@ -57,7 +57,8 @@ export function stateOf(marked: string, extensions: Extension[] = []) {
   const { doc, selection } = parse(marked);
   const state = EditorState.create({ doc, selection, extensions: [EditorState.allowMultipleSelections.of(true), ...extensions] });
   ensureSyntaxTree(state, state.doc.length, 5000);
-  return state;
+  // The parsed tree reaches the state with its next transaction.
+  return state.update({}).state;
 }
 
 /** An editor on a jsdom element, destroyed when the test ends. */
