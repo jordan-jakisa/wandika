@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { renderAsync } from "pele/lazy";
 import { beforeEach, test, vi } from "vitest";
 import { diagrams } from "./diagrams.ts";
-import { decorations, focus, md, mousedown, select, viewOf } from "./testing.ts";
+import { blur, decorations, focus, md, mousedown, select, viewOf } from "./testing.ts";
 
 // Pele draws with real layout, which jsdom doesn't have; these tests cover what happens around it.
 vi.mock("pele/lazy", () => ({ renderAsync: vi.fn() }));
@@ -85,6 +85,20 @@ test("a selection reaching into the block shows its source", async () => {
   const view = setup(`«a\n\n\`\`\`»mermaid\ngraph TD\n\`\`\``);
   await focus(view);
   assert.deepEqual(decorations(view), []);
+});
+
+test("an unfocused editor draws the diagram even with the cursor in it", () => {
+  const view = setup(`‸${FLOW}`);
+  assert.equal(boxes(view).length, 1);
+});
+
+test("the diagram draws again when the editor loses focus with the cursor inside", async () => {
+  const view = setup(`‸\n\n${FLOW}`);
+  await focus(view);
+  select(view, `\n\n\`\`\`mermaid\ngraph‸ TD\n  A --> B\n\`\`\``);
+  assert.equal(boxes(view).length, 0);
+  await blur(view);
+  assert.equal(boxes(view).length, 1);
 });
 
 test("clicking a diagram puts the cursor in its source to edit it", async () => {

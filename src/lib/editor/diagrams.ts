@@ -1,8 +1,9 @@
 // ```mermaid blocks render as diagrams with Pele (obsidianmd/pele). The renderer for each diagram
-// type loads only when a note first uses it. Put the cursor in the block to edit its source.
+// type loads only when a note first uses it. Put the cursor in the block to edit its source; when
+// the editor loses focus the diagram draws again.
 
 import { syntaxTree } from "@codemirror/language";
-import { type EditorState, type Range, StateField } from "@codemirror/state";
+import { type EditorState, type Range, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, WidgetType } from "@codemirror/view";
 
 let seq = 0;
@@ -59,16 +60,23 @@ class Diagram extends WidgetType {
   }
 }
 
+const setFocus = StateEffect.define<boolean>();
+const focusField = StateField.define<boolean>({
+  create: () => false,
+  update: (v, tr) => tr.effects.reduce((acc, e) => (e.is(setFocus) ? e.value : acc), v),
+});
+
 function build(state: EditorState): DecorationSet {
   const out: Range<Decoration>[] = [];
+  const focused = state.field(focusField, false) ?? false;
   const sel = state.selection.main;
   syntaxTree(state).iterate({
     enter(node) {
       if (node.name !== "FencedCode") return;
       const info = node.node.getChild("CodeInfo");
       if (!info || state.sliceDoc(info.from, info.to).trim().toLowerCase() !== "mermaid") return false;
-      // Editing: show the source while the cursor is inside the block.
-      if (sel.from <= node.to && sel.to >= node.from) return false;
+      // Editing: show the source while the focused cursor is inside the block.
+      if (focused && sel.from <= node.to && sel.to >= node.from) return false;
       const text = node.node.getChild("CodeText");
       const source = text ? state.sliceDoc(text.from, text.to) : "";
       if (!source.trim()) return false;
@@ -81,14 +89,28 @@ function build(state: EditorState): DecorationSet {
   return Decoration.set(out, true);
 }
 
-/** Block widgets must come from state, not a view plugin, so this is a StateField. */
+/**
+ * Block widgets must come from state, not a view plugin, so this is a StateField. Focus is
+ * mirrored into state so diagrams draw again on blur.
+ */
 export const diagrams = StateField.define<DecorationSet>({
   create: build,
   update(value, tr) {
-    if (tr.docChanged || tr.selection || syntaxTree(tr.startState) !== syntaxTree(tr.state)) return build(tr.state);
+    if (
+      tr.docChanged ||
+      tr.selection ||
+      tr.effects.some((e) => e.is(setFocus)) ||
+      syntaxTree(tr.startState) !== syntaxTree(tr.state)
+    ) {
+      return build(tr.state);
+    }
     return value;
   },
-  provide: (f) => EditorView.decorations.from(f),
+  provide: (f) => [
+    focusField,
+    EditorView.decorations.from(f),
+    EditorView.focusChangeEffect.of((_state, focusing) => setFocus.of(focusing)),
+  ],
 });
 
 export const diagramTheme = EditorView.theme({
