@@ -70,6 +70,36 @@ Claude can then search, read, write and create notes, open today's note, and lis
 tasks in the vault open in Wandika. Encrypted notes stay locked; mail and calendars aren't offered. A
 running Wandika reloads what Claude changed within a few seconds, and sync takes it to GitHub.
 
+## Releases (public beta)
+
+Public builds are made with `WANDIKA_PUBLIC=1` (no Gmail; Google only after Google's review) and
+only from code that is pushed to GitHub. Compliance: docs/store/compliance-2026-11-03.md.
+
+**Android (signed APK).** Once, in Terminal (you choose the password; keep the file and the
+password safe, because a lost key means existing installs can't be updated):
+
+```bash
+keytool -genkey -v -keystore ~/wandika-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias wandika
+```
+
+Then create `src-tauri/gen/android/keystore.properties` (git-ignored) with four lines:
+`storeFile=/Users/<you>/wandika-release.jks`, `storePassword=...`, `keyAlias=wandika`,
+`keyPassword=...`. Back up the .jks file somewhere safe. Build with `scripts/release-android.sh`.
+
+**Mac (notarized .dmg).** Once:
+1. Xcode, Settings, Accounts, Manage Certificates, +, Developer ID Application.
+2. App Store Connect, Users and Access, Integrations, App Store Connect API: Request Access the
+   first time (Account Holder), then Team Keys, Generate, role Developer. Download the key (it
+   downloads only once) to `~/.appstoreconnect/private_keys/` and `chmod 600` it.
+3. Add `WANDIKA_APPLE_API_KEY_ID` and `WANDIKA_APPLE_API_ISSUER` (both shown on that page) to `.env`.
+
+Build with `scripts/release-mac.sh`. No Apple Account password is used.
+
+**iPhone (TestFlight).** Raise `bundle > iOS > bundleVersion` in `src-tauri/tauri.conf.json` for
+every upload. Run `WANDIKA_PUBLIC=1 npm run tauri ios build -- --open`, then in Xcode: Product,
+Archive (Any iOS Device), then Organizer, Distribute App, App Store Connect, Upload. Xcode uses the
+Apple Account it is already signed in with.
+
 ## Build and run
 
 ```bash

@@ -42,7 +42,8 @@
       "minimumSystemVersion": "14.0"
     },
     "iOS": {
-      "minimumSystemVersion": "17.0"
+      "minimumSystemVersion": "17.0",
+      "bundleVersion": "1"
     },
     "android": {
       "minSdkVersion": 26

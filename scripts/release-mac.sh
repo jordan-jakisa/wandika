@@ -1,9 +1,12 @@
 #!/bin/sh
 # Builds the public Mac download: Gmail left out (WANDIKA_PUBLIC=1), signed with the Developer ID
-# certificate, notarized by Apple and stapled, so it opens on any Mac without a warning.
-# Once: create a "Developer ID Application" certificate (Xcode, Settings, Accounts, Manage
-# Certificates) and store notary credentials as the keychain profile "wandika-notary":
-#   xcrun notarytool store-credentials wandika-notary --apple-id <you> --team-id <team>
+# certificate, and notarized with an App Store Connect API key, so no Apple Account password is
+# used. Tauri notarizes and staples the app; this script then notarizes and staples the .dmg too,
+# so both open without a warning, also offline.
+#
+# Once (docs/setup.md, "Releases"): a Developer ID Application certificate in the keychain, and an
+# App Store Connect team API key saved as ~/.appstoreconnect/private_keys/AuthKey_<KEY ID>.p8 with
+# WANDIKA_APPLE_API_KEY_ID and WANDIKA_APPLE_API_ISSUER in .env.
 set -e
 cd "$(dirname "$0")/.."
 
@@ -21,25 +24,31 @@ fi
 
 identity=$(security find-identity -v -p codesigning | sed -n 's/.*"\(Developer ID Application: .*\)"/\1/p' | head -1)
 if [ -z "$identity" ]; then
-  echo "No Developer ID Application certificate in the keychain. See the top of this script."
+  echo "No Developer ID Application certificate in the keychain (docs/setup.md, Releases)."
   exit 1
 fi
-xcrun notarytool history --keychain-profile wandika-notary >/dev/null 2>&1 || {
-  echo "No notary credentials saved as \"wandika-notary\". See the top of this script."
+key_id=$(sed -n 's/^WANDIKA_APPLE_API_KEY_ID=//p' .env | tr -d '[:space:]')
+issuer=$(sed -n 's/^WANDIKA_APPLE_API_ISSUER=//p' .env | tr -d '[:space:]')
+key="$HOME/.appstoreconnect/private_keys/AuthKey_$key_id.p8"
+if [ -z "$key_id" ] || [ -z "$issuer" ] || [ ! -f "$key" ]; then
+  echo "No App Store Connect API key set up for notarizing (docs/setup.md, Releases)."
   exit 1
-}
+fi
 
 export PATH="$HOME/.cargo/bin:$PATH"
-WANDIKA_PUBLIC=1 APPLE_SIGNING_IDENTITY="$identity" npm run tauri build -- --bundles app,dmg
+WANDIKA_PUBLIC=1 APPLE_SIGNING_IDENTITY="$identity" APPLE_API_KEY="$key_id" APPLE_API_ISSUER="$issuer" APPLE_API_KEY_PATH="$key" \
+  npm run tauri build -- --bundles app,dmg
 
 app=src-tauri/target/release/bundle/macos/Wandika.app
 if otool -L "$app/Contents/MacOS/wandika" | tail -n +2 | grep -v -e "^[[:space:]]*/System/" -e "^[[:space:]]*/usr/lib/"; then
   echo "The build links the libraries above from outside macOS, so it wouldn't start elsewhere."
   exit 1
 fi
+xcrun stapler validate "$app"
 
 dmg=$(ls -t src-tauri/target/release/bundle/dmg/*.dmg | head -1)
-xcrun notarytool submit "$dmg" --keychain-profile wandika-notary --wait
+xcrun notarytool submit "$dmg" --key "$key" --key-id "$key_id" --issuer "$issuer" --wait
 xcrun stapler staple "$dmg"
 spctl --assess --type open --context context:primary-signature -v "$dmg"
+shasum -a 256 "$dmg"
 echo "Ready: $dmg"
