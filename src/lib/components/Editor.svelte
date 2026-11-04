@@ -99,7 +99,7 @@
   // The open note's own commands in the palette.
   $effect(() =>
     registerCommands("note", [
-      { id: "pdf", label: "Export as PDF", keys: "⌘P", run: exportNote, when: () => !locked && !error },
+      { id: "pdf", label: "Export as PDF", run: exportNote, when: () => !locked && !error },
       { id: "voice-here", label: "Voice note into this note", run: addVoice, when: () => !!view },
       { id: "image", label: "Add image", run: pickImages, when: () => !!view },
       { id: "drawing", label: "Add drawing", run: addDrawing, when: () => !!view },
@@ -138,11 +138,6 @@
       exporting = false;
     }
   }
-  $effect(() => {
-    const run = () => void exportNote();
-    window.addEventListener("wandika-export-pdf", run);
-    return () => window.removeEventListener("wandika-export-pdf", run);
-  });
 
   async function insertTemplate() {
     const list = await api.templatesList().catch(() => []);

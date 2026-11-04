@@ -2,6 +2,7 @@
   import { plainText } from "../plain";
   import { ArrowLeft, ChevronRight, FilePlus, FileText, Lock, Search, X } from "@lucide/svelte";
   import { matchCommands } from "../commands.svelte";
+  import { shownKeys } from "../shortcuts.svelte";
   import { untrack } from "svelte";
   import { isIOS } from "../platform";
   import { api } from "../api";
@@ -182,7 +183,7 @@
       >
         <ChevronRight size={15} />
         <span class="text"><span class="title">{c.label}</span></span>
-        {#if c.keys}<kbd>{c.keys}</kbd>{/if}
+        {#if shownKeys(c.id)}<kbd>{shownKeys(c.id)}</kbd>{/if}
       </li>
     {:else}
       <li class="none" role="presentation">No command matches.</li>

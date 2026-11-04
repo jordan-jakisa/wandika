@@ -1,4 +1,4 @@
-// Every action in one list, for the command palette (⌘⇧P, or ">" in ⌘K): so the whole app works
+// Every action in one list, for the command palette (shortcuts live in shortcuts.svelte.ts) (⌘⇧P, or ">" in ⌘K): so the whole app works
 // from the keyboard. Screens add their own while they're on screen (the open note adds Export as
 // PDF, the workspace adds the sidebar and focus moves) and take them away when they leave.
 
@@ -9,8 +9,6 @@ import { prefs } from "./prefs.svelte";
 export interface Command {
   id: string;
   label: string;
-  /** The shortcut, as the About list writes it: "⌘N", "⌥⌘T". */
-  keys?: string;
   run: () => void | Promise<unknown>;
   /** Shown only while this holds (a note is open, sync is set up). */
   when?: () => boolean;
@@ -28,14 +26,14 @@ export function registerCommands(source: string, commands: Command[]) {
 
 /** What the app can always do. */
 const core: Command[] = [
-  { id: "new-note", label: "New note", keys: "⌘N", run: () => app.newNote() },
-  { id: "new-voice", label: "New voice note", keys: "⌥⌘N", run: () => app.newVoiceNote() },
+  { id: "new-note", label: "New note", run: () => app.newNote() },
+  { id: "new-voice", label: "New voice note", run: () => app.newVoiceNote() },
   { id: "new-task", label: "New task", run: () => app.newTask() },
   { id: "new-drawing", label: "New drawing", run: () => app.newDrawing() },
   { id: "new-board", label: "New board", run: () => app.newBoard() },
   { id: "new-folder", label: "New folder", run: () => app.newFolder() },
-  { id: "daily", label: "Open today's note", keys: "⌘D", run: () => app.openDaily() },
-  { id: "search", label: "Search notes", keys: "⌘K", run: () => (app.switcherOpen = true) },
+  { id: "daily", label: "Open today's note", run: () => app.openDaily() },
+  { id: "search", label: "Search notes", run: () => (app.switcherOpen = true) },
   { id: "tasks", label: "Go to Tasks", run: () => app.showTasks() },
   {
     id: "projects",
@@ -46,13 +44,13 @@ const core: Command[] = [
     },
   },
   { id: "graph", label: "Go to Graph", run: () => app.showGraph() },
-  { id: "back", label: "Back", keys: "⌘[", run: () => app.goBack() },
-  { id: "forward", label: "Forward", keys: "⌘]", run: () => app.goForward() },
-  { id: "today-panel", label: "Show or hide Today", keys: "⌥⌘T", run: () => (app.showToday = !app.showToday) },
+  { id: "back", label: "Back", run: () => app.goBack() },
+  { id: "forward", label: "Forward", run: () => app.goForward() },
+  { id: "today-panel", label: "Show or hide Today", run: () => (app.showToday = !app.showToday) },
   { id: "today-full", label: "Today full screen", run: () => (app.todayFull = !app.todayFull) },
-  { id: "sync", label: "Sync now", keys: "⌘S", run: () => app.sync(true), when: () => !!app.synced },
-  { id: "settings", label: "Settings", keys: "⌘,", run: () => app.openSettings() },
-  { id: "shortcuts", label: "Keyboard shortcuts", run: () => app.openSettings("about") },
+  { id: "sync", label: "Sync now", run: () => app.sync(true), when: () => !!app.synced },
+  { id: "settings", label: "Settings", run: () => app.openSettings() },
+  { id: "shortcuts", label: "Keyboard shortcuts", run: () => app.openSettings("shortcuts") },
   {
     id: "vim",
     label: "Turn Vim keys on or off",
@@ -62,6 +60,12 @@ const core: Command[] = [
     },
   },
 ];
+
+/** Runs a command by its id, if it fits now (Export as PDF needs an open note). */
+export function runCommand(id: string) {
+  const c = [...Object.values(sources).flat(), ...core].find((x) => x.id === id && (!x.when || x.when()));
+  return c?.run();
+}
 
 /** Commands that fit now, best match first: every typed word starts a word of the name. */
 export function matchCommands(query: string): Command[] {

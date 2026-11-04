@@ -6,6 +6,7 @@ import { EditorView, keymap, showTooltip, type Tooltip } from "@codemirror/view"
 import { Bold, Code, Italic, List, ListChecks, ListOrdered, Pilcrow, Quote, Strikethrough } from "@lucide/svelte";
 import { mount, type Component } from "svelte";
 import { convertLines, toggleWrap, type LineKind } from "./lists";
+import { editingKeys } from "../shortcuts.svelte";
 
 export function setLines(view: EditorView, kind: LineKind) {
   const { state } = view;
@@ -121,12 +122,15 @@ const toolbarField = StateField.define<readonly Tooltip[]>({
   provide: (f) => showTooltip.computeN([f], (state) => state.field(f)),
 });
 
+// The keys come from the shortcut table (Settings, Shortcuts).
 export const formatKeymap = keymap.of([
-  { key: "Mod-Shift-8", run: (v) => setLines(v, "bullet") },
-  { key: "Mod-Shift-7", run: (v) => setLines(v, "numbered") },
-  { key: "Mod-l", run: (v) => setLines(v, "task") },
-  { key: "Mod-b", run: (v) => wrap(v, "**") },
-  { key: "Mod-i", run: (v) => wrap(v, "*") },
+  editingKeys<EditorView>({
+    bullets: (v) => setLines(v, "bullet"),
+    numbers: (v) => setLines(v, "numbered"),
+    checklist: (v) => setLines(v, "task"),
+    bold: (v) => wrap(v, "**"),
+    italic: (v) => wrap(v, "*"),
+  }),
 ]);
 
 export const formatTheme = EditorView.theme({

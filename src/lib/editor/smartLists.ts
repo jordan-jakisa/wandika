@@ -6,6 +6,7 @@ import { indentLess, indentMore, moveLineDown, moveLineUp } from "@codemirror/co
 import { getIndentUnit, indentString } from "@codemirror/language";
 import { EditorSelection, Prec, type EditorState, type Text, type TransactionSpec } from "@codemirror/state";
 import { keymap, type EditorView } from "@codemirror/view";
+import { editingKeys } from "../shortcuts.svelte";
 
 const ITEM = /^(\s*)(?:([-*+])( \[[ xX]\])?|(\d+)([.)]))[ \t]/;
 const lead = (text: string) => /^\s*/.exec(text)![0];
@@ -178,8 +179,8 @@ export function enterNested(view: EditorView): boolean {
 export const smartListKeymap = Prec.high(
   keymap.of([
     { key: "Tab", run: indentItem, shift: outdentItem },
-    { key: "Alt-ArrowUp", run: moveItemUp },
-    { key: "Alt-ArrowDown", run: moveItemDown },
+    // ⌥↑ and ⌥↓ by default; Settings, Shortcuts can change them.
+    editingKeys<EditorView>({ "item-up": moveItemUp, "item-down": moveItemDown }),
     { key: "Enter", run: enterNested },
   ]),
 );

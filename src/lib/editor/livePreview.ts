@@ -12,6 +12,7 @@ import {
   type ViewUpdate,
   WidgetType,
 } from "@codemirror/view";
+import { editingKeys } from "../shortcuts.svelte";
 
 const hide = Decoration.replace({});
 /** A web address typed without https:// or www., like google.com or wandika.app/download. The
@@ -369,9 +370,8 @@ export function livePreview(onOpenLink: (target: string) => void, onTag: (tag: s
 
   // ⌘Return (Ctrl+Enter elsewhere) follows the link or tag under the cursor, as a click does.
   const follow = keymap.of([
-    {
-      key: "Mod-Enter",
-      run(view) {
+    editingKeys<EditorView>({
+      follow(view) {
         const pos = view.state.selection.main.head;
         let found: Record<string, string> | null = null;
         view.plugin(plugin)?.decorations.between(Math.max(0, pos - 1), pos + 1, (from, to, d) => {
@@ -388,7 +388,7 @@ export function livePreview(onOpenLink: (target: string) => void, onTag: (tag: s
         else window.dispatchEvent(new CustomEvent("wandika:open-url", { detail: a["data-href"] }));
         return true;
       },
-    },
+    }),
   ]);
 
   return [plugin, clicks, Prec.high(follow)];

@@ -7,6 +7,7 @@ import { api, AppError } from "../api";
 import { app } from "../app.svelte";
 import type { SearchHit } from "../types";
 import Search from "./Search.svelte";
+import { display } from "../shortcuts.svelte";
 
 const hit = (path: string, snippet = ""): SearchHit => ({
   path,
@@ -235,6 +236,6 @@ test("the palette opens on its commands when asked to (⌘⇧P)", async () => {
   app.paletteStart = ">";
   render(Search);
   expect(screen.getByRole("combobox", { name: "Search notes" })).toHaveValue(">");
-  expect(options().find((o) => o.textContent?.includes("New note"))?.textContent).toContain("⌘N");
+  expect(options().find((o) => o.textContent?.includes("New note"))?.textContent).toContain(display("Mod-n"));
   expect(app.paletteStart).toBe("");
 });

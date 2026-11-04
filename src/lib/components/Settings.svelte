@@ -10,6 +10,7 @@
     FolderOpen,
     HardDrive,
     Info,
+    Keyboard,
     KeyRound,
     Lock,
     Paintbrush,
@@ -25,6 +26,7 @@
   import { ago, app, type SettingsSection } from "../app.svelte";
   import { ACCENTS, FONTS, WIDTHS, prefs, type NoteFont, type Theme, type Width } from "../prefs.svelte";
   import { touch } from "../tips";
+  import { CATALOG, display, fromEvent, shortcuts, shownKeys, usable, type ShortcutGroup } from "../shortcuts.svelte";
   import { isIOS, isMac } from "../platform";
   import type { AppleAccess, NewNoteLocation } from "../types";
   import GitHubSignIn from "./GitHubSignIn.svelte";
@@ -38,6 +40,7 @@
     { id: "vault", label: "Vault", icon: HardDrive },
     { id: "appearance", label: "Appearance", icon: Paintbrush },
     { id: "editor", label: "Editor", icon: Type },
+    { id: "shortcuts", label: "Shortcuts", icon: Keyboard },
     { id: "encryption", label: "Encryption", icon: KeyRound },
     { id: "connections", label: "Connections", icon: Plug },
     { id: "account", label: "Account", icon: UserRound },
@@ -125,8 +128,10 @@
       }
       case "account":
         return st?.user ? `GitHub: ${st.user.login}` : "Not signed in";
+      case "shortcuts":
+        return "Change any keyboard shortcut";
       case "about":
-        return phone ? "Version 0.1.0 beta, feedback" : "Version 0.1.0 beta, feedback, keyboard shortcuts";
+        return "Version 0.1.0 beta, feedback";
     }
   };
 
@@ -281,30 +286,54 @@
     }
   }
 
-  const SHORTCUTS = [
-    ["⌘K or ⌘O", "Search or create a note"],
-    ["⌘⇧P", "Every command"],
-    ["⌘1, ⌘2, ⌘3", "Go to the file list, the note or Today"],
-    ["F6 and ⇧F6", "Move between the file list, the note and Today"],
-    ["⌘Return", "Open the link under the cursor"],
-    ["⇧F10", "Open the menu of a file or task"],
-    ["⌘N", "New note"],
-    ["⌥⌘N", "New voice note"],
-    ["⌘D", "Today's note"],
-    ["⌘S", "Sync now"],
-    ["⌘,", "Settings"],
-    ["⌘\\", "Show or hide the sidebar"],
-    ["⌥⌘T", "Show or hide Today"],
-    ["⌘[ and ⌘]", "Back and forward between notes"],
+  /** Shortcuts the editor has built in; they can't be changed. */
+  const BUILT_IN = [
     ["⌘F", "Find in note"],
     ["⌥-click", "Add a cursor"],
     ["⌥⌘↑ and ⌥⌘↓", "Add a cursor above or below"],
-    ["⌘P", "Export the note as a PDF"],
-    ["⌘B, ⌘I", "Bold, italic"],
-    ["⌘L", "Checklist"],
-    ["⌘⇧8, ⌘⇧7", "Bulleted list, numbered list"],
+    ["⇧F10", "Open the menu of a file or task"],
     ["[[", "Link a note"],
+    ["/", "Commands in a note"],
   ];
+  const GROUPS: { id: ShortcutGroup; label: string }[] = [
+    { id: "App", label: "Everywhere" },
+    { id: "Note", label: "With a note open" },
+    { id: "Editing", label: "While writing" },
+  ];
+
+  /** The shortcut waiting for new keys, and what the last try said. */
+  let recording = $state<string | null>(null);
+  let recordHint = $state("");
+  $effect(() => {
+    const id = recording;
+    if (!id) return;
+    const onKey = (e: KeyboardEvent) => {
+      // Every key goes here while recording; Esc mustn't close Settings.
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.key === "Escape") return void (recording = null);
+      if (e.key === "Backspace" || e.key === "Delete") {
+        shortcuts.set(id, []);
+        recording = null;
+        return;
+      }
+      const keys = fromEvent(e);
+      if (!keys) return;
+      if (!usable(keys)) {
+        recordHint = "Use ⌘, ⌃ or ⌥ with a key, or a function key.";
+        return;
+      }
+      const taken = shortcuts.set(id, [keys]);
+      recording = null;
+      if (taken.length) app.say(`${display(keys)} moved here from ${taken.join(" and ")}.`);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  });
+  function record(id: string) {
+    recordHint = "";
+    recording = recording === id ? null : id;
+  }
 
   const label = (id: SettingsSection | null) => SECTIONS.find((x) => x.id === id)?.label ?? "Settings";
 </script>
@@ -358,7 +387,7 @@
         <h2 id="settings-title" class:large={embedded}>Settings</h2>
       </header>
       <ul>
-        {#each SECTIONS as sec (sec.id)}
+        {#each SECTIONS.filter((x) => !phone || x.id !== "shortcuts") as sec (sec.id)}
           <li>
             <button class:on={!phone && section === sec.id} aria-current={!phone && section === sec.id ? "page" : undefined} onclick={() => go(sec.id)}>
               <sec.icon size={phone ? 22 : 17} />
@@ -669,6 +698,42 @@
               </div>
             {/if}
           </div>
+        {:else if section === "shortcuts"}
+          <p class="note">Choose Change, then press the new keys. Kept on this device.</p>
+          {#each GROUPS as g (g.id)}
+            <h4>{g.label}</h4>
+            <div class="group">
+              {#each CATALOG.filter((d) => d.group === g.id) as d (d.id)}
+                <div class="row shortcut">
+                  <span class="row-text">
+                    <span class="row-label">{d.label}</span>
+                    {#if recording === d.id}
+                      <span class="row-desc" role="status">{recordHint || "Press the new keys. Esc keeps the old ones, ⌫ removes them."}</span>
+                    {/if}
+                  </span>
+                  <kbd class:none={!shortcuts.keysOf(d.id).length}>{shownKeys(d.id) || "None"}</kbd>
+                  <button class="link-btn" aria-pressed={recording === d.id} aria-label={`Change the shortcut for ${d.label}`} onclick={() => record(d.id)}>
+                    {recording === d.id ? "Cancel" : "Change"}
+                  </button>
+                  {#if shortcuts.isChanged(d.id) && recording !== d.id}
+                    <button class="link-btn" aria-label={`Reset the shortcut for ${d.label}`} onclick={() => shortcuts.reset(d.id)}>Reset</button>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          {/each}
+          <h4>Built in</h4>
+          <div class="group">
+            {#each BUILT_IN as [keys, what] (keys)}
+              <div class="row">
+                <span class="row-label">{what}</span>
+                <kbd>{keys}</kbd>
+              </div>
+            {/each}
+          </div>
+          {#if Object.keys(shortcuts.changed).length}
+            <p class="note"><button class="link-btn" onclick={() => shortcuts.reset()}>Reset every shortcut</button></p>
+          {/if}
         {:else if section === "about"}
           <div class="group">
             <div class="row">
@@ -691,17 +756,6 @@
               <button class="link-btn" onclick={() => openUrl("https://github.com/jordan-jakisa/wandika")}>github.com/jordan-jakisa/wandika</button>
             </div>
           </div>
-          {#if !phone}
-          <h4>Keyboard shortcuts</h4>
-          <div class="group">
-            {#each SHORTCUTS as [keys, what] (keys)}
-              <div class="row">
-                <span class="row-label">{what}</span>
-                <kbd>{keys}</kbd>
-              </div>
-            {/each}
-          </div>
-          {/if}
         {/if}
       </div>
     </div>
@@ -1031,6 +1085,16 @@
   }
   label.row {
     cursor: pointer;
+  }
+  /* A shortcut row: its name, its keys, then Change (and Reset once changed). */
+  .row.shortcut {
+    gap: var(--space-3);
+  }
+  .row.shortcut .row-text {
+    flex: 1;
+  }
+  kbd.none {
+    color: var(--graphite);
   }
   kbd {
     font: inherit;

@@ -9,7 +9,7 @@ import type { Entry, NoteMeta, Snippet, Status, SyncReport, Today, VaultTask } f
 export type Tab = "notes" | "today" | "tasks" | "projects" | "graph" | "search" | "settings";
 const TABS: Tab[] = ["notes", "today", "tasks", "projects", "graph", "search"];
 
-export type SettingsSection = "vault" | "appearance" | "editor" | "encryption" | "connections" | "account" | "about";
+export type SettingsSection = "vault" | "appearance" | "editor" | "shortcuts" | "encryption" | "connections" | "account" | "about";
 const SECTIONS: SettingsSection[] = ["vault", "appearance", "editor", "encryption", "connections", "account", "about"];
 
 export interface Ask {

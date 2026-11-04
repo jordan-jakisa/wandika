@@ -22,7 +22,8 @@
     Mic,
   } from "@lucide/svelte";
   import { api } from "../api";
-  import { registerCommands } from "../commands.svelte";
+  import { registerCommands, runCommand } from "../commands.svelte";
+  import { shortcuts } from "../shortcuts.svelte";
   import Menu from "./Menu.svelte";
   import { isIOS, isMac } from "../platform";
   import { push } from "../transitions";
@@ -104,10 +105,11 @@
 
   $effect(() =>
     registerCommands("workspace", [
-      { id: "sidebar", label: "Show or hide the sidebar", keys: "⌘\\", run: toggleSidebar },
-      { id: "focus-tree", label: "Go to the file list", keys: "⌘1", run: () => focusRegion("tree") },
-      { id: "focus-note", label: "Go to the note", keys: "⌘2", run: () => focusRegion("note") },
-      { id: "focus-today", label: "Go to Today", keys: "⌘3", run: () => focusRegion("today") },
+      { id: "sidebar", label: "Show or hide the sidebar", run: toggleSidebar },
+      { id: "focus-tree", label: "Go to the file list", run: () => focusRegion("tree") },
+      { id: "focus-note", label: "Go to the note", run: () => focusRegion("note") },
+      { id: "focus-today", label: "Go to Today", run: () => focusRegion("today") },
+      { id: "cycle", label: "Next of the file list, the note and Today", run: () => cycleRegion(false) },
     ]),
   );
   const roomForToday = $derived(
@@ -121,63 +123,28 @@
       app.todayFull = false;
       return;
     }
-    // F6 and ⇧F6 move between the file list, the note and Today, as in Mac and Windows apps.
-    if (e.key === "F6" && !document.querySelector("dialog[open]")) {
-      e.preventDefault();
-      const order = ["tree", "note", "today"] as const;
-      const at = document.activeElement;
-      const now = at?.closest(".tree") ? 0 : at?.closest(".cm-editor, .note") ? 1 : at?.closest(".today") ? 2 : -1;
-      const next = order[(now + (e.shiftKey ? -1 : 1) + order.length) % order.length];
-      void focusRegion(next);
-      return;
-    }
-    const mod = e.metaKey || e.ctrlKey;
-    if (!mod) return;
-    const k = e.key.toLowerCase();
+    // Every other shortcut comes from the shortcut table, which Settings can change.
+    const id = shortcuts.match(e, ["App", "Note"]);
+    if (!id) return;
     // While a dialog is open (Settings, the task editor, a question), app-wide shortcuts wait;
-    // ⌘K still opens and closes its own palette.
+    // the palette still opens and closes itself.
     const dialogOpen = [...document.querySelectorAll("dialog[open]")].some((d) => !d.classList.contains("switcher"));
-    if (dialogOpen) return;
-    if (e.key === "[" || e.key === "]") {
-      e.preventDefault();
-      if (e.key === "[") app.goBack();
-      else app.goForward();
-    } else if (k === "t" && e.altKey) {
-      e.preventDefault();
-      app.showToday = !app.showToday;
-    } else if (k === "p" && e.shiftKey) {
-      e.preventDefault();
+    if (dialogOpen && id !== "search" && id !== "palette") return;
+    e.preventDefault();
+    if (id === "search") app.switcherOpen = !app.switcherOpen;
+    else if (id === "palette") {
       app.paletteStart = ">";
       app.switcherOpen = true;
-    } else if (e.key === "1" || e.key === "2" || e.key === "3") {
-      e.preventDefault();
-      void focusRegion(e.key === "1" ? "tree" : e.key === "2" ? "note" : "today");
-    } else if (k === "k" || k === "o") {
-      e.preventDefault();
-      app.switcherOpen = !app.switcherOpen;
-    } else if (k === "n" && e.altKey) {
-      e.preventDefault();
-      app.newVoiceNote();
-    } else if (k === "n" && !e.shiftKey) {
-      e.preventDefault();
-      void app.newNote();
-    } else if (k === "p" && app.current) {
-      // The open note listens for this and exports itself.
-      e.preventDefault();
-      window.dispatchEvent(new Event("wandika-export-pdf"));
-    } else if (k === "s") {
-      e.preventDefault();
-      void app.sync(true);
-    } else if (k === "d") {
-      e.preventDefault();
-      void app.openDaily();
-    } else if (k === "\\") {
-      e.preventDefault();
-      toggleSidebar();
-    } else if (k === ",") {
-      e.preventDefault();
-      app.openSettings();
-    }
+    } else if (id === "cycle" || id === "cycle-back") cycleRegion(id === "cycle-back");
+    else void runCommand(id);
+  }
+
+  /** F6 and ⇧F6: the next or previous of the file list, the note and Today, as in Mac and Windows apps. */
+  function cycleRegion(back: boolean) {
+    const order = ["tree", "note", "today"] as const;
+    const at = document.activeElement;
+    const now = at?.closest(".tree") ? 0 : at?.closest(".cm-editor, .note") ? 1 : at?.closest(".today") ? 2 : -1;
+    void focusRegion(order[(now + (back ? -1 : 1) + order.length) % order.length]);
   }
 
   // Phones: system back (Android) and swipe back (iOS) leave the note, as in native apps. Opening

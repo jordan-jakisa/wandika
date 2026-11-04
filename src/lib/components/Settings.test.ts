@@ -11,6 +11,7 @@ import { prefs } from "../prefs.svelte";
 import type { Status } from "../types";
 import Dialog from "./Dialog.svelte";
 import Settings from "./Settings.svelte";
+import { display, shortcuts } from "../shortcuts.svelte";
 
 // Events from the Rust core, captured so a test can send one as the core would.
 const events = vi.hoisted(() => new Map<string, (payload: unknown) => void>());
@@ -66,6 +67,7 @@ describe("on a desktop", () => {
       "Vault",
       "Appearance",
       "Editor",
+      "Shortcuts",
       "Encryption",
       "Connections",
       "Account",
@@ -745,33 +747,29 @@ describe("About", () => {
     expect(open_).toHaveBeenCalledWith("mailto:jordan.timutic@gmail.com?subject=Wandika%20beta%20feedback", "_blank", "noopener");
   });
 
-  test("lists the keyboard shortcuts", async () => {
-    await open("about");
-    const keys = [...document.querySelectorAll(".pane kbd")].map((k) => [k.closest(".row")!.querySelector(".row-label")!.textContent, k.textContent]);
-    expect(keys).toEqual([
-      ["Search or create a note", "⌘K or ⌘O"],
-      ["Every command", "⌘⇧P"],
-      ["Go to the file list, the note or Today", "⌘1, ⌘2, ⌘3"],
-      ["Move between the file list, the note and Today", "F6 and ⇧F6"],
-      ["Open the link under the cursor", "⌘Return"],
-      ["Open the menu of a file or task", "⇧F10"],
-      ["New note", "⌘N"],
-      ["New voice note", "⌥⌘N"],
-      ["Today's note", "⌘D"],
-      ["Sync now", "⌘S"],
-      ["Settings", "⌘,"],
-      ["Show or hide the sidebar", "⌘\\"],
-      ["Show or hide Today", "⌥⌘T"],
-      ["Back and forward between notes", "⌘[ and ⌘]"],
-      ["Find in note", "⌘F"],
-      ["Add a cursor", "⌥-click"],
-      ["Add a cursor above or below", "⌥⌘↑ and ⌥⌘↓"],
-      ["Export the note as a PDF", "⌘P"],
-      ["Bold, italic", "⌘B, ⌘I"],
-      ["Checklist", "⌘L"],
-      ["Bulleted list, numbered list", "⌘⇧8, ⌘⇧7"],
-      ["Link a note", "[["],
-    ]);
+  test("Shortcuts lists every shortcut, and one changes by pressing new keys", async () => {
+    localStorage.removeItem("wandika.shortcuts");
+    shortcuts.reset();
+    await open("shortcuts");
+    const row = (label: string) => screen.getByRole("button", { name: `Change the shortcut for ${label}` }).closest(".row")!;
+    expect(row("New note").querySelector("kbd")!.textContent).toBe(display("Mod-n"));
+    expect(row("New task").querySelector("kbd")!.textContent).toBe("None");
+    await userEvent.click(screen.getByRole("button", { name: "Change the shortcut for New task" }));
+    expect(screen.getByRole("status")).toHaveTextContent("Press the new keys");
+    // A plain letter isn't a shortcut; ⌘⇧T is.
+    await fireEvent.keyDown(window, { key: "t", code: "KeyT" });
+    expect(screen.getByRole("status")).toHaveTextContent("Use ⌘, ⌃ or ⌥");
+    await fireEvent.keyDown(window, { key: "T", code: "KeyT", ctrlKey: true, metaKey: true, shiftKey: true });
+    expect(shortcuts.keysOf("new-task")).toHaveLength(1);
+    expect(row("New task").querySelector("kbd")!.textContent).not.toBe("None");
+    expect(screen.getByRole("button", { name: "Reset the shortcut for New task" })).toBeInTheDocument();
+    // Taking a key another shortcut had moves it, and says so.
+    await userEvent.click(screen.getByRole("button", { name: "Change the shortcut for New task" }));
+    await fireEvent.keyDown(window, { key: "n", code: "KeyN", ctrlKey: true, metaKey: true });
+    expect(shortcuts.keysOf("new-note")).toEqual([]);
+    expect(app.toast).toContain("moved here from New note");
+    await userEvent.click(screen.getByRole("button", { name: "Reset every shortcut" }));
+    expect(shortcuts.keysOf("new-note")).toEqual(["Mod-n"]);
   });
 });
 
