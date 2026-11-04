@@ -13,6 +13,7 @@
   import "$lib/platform";
   import { prefs } from "$lib/prefs.svelte";
   import { onMount } from "svelte";
+  import { installKeyboard } from "$lib/keyboard";
 
   let toastEl = $state<HTMLDivElement>();
   // The bar lives in the top layer, above any open dialog, so its words and Undo stay readable
@@ -48,6 +49,7 @@
   prefs.apply();
 
   onMount(() => {
+    installKeyboard();
     void app.init();
   });
 </script>

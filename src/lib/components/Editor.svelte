@@ -648,8 +648,12 @@
     margin-bottom: 0.6em;
     color: var(--ink);
   }
+  /* The caret shows where the title is being typed; from the keyboard, a quiet underline too. */
   .title:focus {
     outline: none;
+  }
+  .title:focus-visible {
+    box-shadow: 0 2px 0 0 var(--papyrus-wash);
   }
   .backlinks {
     font-family: var(--font-ui);

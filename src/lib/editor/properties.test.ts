@@ -27,10 +27,10 @@ test("frontmatter shows as a list of properties", () => {
   ]);
 });
 
-test("the panel is labelled as a button to edit", () => {
+test("the panel is a labelled group that says how to edit it", () => {
   const view = setup(`${FM}\nBody‸`);
-  assert.equal(panel(view)!.getAttribute("role"), "button");
-  assert.equal(panel(view)!.getAttribute("aria-label"), "Properties. Tap to edit.");
+  assert.equal(panel(view)!.getAttribute("role"), "group");
+  assert.equal(panel(view)!.getAttribute("aria-label"), "Properties. Move the cursor here, or click, to edit them.");
 });
 
 test("an empty value is marked as empty", () => {

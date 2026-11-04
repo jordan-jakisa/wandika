@@ -4,6 +4,7 @@
 </script>
 
 <script lang="ts">
+  import { focusMenuIn, isMenuKey } from "../keyboard";
   import { Archive, Mail, Pencil, Pin, PinOff, Timer, Trash2 } from "@lucide/svelte";
   import { app } from "../app.svelte";
   import { mailRef } from "../mailLinks";
@@ -216,6 +217,12 @@
     class:moved={dragging || offset !== 0}
     style:transform={offset ? `translateX(${offset}px)` : null}
     onclickcapture={tapWhileOpen}
+    onkeydown={(e) => {
+      if (!isMenuKey(e) || !(onEdit || onPin || onFocus || onArchive || onDelete)) return;
+      e.preventDefault();
+      menuOpen = true;
+      focusMenuIn(e.currentTarget);
+    }}
     oncontextmenu={(e) => {
       // Mac: a right-click opens the row's menu.
       if (touch || !(onEdit || onPin || onFocus || onArchive || onDelete)) return;

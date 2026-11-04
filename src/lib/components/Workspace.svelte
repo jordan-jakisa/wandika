@@ -121,6 +121,16 @@
       app.todayFull = false;
       return;
     }
+    // F6 and ⇧F6 move between the file list, the note and Today, as in Mac and Windows apps.
+    if (e.key === "F6" && !document.querySelector("dialog[open]")) {
+      e.preventDefault();
+      const order = ["tree", "note", "today"] as const;
+      const at = document.activeElement;
+      const now = at?.closest(".tree") ? 0 : at?.closest(".cm-editor, .note") ? 1 : at?.closest(".today") ? 2 : -1;
+      const next = order[(now + (e.shiftKey ? -1 : 1) + order.length) % order.length];
+      void focusRegion(next);
+      return;
+    }
     const mod = e.metaKey || e.ctrlKey;
     if (!mod) return;
     const k = e.key.toLowerCase();

@@ -179,6 +179,13 @@
 <dialog
   bind:this={dialogEl}
   class="sketch rises"
+  onkeydown={(e) => {
+    // ⌘Z takes back the last stroke, as Undo does.
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z" && !e.shiftKey) {
+      e.preventDefault();
+      undo();
+    }
+  }}
   aria-labelledby="sketch-h"
   oncancel={(e) => {
     e.preventDefault();

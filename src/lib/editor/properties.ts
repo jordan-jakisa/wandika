@@ -24,8 +24,8 @@ class Properties extends WidgetType {
   toDOM(view: EditorView) {
     const box = document.createElement("div");
     box.className = "cm-properties";
-    box.setAttribute("role", "button");
-    box.setAttribute("aria-label", "Properties. Tap to edit.");
+    box.setAttribute("role", "group");
+    box.setAttribute("aria-label", "Properties. Move the cursor here, or click, to edit them.");
     const props = parseProperties(this.yaml);
     for (const p of props) {
       const row = document.createElement("div");

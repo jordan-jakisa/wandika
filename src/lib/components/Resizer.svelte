@@ -54,6 +54,8 @@
     else if (e.key === shrink) onchange(clamp(value - step));
     else if (e.key === "Home") onchange(min);
     else if (e.key === "End") onchange(max);
+    // Return puts it back, as a double-click does.
+    else if (e.key === "Enter") onchange(initial);
     else return;
     e.preventDefault();
   }

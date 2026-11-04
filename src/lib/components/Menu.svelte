@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Ellipsis } from "@lucide/svelte";
   import type { Snippet } from "svelte";
+  import { rememberMenuTrigger } from "../keyboard";
 
   /** `open` is bindable so a long press on the row can open the same menu. */
   let {
@@ -34,6 +35,9 @@
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       items[(i - 1 + items.length) % items.length]?.focus();
+    } else if (e.key === "Home" || e.key === "End") {
+      e.preventDefault();
+      items[e.key === "Home" ? 0 : items.length - 1]?.focus();
     }
   }
 
@@ -76,6 +80,8 @@
       tabindex="-1"
       onclick={() => {
         open = false;
+        // A dialog the item opens gives focus back to this menu's button when it closes.
+        rememberMenuTrigger(root?.querySelector<HTMLElement>(".trigger") ?? null);
         // Focus goes back to the ⋯ button, unless the choice moved it (a dialog, a field).
         setTimeout(() => {
           const at = document.activeElement;

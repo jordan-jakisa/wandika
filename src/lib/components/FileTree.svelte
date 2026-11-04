@@ -8,6 +8,7 @@
   import { isImage } from "../attachments";
   import type { Entry } from "../types";
   import Menu from "./Menu.svelte";
+  import { focusMenuIn, isMenuKey } from "../keyboard";
 
   interface Node {
     entry: Entry;
@@ -230,6 +231,12 @@
               onpointermove={pressMove}
               onpointerup={pressEnd}
               onpointercancel={pressEnd}
+              onkeydown={(ev) => {
+                if (!isMenuKey(ev)) return;
+                ev.preventDefault();
+                pressedMenu = e.path;
+                focusMenuIn((ev.currentTarget as HTMLElement).closest(".row"));
+              }}
               oncontextmenu={(ev) => {
                 ev.preventDefault();
                 // A right-click or two-finger click opens the row's menu, as in Finder. Touch has
@@ -388,6 +395,10 @@
     }
     .actions :global(.trigger) {
       display: none;
+    }
+    /* An iPad with a keyboard: the ⋯ button comes back for keyboard focus (⇧F10 opens it too). */
+    .row:has(:focus-visible) .actions :global(.trigger) {
+      display: inline-flex;
     }
     .row:active {
       background: var(--papyrus-wash);
