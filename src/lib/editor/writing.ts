@@ -44,3 +44,5 @@ export function heading(view: EditorView) {
 }
 
 export { indentLess, indentMore, redo, undo };
+/** The toolbar's Indent and Outdent: a list item takes its nested items along. */
+export { indentItem, outdentItem } from "./smartLists";

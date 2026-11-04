@@ -30,8 +30,8 @@
     { label: "Checklist", icon: ListChecks, run: (v) => w.lines(v, "task") },
     { label: "Heading", icon: Heading, run: w.heading },
     { label: "Bulleted list", icon: List, run: (v) => w.lines(v, "bullet") },
-    { label: "Indent", icon: ListIndentIncrease, run: w.indentMore },
-    { label: "Outdent", icon: ListIndentDecrease, run: w.indentLess },
+    { label: "Indent", icon: ListIndentIncrease, run: w.indentItem },
+    { label: "Outdent", icon: ListIndentDecrease, run: w.outdentItem },
     { label: "Undo", icon: Undo2, run: w.undo },
     { label: "Redo", icon: Redo2, run: w.redo },
   ]);

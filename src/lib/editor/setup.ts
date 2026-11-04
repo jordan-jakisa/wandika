@@ -1,5 +1,6 @@
 import { autocompletion, type Completion, type CompletionContext } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { smartListKeymap } from "./smartLists";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
@@ -141,6 +142,7 @@ export function extensions(opts: {
     highlightSelectionMatches(),
     autocompletion({ override: [wikilinks(opts.getTitles)], icons: false }),
     formatting,
+    smartListKeymap,
     keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
     placeholder("Start writing. Type [[ to link a note."),
     embeds(opts.getPath, opts.onOpenLink),
