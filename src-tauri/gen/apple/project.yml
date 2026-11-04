@@ -2,7 +2,8 @@ name: wandika
 options:
   bundleIdPrefix: me.jordanjakisa.wandika
   deploymentTarget:
-    iOS: 17.0
+    # Every iPhone that runs iOS 17 runs iOS 18, which voice notes from the Lock Screen need.
+    iOS: 18.0
 fileGroups: [../../src]
 configs:
   debug: debug
@@ -12,6 +13,7 @@ settingGroups:
     base:
       PRODUCT_NAME: Wandika
       PRODUCT_BUNDLE_IDENTIFIER: me.jordanjakisa.wandika
+      DEVELOPMENT_TEAM: VZ87DND9MP
 targetTemplates:
   app:
     type: application
@@ -41,6 +43,8 @@ targets:
         buildPhase: resources
         type: folder
       - path: LaunchScreen.storyboard
+      # The voice recorder and capture queue, shared with the capture plugin.
+      - path: ../../plugins/capture/ios/Sources/Shared
     info:
       path: wandika_iOS/Info.plist
       properties:
@@ -77,6 +81,9 @@ targets:
         EXCLUDED_ARCHS[sdk=iphoneos*]: x86_64
       groups: [app]
     dependencies:
+      - target: WandikaWidgets
+        embed: true
+        codeSign: true
       - framework: libapp.a
         embed: false
       - sdk: CoreGraphics.framework
@@ -94,3 +101,31 @@ targets:
         outputFiles:
           - $(SRCROOT)/Externals/x86_64/${CONFIGURATION}/libapp.a
           - $(SRCROOT)/Externals/arm64/${CONFIGURATION}/libapp.a
+  # The Voice note control (Control Center, Lock Screen, Action button) and its Live Activity.
+  WandikaWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: WandikaWidgets
+      - path: wandika_iOS/Voice/VoiceActivity.swift
+      - path: wandika_iOS/Voice/VoiceIntents.swift
+    info:
+      path: WandikaWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: Wandika
+        # scripts/release-ios.sh keeps these equal to the app's.
+        CFBundleShortVersionString: 0.1.0
+        CFBundleVersion: "3"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_NAME: WandikaWidgets
+        PRODUCT_BUNDLE_IDENTIFIER: me.jordanjakisa.wandika.widgets
+        DEVELOPMENT_TEAM: VZ87DND9MP
+        CODE_SIGN_STYLE: Automatic
+        SWIFT_VERSION: "5.0"
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) WIDGET_EXTENSION
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ARCHS: [arm64]
+        SKIP_INSTALL: true

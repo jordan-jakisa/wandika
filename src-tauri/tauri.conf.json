@@ -43,7 +43,7 @@
       "entitlements": "Entitlements.plist"
     },
     "iOS": {
-      "minimumSystemVersion": "17.0",
+      "minimumSystemVersion": "18.0",
       "bundleVersion": "3"
     },
     "android": {

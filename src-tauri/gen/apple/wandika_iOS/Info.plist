@@ -16,10 +16,37 @@
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>0.1.0</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER).com.googleusercontent.apps.300312260148-1ggsg58n56qsu9j5qsc529tla9pl8d6t</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.300312260148-1ggsg58n56qsu9j5qsc529tla9pl8d6t</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>3</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Wandika shows today's events beside your notes and turns a meeting into a note.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Wandika listens while you make a voice note and turns your words into text.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Wandika lists your reminders beside the tasks in your notes so you can tick them off.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Wandika turns your voice notes into text on this device. Your audio never leaves it.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>
@@ -40,22 +67,5 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>Wandika shows today&apos;s events beside your notes and turns a meeting into a note.</string>
-	<key>NSRemindersFullAccessUsageDescription</key>
-	<string>Wandika lists your reminders beside the tasks in your notes so you can tick them off.</string>
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>com.googleusercontent.apps.300312260148-1ggsg58n56qsu9j5qsc529tla9pl8d6t</string>
-			</array>
-			<key>CFBundleURLName</key>
-			<string>$(PRODUCT_BUNDLE_IDENTIFIER).com.googleusercontent.apps.300312260148-1ggsg58n56qsu9j5qsc529tla9pl8d6t</string>
-		</dict>
-	</array>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
 </dict>
 </plist>
