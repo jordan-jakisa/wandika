@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { fold } from "../fold";
   import { readView, saveView } from "../viewPrefs";
   import { Maximize, SlidersHorizontal } from "@lucide/svelte";
   import { onDestroy, untrack } from "svelte";
@@ -86,8 +87,8 @@
     ctx.scale(view.k, view.k);
 
     const lit = hover ? neighbours.get(hover.id) ?? new Set<string>() : null;
-    const q = filter.trim().toLowerCase();
-    const matches = (n: GNode) => (!q || n.title.toLowerCase().includes(q)) && (spotlight === null || n.group === spotlight);
+    const q = fold(filter.trim());
+    const matches = (n: GNode) => (!q || fold(n.title).includes(q)) && (spotlight === null || n.group === spotlight);
 
     ctx.lineWidth = 1 / view.k;
     for (const l of links) {

@@ -1,6 +1,8 @@
 // A task line in the Obsidian Tasks emoji format, so the vault stays readable in Obsidian:
 // `Call Amina #home 📌 ⏫ 📅 2026-11-05`. 📌 (pinned) is Wandika's own; Obsidian shows it as text.
 
+import { fold } from "./fold";
+
 export type Priority = "highest" | "high" | "medium" | "low" | "lowest";
 
 export const PRIORITIES: { value: Priority; emoji: string; label: string }[] = [
@@ -65,8 +67,6 @@ export function composeTask(text: string, change: Partial<Omit<TaskParts, "tags"
   return [...parts, ...keep].filter(Boolean).join(" ");
 }
 
-/** Lower case without accents, so "cafe" finds "Café". */
-const fold = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 
 /**
  * Whether a task matches a search: every word must appear in the task, its notes or its note's

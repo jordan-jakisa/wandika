@@ -1,5 +1,6 @@
 import { autocompletion, type Completion, type CompletionContext } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { fold } from "../fold";
 import { smartListKeymap } from "./smartLists";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
@@ -107,11 +108,25 @@ function wikilinks(getTitles: () => NoteMeta[]) {
   return (ctx: CompletionContext) => {
     const m = ctx.matchBefore(/\[\[[^\]\n|]*/);
     if (!m) return null;
-    const options: Completion[] = getTitles().map((n) => {
+    // Matched here rather than by the editor, so accents don't matter: "cafe" finds "Café".
+    // Titles that start with what was typed come first, then titles that contain it.
+    const typed = fold(m.text.slice(2).trim());
+    const ranked = getTitles()
+      .map((n) => ({ n, t: fold(n.title), p: fold(n.path) }))
+      .filter(({ t, p }) => !typed || t.includes(typed) || p.includes(typed))
+      .sort(
+        (a, b) =>
+          Number(!a.t.startsWith(typed)) - Number(!b.t.startsWith(typed)) ||
+          Number(!a.t.includes(typed)) - Number(!b.t.includes(typed)) ||
+          a.n.title.localeCompare(b.n.title),
+      )
+      .slice(0, 200);
+    const options: Completion[] = ranked.map(({ n }, i) => {
       const folder = n.path.includes("/") ? n.path.slice(0, n.path.lastIndexOf("/")) : "";
       return {
         label: n.title,
         detail: folder,
+        boost: -i,
         apply: (view, _c, from, to) => {
           const closed = view.state.sliceDoc(to, to + 2) === "]]";
           const insert = n.title + (closed ? "" : "]]");
@@ -119,7 +134,7 @@ function wikilinks(getTitles: () => NoteMeta[]) {
         },
       };
     });
-    return { from: m.from + 2, options, validFor: /^[^\]\n|]*$/ };
+    return { from: m.from + 2, options, filter: false };
   };
 }
 

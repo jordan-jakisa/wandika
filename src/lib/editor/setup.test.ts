@@ -15,9 +15,9 @@ const titles = [
   { path: "Trips/2026/Kampala.md", title: "Kampala" },
 ] as NoteMeta[];
 
-function setup(marked: string) {
+function setup(marked: string, more: Partial<NoteMeta>[] = []) {
   const opts = {
-    getTitles: () => titles,
+    getTitles: () => [...titles, ...(more as NoteMeta[])],
     onOpenLink: vi.fn(),
     onTag: vi.fn(),
     onChange: vi.fn(),
@@ -50,6 +50,15 @@ test("typing [[ suggests every note by name, with its folder", async () => {
     ["Kampala", "Trips/2026"],
     ["Plan", ""],
   ]);
+});
+
+test("suggestions ignore accents: cafe finds Café", async () => {
+  const { view } = setup("See [[cafe‸", [{ title: "Café Ruzizi", path: "Café Ruzizi.md" }]);
+  const options = await suggest(view);
+  assert.deepEqual(
+    options.map((o) => o.label),
+    ["Café Ruzizi"],
+  );
 });
 
 test("choosing a note completes the link and puts the cursor after it", async () => {
