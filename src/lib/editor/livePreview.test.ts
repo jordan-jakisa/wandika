@@ -394,3 +394,21 @@ test("an address inside a Markdown link or code is not linked twice", () => {
     ["https://x.com"],
   );
 });
+
+test("⌘Return opens the link or tag under the cursor; elsewhere it does what it always did", async () => {
+  const { runScopeHandlers } = await import("@codemirror/view");
+  const press = (v: import("@codemirror/view").EditorView) =>
+    runScopeHandlers(v, new KeyboardEvent("keydown", { key: "Enter", metaKey: /Mac/.test(navigator.platform), ctrlKey: !/Mac/.test(navigator.platform) }), "editor");
+  const link = setup("See [[Pl‸an]] now");
+  assert.equal(press(link.view), true);
+  assert.deepEqual(link.onOpenLink.mock.calls, [["Plan"]]);
+  const tag = setup("Filed under #wo‸rk");
+  assert.equal(press(tag.view), true);
+  assert.deepEqual(tag.onTag.mock.calls, [["work"]]);
+  const url = setup("At [site](https://x.or‸g) ok");
+  const heard = vi.fn();
+  window.addEventListener("wandika:open-url", (e) => heard((e as CustomEvent).detail), { once: true });
+  assert.equal(press(url.view), true);
+  assert.deepEqual(heard.mock.calls, [["https://x.org"]]);
+  assert.equal(press(setup("Plain ‸text").view), false);
+});

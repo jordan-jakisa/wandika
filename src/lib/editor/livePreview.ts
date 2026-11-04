@@ -2,11 +2,12 @@
 // emphasis render in place, task boxes become real checkboxes, and [[links]] become tappable.
 
 import { syntaxTree } from "@codemirror/language";
-import { type EditorState, type Range } from "@codemirror/state";
+import { Prec, type EditorState, type Range } from "@codemirror/state";
 import {
   Decoration,
   type DecorationSet,
   EditorView,
+  keymap,
   ViewPlugin,
   type ViewUpdate,
   WidgetType,
@@ -344,5 +345,29 @@ export function livePreview(onOpenLink: (target: string) => void, onTag: (tag: s
     },
   });
 
-  return [plugin, clicks];
+  // ⌘Return (Ctrl+Enter elsewhere) follows the link or tag under the cursor, as a click does.
+  const follow = keymap.of([
+    {
+      key: "Mod-Enter",
+      run(view) {
+        const pos = view.state.selection.main.head;
+        let found: Record<string, string> | null = null;
+        view.plugin(plugin)?.decorations.between(Math.max(0, pos - 1), pos + 1, (from, to, d) => {
+          const a = d.spec.attributes as Record<string, string> | undefined;
+          if (a && from <= pos && pos <= to && (a["data-target"] || a["data-href"] || a["data-tag"])) {
+            found = a;
+            return false;
+          }
+        });
+        const a = found as Record<string, string> | null;
+        if (!a) return false;
+        if (a["data-target"]) onOpenLink(a["data-target"]);
+        else if (a["data-tag"]) onTag(a["data-tag"]);
+        else window.dispatchEvent(new CustomEvent("wandika:open-url", { detail: a["data-href"] }));
+        return true;
+      },
+    },
+  ]);
+
+  return [plugin, clicks, Prec.high(follow)];
 }
