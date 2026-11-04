@@ -1,6 +1,6 @@
 <script lang="ts">
   import { clock } from "../clock.svelte";
-  import { ArrowRight, FilePlus, Pencil, Plus, Trash2, CircleCheck, X } from "@lucide/svelte";
+  import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, FilePlus, Pencil, Plus, Trash2, CircleCheck, X } from "@lucide/svelte";
   import { api } from "../api";
   import { app, titleOf } from "../app.svelte";
   import { newCard, newLane, parse, serialize, tagsOf, tokens, type Card, type Lane } from "../kanban";
@@ -82,6 +82,15 @@
     if (from === to && i < at) at -= 1;
     if (to.complete !== from.complete) card.done = to.complete;
     to.cards.splice(Math.max(0, Math.min(at, to.cards.length)), 0, card);
+    commit();
+  }
+
+  /** Swaps a column with the one beside it. */
+  function shiftLane(lane: Lane, by: -1 | 1) {
+    const i = board.lanes.indexOf(lane);
+    const j = i + by;
+    if (i < 0 || j < 0 || j >= board.lanes.length) return;
+    [board.lanes[i], board.lanes[j]] = [board.lanes[j], board.lanes[i]];
     commit();
   }
 
@@ -227,6 +236,12 @@
           <span class="grow"></span>
           <Menu label={`Actions for column ${lane.title}`} size={16}>
             <button role="menuitem" onclick={() => renameLane(lane)}><Pencil size={16} /> Rename column</button>
+            {#if board.lanes.indexOf(lane) > 0}
+              <button role="menuitem" onclick={() => shiftLane(lane, -1)}><ArrowLeft size={16} /> Move left</button>
+            {/if}
+            {#if board.lanes.indexOf(lane) < board.lanes.length - 1}
+              <button role="menuitem" onclick={() => shiftLane(lane, 1)}><ArrowRight size={16} /> Move right</button>
+            {/if}
             <button role="menuitem" onclick={() => toggleComplete(lane)}>
               <CircleCheck size={16} />
               {lane.complete ? "Stop marking cards done" : "Mark cards here as done"}
@@ -306,6 +321,13 @@
                       <button role="menuitem" onclick={() => startEdit(card)}><Pencil size={16} /> Edit card</button>
                       {#if !/^\[\[[^\]]+\]\]/.test(card.text)}
                         <button role="menuitem" onclick={() => toNote(card)}><FilePlus size={16} /> Make into a note</button>
+                      {/if}
+                      <!-- The keyboard's way to reorder, besides dragging. -->
+                      {#if index > 0}
+                        <button role="menuitem" onclick={() => move(card.id, lane.id, lane.id, index - 1)}><ArrowUp size={16} /> Move up</button>
+                      {/if}
+                      {#if index < lane.cards.length - 1}
+                        <button role="menuitem" onclick={() => move(card.id, lane.id, lane.id, index + 2)}><ArrowDown size={16} /> Move down</button>
                       {/if}
                       {#each board.lanes.filter((l) => l.id !== lane.id) as other (other.id)}
                         <button role="menuitem" onclick={() => move(card.id, lane.id, other.id)}><ArrowRight size={16} /> Move to {other.title}</button>

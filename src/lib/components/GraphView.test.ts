@@ -92,7 +92,7 @@ test("draws every note with its name and counts notes and links", async () => {
   await setup();
   expect(titles()).toEqual(["Home", "Ideas", "Lonely", "Plan", "Spec"]);
   expect(legend()).toHaveTextContent("5 notes, 3 links");
-  expect(screen.getByRole("img", { name: "Graph of 5 notes and 3 links. Use search to open a note." })).toBe(graphCanvas());
+  expect(screen.getByRole("img", { name: "Graph of 5 notes and 3 links. Type in the filter and press Return to open a note." })).toBe(graphCanvas());
   expect(screen.queryByText(/No notes yet/)).not.toBeInTheDocument();
 });
 
@@ -256,10 +256,16 @@ describe("hover", () => {
 });
 
 describe("filter", () => {
+  test("Return opens the best matching note", async () => {
+    const { user } = await setup();
+    await user.type(screen.getByRole("searchbox", { name: "Filter notes in the graph; Return opens the best match" }), "pl{Enter}");
+    expect(app.current).toMatch(/Plan/);
+  });
+
   test("typing fades every note whose name doesn't match", async () => {
     const { user } = await setup();
     const n = canvas.frames.length;
-    await user.type(screen.getByRole("searchbox", { name: "Filter notes in the graph" }), "pl");
+    await user.type(screen.getByRole("searchbox", { name: "Filter notes in the graph; Return opens the best match" }), "pl");
     const frame = await nextFrame(n);
     expect(dotOf("Plan", frame).alpha).toBe(1);
     expect(dotOf("Home", frame).alpha).toBe(0.2);
@@ -478,3 +484,4 @@ test("with motion on, the layout settles over time and stops when the view close
   await new Promise((r) => setTimeout(r, 100));
   expect(canvas.frames.length).toBe(n);
 });
+

@@ -423,7 +423,24 @@
 <section class="graph" aria-labelledby="graph-title">
   <header>
     <h2 id="graph-title">Graph</h2>
-    <input class="field" type="search" bind:value={filter} placeholder="Filter notes" aria-label="Filter notes in the graph" />
+    <input
+      class="field"
+      type="search"
+      bind:value={filter}
+      placeholder="Filter notes, Return opens"
+      aria-label="Filter notes in the graph; Return opens the best match"
+      onkeydown={(e) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        // The keyboard's way into a note on the graph: the title that starts with what's typed, else one that holds it.
+        const q = fold(filter.trim());
+        if (!q) return;
+        const titled = nodes.filter((n) => !n.ghost && fold(n.title).includes(q));
+        const best = titled.find((n) => fold(n.title).startsWith(q)) ?? titled[0];
+        if (best) app.open(best.id);
+        else app.say(`No note in the graph matches “${filter.trim()}”.`);
+      }}
+    />
     <div class="segmented" role="group" aria-label="Which notes to show">
       <button aria-pressed={!local} class:on={!local} onclick={() => (local = false)}>Whole vault</button>
       <button
@@ -455,7 +472,7 @@
     <canvas
       bind:this={canvas}
       role="img"
-      aria-label={`Graph of ${counts.nodes} notes and ${counts.links} links. Use search to open a note.`}
+      aria-label={`Graph of ${counts.nodes} notes and ${counts.links} links. Type in the filter and press Return to open a note.`}
       onpointerdown={down}
       onpointermove={move}
       onpointerup={up}

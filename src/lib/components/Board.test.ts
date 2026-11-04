@@ -331,7 +331,26 @@ describe("moving cards with the menu", () => {
     const { user } = setup();
     await user.click(within(card("To do", "Set up OAuth")).getByRole("button", { name: cardMenu }));
     const items = screen.getAllByRole("menuitem").map((i) => i.textContent!.trim());
-    expect(items).toEqual(["Edit card", "Make into a note", "Move to Doing", "Move to Done", "Delete card"]);
+    expect(items).toEqual(["Edit card", "Make into a note", "Move down", "Move to Doing", "Move to Done", "Delete card"]);
+  });
+
+  test("Move up and Move down reorder a card in its column, without dragging", async () => {
+    const { user, saved } = setup();
+    await user.click(within(card("To do", "Test on the phone")).getByRole("button", { name: cardMenu }));
+    await user.click(screen.getByRole("menuitem", { name: "Move down" }));
+    expect(saved()["To do"].map((c) => c.slice(4, 14))).toEqual(["Set up OAu", "Write [[Re", "Test on th"]);
+    await user.click(within(card("To do", "Test on the phone")).getByRole("button", { name: cardMenu }));
+    await user.click(screen.getByRole("menuitem", { name: "Move up" }));
+    await user.click(within(card("To do", "Test on the phone")).getByRole("button", { name: cardMenu }));
+    await user.click(screen.getByRole("menuitem", { name: "Move up" }));
+    expect(saved()["To do"].map((c) => c.slice(4, 14))).toEqual(["Test on th", "Set up OAu", "Write [[Re"]);
+  });
+
+  test("a column moves left or right from its menu", async () => {
+    const { user, saved } = setup();
+    await user.click(within(lane("Doing")).getByRole("button", { name: /^Actions for column/ }));
+    await user.click(screen.getByRole("menuitem", { name: "Move left" }));
+    expect(Object.keys(saved())).toEqual(["Doing", "To do", "Done"]);
   });
 
   test("Move to puts the card at the end of that column", async () => {
