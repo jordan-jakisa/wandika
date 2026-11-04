@@ -500,3 +500,18 @@ test("the cursor and scroll come back when a note is opened again", async () => 
   await user.keyboard("!");
   await waitFor(() => expect(api.noteRead(path)).resolves.toMatch(/three!$/));
 });
+
+test("a save that changes a task tells Tasks and Today; other typing doesn't", async () => {
+  const user = userEvent.setup();
+  const { path } = await openNote("Plans", "Intro\n- [ ] Call Ana");
+  const write = vi.spyOn(api, "noteWrite");
+  const before = app.changed.at;
+  await user.click(body());
+  await user.keyboard("{Control>}{Home}{/Control}{End} more");
+  await waitFor(() => expect(write).toHaveBeenCalledTimes(1));
+  expect(app.changed.at).toBe(before);
+  await user.keyboard("{Control>}{End}{/Control} today");
+  await waitFor(() => expect(write).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(app.changed.paths).toEqual([path]));
+  expect(app.changed.at).not.toBe(before);
+});

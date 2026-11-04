@@ -170,6 +170,14 @@
   /** On phones the writing toolbar shows while the note's text has focus. */
   let writing = $state(false);
 
+  /** The note's task lines as last saved, to tell when a save changed a task. */
+  let savedTasks: string | null = null;
+  const taskLines = (text: string) =>
+    text
+      .split("\n")
+      .filter((l) => /^\s*[-*+] \[.\]/.test(l))
+      .join("\n");
+
   async function save() {
     clearTimeout(saveTimer);
     if (pending === null || !loadedPath) return;
@@ -178,6 +186,13 @@
     try {
       await api.noteWrite(loadedPath, text);
       app.edited();
+      // Tasks and Today refresh when the save changed a task line, and only then, so typing
+      // stays cheap.
+      const tasks = taskLines(text);
+      if (tasks !== savedTasks) {
+        savedTasks = tasks;
+        app.changed = { paths: [loadedPath], at: Date.now() };
+      }
       saveError = null;
       saveTries = 0;
     } catch (e) {
@@ -247,6 +262,7 @@
     let text = "";
     try {
       text = await api.noteRead(p);
+      savedTasks = taskLines(text);
     } catch (e) {
       if (codeOf(e) === "locked") locked = true;
       else error = (e as Error).message;
