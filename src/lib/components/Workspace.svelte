@@ -676,15 +676,17 @@
   .full-scroll {
     overflow-y: auto;
   }
+  /* The window is the frame: each column scrolls inside it, never the whole app. */
   .shell {
     display: grid;
-    transition: grid-template-columns var(--dur-base) var(--ease-out);
-  }
-  :global(html.resizing) .shell {
-    transition: none;
     grid-template-columns: var(--sidebar) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) auto;
     height: 100dvh;
+    transition: grid-template-columns var(--dur-base) var(--ease-out);
+  }
+  /* While a column is dragged it follows the pointer, without easing. */
+  :global(html.resizing) .shell {
+    transition: none;
   }
   .shell.with-today {
     grid-template-columns: var(--sidebar) minmax(0, 1fr) var(--today);
