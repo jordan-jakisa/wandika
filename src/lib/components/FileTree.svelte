@@ -1,7 +1,7 @@
 <script lang="ts">
   import { touch } from "../tips";
   import { haptic } from "../haptics";
-  import { tick } from "svelte";
+  import { tick, untrack } from "svelte";
   import { ChevronRight, FileText, Folder, FolderPlus, Lock, LockOpen, Pencil, Plus, Trash2, File, Image as ImageIcon } from "@lucide/svelte";
   import { api } from "../api";
   import { app } from "../app.svelte";
@@ -34,6 +34,9 @@
   let swallowClick = false;
 
   function pressDown(e: PointerEvent, path: string) {
+    // A hold that ended without a click (the menu took it, or the finger slid off) mustn't eat
+    // the next tap on another row.
+    swallowClick = false;
     if (e.pointerType !== "touch") return;
     pressStart = { x: e.clientX, y: e.clientY };
     clearTimeout(pressTimer);
@@ -72,6 +75,11 @@
     if (e.key === "ArrowDown") rows[i + 1]?.focus();
     else if (e.key === "ArrowUp") rows[i - 1]?.focus();
     else if (at.dataset.kind === "folder" && (e.key === "ArrowRight") !== openFolders.has(path)) toggle(path);
+    // Left on a note, or on a folder already closed, goes to the folder it's in, as in Finder.
+    else if (e.key === "ArrowLeft" && path.includes("/")) {
+      const parent = path.slice(0, path.lastIndexOf("/"));
+      rows.find((r) => r.dataset.path === parent)?.focus();
+    }
   }
 
   function toggle(path: string) {
@@ -111,16 +119,19 @@
     return sort(top);
   });
 
-  // Reveal the open note inside its folders.
+  // Reveal the open note inside its folders, once each time a note opens. It mustn't watch the
+  // open folders too, or closing the folder that holds the open note would reopen it at once.
   $effect(() => {
     const c = app.current;
     if (!c || !c.includes("/")) return;
     const parts = c.split("/").slice(0, -1);
     const needed = parts.map((_, i) => parts.slice(0, i + 1).join("/"));
-    if (!needed.every((p) => openFolders.has(p))) {
-      openFolders = new Set([...openFolders, ...needed]);
-      save();
-    }
+    untrack(() => {
+      if (!needed.every((p) => openFolders.has(p))) {
+        openFolders = new Set([...openFolders, ...needed]);
+        save();
+      }
+    });
     // Bring the open note's row into view, e.g. after opening it from search.
     void tick().then(() => document.querySelector(".tree .row.current")?.scrollIntoView({ block: "nearest" }));
   });
@@ -144,6 +155,11 @@
     try {
       await app.flush();
       const to = await api.entryRename(e.path, name);
+      // A renamed folder stays open, and so do the folders inside it.
+      if (e.kind === "folder") {
+        openFolders = new Set([...openFolders].map((p) => (p === e.path ? to : p.startsWith(e.path + "/") ? to + p.slice(e.path.length) : p)));
+        save();
+      }
       if (app.current === e.path) app.current = to;
       else if (app.current?.startsWith(e.path + "/")) app.current = to + app.current.slice(e.path.length);
       await app.refreshFiles();

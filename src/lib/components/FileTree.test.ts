@@ -365,3 +365,55 @@ test("a right-click opens the row's menu", async () => {
   await fireEvent.contextMenu(row(/^Welcome/));
   expect(await screen.findByRole("menuitem", { name: /Rename/ })).toBeInTheDocument();
 });
+
+test("the folder holding the open note closes when clicked, and stays closed", async () => {
+  const user = userEvent.setup();
+  renderTree();
+  app.open("Projects/Sync design.md");
+  await within(tree()).findByRole("button", { name: /^Sync design$/ });
+  await user.click(row(/^Projects$/));
+  await waitFor(() => expect(row(/^Projects$/).closest("li")).toHaveAttribute("aria-expanded", "false"));
+  await new Promise((r) => setTimeout(r, 50));
+  expect(row(/^Projects$/).closest("li")).toHaveAttribute("aria-expanded", "false");
+  await user.click(row(/^Projects$/));
+  expect(row(/^Projects$/).closest("li")).toHaveAttribute("aria-expanded", "true");
+});
+
+test("a hold that ends without a click doesn't eat the next tap", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  renderTree();
+  const welcome = row(/^Welcome$/);
+  await fireEvent.pointerDown(welcome, { pointerType: "touch", clientX: 10, clientY: 10 });
+  await vi.advanceTimersByTimeAsync(500);
+  await fireEvent.pointerCancel(welcome, { pointerType: "touch" });
+  // No click came from that hold. The next tap is a fresh press and opens the note.
+  await fireEvent.pointerDown(welcome, { pointerType: "touch", clientX: 10, clientY: 10 });
+  await fireEvent.pointerUp(welcome, { pointerType: "touch" });
+  await fireEvent.click(welcome);
+  expect(app.current).toBe("Welcome.md");
+});
+
+test("Left on a note goes to its folder", async () => {
+  app.tree = [entry("Daily", "folder"), entry("Daily/2026-11-03.md"), entry("Welcome.md")];
+  renderTree();
+  const daily = row(/^Daily/);
+  daily.focus();
+  await fireEvent.keyDown(daily, { key: "ArrowRight" });
+  const note = await waitFor(() => row("2026-11-03"));
+  note.focus();
+  await fireEvent.keyDown(note, { key: "ArrowLeft" });
+  expect(daily).toHaveFocus();
+});
+
+test("a renamed folder stays open", async () => {
+  const user = userEvent.setup();
+  vi.spyOn(api, "entryRename").mockResolvedValue("Work");
+  app.open("Projects/Wandika.md");
+  renderTree();
+  await within(tree()).findByRole("button", { name: /^Wandika$/ });
+  await user.click(screen.getByRole("button", { name: "Actions for Projects" }));
+  await user.click(screen.getByRole("menuitem", { name: "Rename" }));
+  await user.clear(screen.getByRole("textbox", { name: "New name" }));
+  await user.type(screen.getByRole("textbox", { name: "New name" }), "Work{Enter}");
+  await waitFor(() => expect(JSON.parse(localStorage.getItem("wandika.openFolders")!)).toContain("Work"));
+});
