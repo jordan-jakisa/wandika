@@ -103,6 +103,22 @@ pressure and, once used, makes a resting palm draw nothing. The drawing is saved
 attachments folder and embedded with `![[…]]`, so Obsidian and GitHub show it; Wandika keeps the
 strokes inside the file and offers "Edit drawing" on its own drawings only.
 
+Voice notes (Jordan, 2026-11-04): a sheet with Cancel and Done on top, a red mic with "Listening,
+0:12", and the words in Literata as they're heard. Speech becomes text on the device only, and a
+two-second pause starts a new line. In a note the words go where the cursor is (note menu, or the
+mic on the writing bar); New voice note makes a note named by its first words. On iPhone the Voice
+note control (Control Center, Lock Screen, Action button, Siri) records without opening the app,
+with a Live Activity showing the timer, the last words and Stop; the words go into that day's daily
+note, under Notes, when Wandika next opens.
+
+Export as PDF (2026-11-04): the note is laid out as a print page (title, then the note in dark ink
+on white, Literata 11 pt, task boxes, tables, callouts, pictures and diagrams in place), and the
+system takes it from there: the Mac's print panel, the iPhone's share sheet, Android's print dialog.
+
+Task filters (2026-11-04): filter chips under the task search (Overdue, Today, This week, No date,
+High priority) and a folder chip around the system picker. They stack, stay as left on the device,
+and the count says "3 of 12 open tasks". Search everywhere ignores accents, as Obsidian's does.
+
 Left aligned throughout. The one memorable element is the page itself: Literata at a generous size on
 a quiet sheet. Everything else is restrained.
 

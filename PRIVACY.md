@@ -1,6 +1,6 @@
 # Wandika privacy policy
 
-Last updated 3 November 2026.
+Last updated 4 November 2026.
 
 Wandika is a free notes app for Mac, iPhone and Android, made by Jordan Mungujakisa. It has no
 server and no accounts of its own. Everything it reads stays on your device, apart from your notes,
@@ -17,13 +17,15 @@ which go to the GitHub repository you choose.
 | Gmail (`gmail.readonly`) | Only in the developer's own build. The versions you can download don't ask for Gmail. |
 | Outlook mail and calendar | Shows recent mail and today's events, read only. Saves an email as a note when you ask. |
 | Apple Calendar and Reminders | Read on the device, with your permission. Reminders are marked done when you tick them. |
+| Microphone and speech recognition | Only while you make a voice note, with your permission. Your words are turned into text on your device, and only the text is kept, in your note. The audio is never saved or sent anywhere: Wandika only uses speech recognition that works offline. |
 
 ## Who receives your data
 
 - **GitHub** receives your notes, in your own repository, when you connect it.
 - **Google** and **Microsoft** receive only the requests needed to show your calendar, tasks and
   mail, under your own account.
-- **Apple** receives nothing from Wandika: Apple Calendar and Reminders are read on your device.
+- **Apple** receives nothing from Wandika: Apple Calendar and Reminders are read on your device,
+  and voice notes are turned into text on your device.
 - **Claude Code** (Mac only, if you set it up): Wandika on the Mac can let Claude Code on the same
   Mac read and change your notes and tasks. Encrypted notes stay locked, and mail and calendars are
   not offered. What Claude Code does with what it reads is covered by Anthropic's terms.
