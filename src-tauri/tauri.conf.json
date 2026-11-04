@@ -39,7 +39,8 @@
     "category": "Productivity",
     "shortDescription": "Markdown notes synced through GitHub",
     "macOS": {
-      "minimumSystemVersion": "14.0"
+      "minimumSystemVersion": "14.0",
+      "entitlements": "Entitlements.plist"
     },
     "iOS": {
       "minimumSystemVersion": "17.0",

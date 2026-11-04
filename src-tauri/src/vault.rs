@@ -923,6 +923,41 @@ pub fn add_task(root: &Path, rel: &str, text: &str, crypto: &Crypto) -> Result<(
     write_note(root, rel, &out, crypto)
 }
 
+/// Adds a voice note to the daily note of the day it was made, under its Notes heading when the
+/// note has one, as a "Voice note, 09:15" heading and the words. Returns the daily note's path.
+// Voice notes from outside the app exist only on iPhone.
+#[cfg_attr(desktop, allow(dead_code))]
+pub fn add_voice_note(root: &Path, at: NaiveDateTime, text: &str, crypto: &Crypto) -> Result<String> {
+    let rel = daily_note(root, at.date(), crypto)?;
+    let note = read_note(root, &rel, crypto)?;
+    let entry = format!("### Voice note, {}\n\n{}\n", at.format("%H:%M"), text.trim());
+    let lines: Vec<&str> = note.split('\n').collect();
+    let notes = lines.iter().position(|l| l.trim().eq_ignore_ascii_case("## notes"));
+    let out = match notes {
+        Some(h) => {
+            // The end of the Notes section: the next heading of the same or a higher level.
+            let end = lines[h + 1..]
+                .iter()
+                .position(|l| l.starts_with("# ") || l.starts_with("## "))
+                .map_or(lines.len(), |i| h + 1 + i);
+            let mut before = lines[..end].join("\n").trim_end().to_string();
+            before.push_str("\n\n");
+            before.push_str(&entry);
+            if end < lines.len() {
+                before.push('\n');
+                before.push_str(&lines[end..].join("\n"));
+            }
+            before
+        }
+        None => {
+            let body = note.trim_end();
+            if body.is_empty() { entry } else { format!("{body}\n\n{entry}") }
+        }
+    };
+    write_note(root, &rel, &format!("{}\n", out.trim_end()), crypto)?;
+    Ok(rel)
+}
+
 /// Today's note, following Obsidian's Daily notes settings when the vault has them.
 pub fn daily_note(root: &Path, date: NaiveDate, crypto: &Crypto) -> Result<String> {
     #[derive(serde::Deserialize, Default)]
@@ -1281,6 +1316,25 @@ mod tests {
         assert_eq!(moment_format("YYYY-MM-DD [Daily]", d), "2026-11-02 Daily");
         assert_eq!(moment_format("[Week of] MMM D", d), "Week of Nov 2");
         assert_eq!(moment_format("YYYY [", d), "2026 [");
+    }
+
+    #[test]
+    fn voice_notes_go_under_the_daily_note_s_notes_heading() {
+        let root = std::env::temp_dir().join(format!("wandika-voice-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let crypto = Crypto::load(&root, &crate::secrets::Secrets::new(root.clone()), "test/voice");
+        let at = NaiveDate::from_ymd_opt(2026, 11, 4).unwrap().and_hms_opt(9, 15, 0).unwrap();
+        let rel = add_voice_note(&root, at, "Buy milk.\nCall Ana.", &crypto).unwrap();
+        assert_eq!(rel, "Daily/2026-11-04.md");
+        let at2 = at + chrono::Duration::minutes(30);
+        add_voice_note(&root, at2, "Second one.", &crypto).unwrap();
+        let text = read_note(&root, &rel, &crypto).unwrap();
+        assert_eq!(
+            text,
+            "# Wednesday 4 November 2026\n\n## Agenda\n\n## Notes\n\n### Voice note, 09:15\n\nBuy milk.\nCall Ana.\n\n### Voice note, 09:45\n\nSecond one.\n\n## Tasks\n"
+        );
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

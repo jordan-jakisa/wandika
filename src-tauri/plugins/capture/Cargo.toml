@@ -1,0 +1,15 @@
+[package]
+name = "tauri-plugin-capture"
+version = "0.1.0"
+description = "Wandika's native capture: PDF export and on-device voice notes"
+edition = "2024"
+links = "tauri-plugin-capture"
+publish = false
+
+[dependencies]
+tauri = { version = "2.12", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[build-dependencies]
+tauri-plugin = { version = "2.7.1", features = ["build"] }

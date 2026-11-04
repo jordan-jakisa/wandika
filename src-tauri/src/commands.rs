@@ -13,7 +13,7 @@ use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use tauri::{AppHandle, Emitter, Manager, State};
 
-type S<'a> = State<'a, App>;
+pub(crate) type S<'a> = State<'a, App>;
 
 #[derive(Serialize)]
 pub struct Status {
@@ -406,7 +406,7 @@ fn with_index<T>(app: &App, f: impl FnOnce(&vault::Index, &Crypto) -> T) -> Resu
 }
 
 /// Every command that changes files on disk calls this, so the next lookup rescans.
-fn changed(app: &App) {
+pub(crate) fn changed(app: &App) {
     app.index.lock().unwrap().mark_stale();
 }
 

@@ -14,6 +14,7 @@ mod sync;
 #[cfg(test)]
 mod test_http;
 mod vault;
+mod voice;
 
 use tauri::Manager;
 use tauri_plugin_deep_link::DeepLinkExt;
@@ -30,6 +31,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_capture::init())
         .setup(|app| {
             // Haptic feedback on phones: a tick at a swipe's or pull's point, a tap on a done task.
             #[cfg(mobile)]
@@ -47,6 +49,10 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::status,
+            voice::note_print,
+            voice::voice_start,
+            voice::voice_stop,
+            voice::captures_import,
             commands::github_start_login,
             commands::github_poll_login,
             commands::github_sign_out,

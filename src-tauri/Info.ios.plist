@@ -8,5 +8,15 @@
   <string>Wandika lists your reminders beside the tasks in your notes so you can tick them off.</string>
   <key>ITSAppUsesNonExemptEncryption</key>
   <false/>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Wandika listens while you make a voice note and turns your words into text.</string>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>Wandika turns your voice notes into text on this device. Your audio never leaves it.</string>
+  <key>NSSupportsLiveActivities</key>
+  <true/>
+  <key>UIBackgroundModes</key>
+  <array>
+    <string>audio</string>
+  </array>
 </dict>
 </plist>
