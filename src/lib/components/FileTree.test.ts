@@ -113,9 +113,9 @@ test("each row's menu offers what fits it", async () => {
     await user.keyboard("{Escape}");
     return list;
   };
-  expect(await items("Projects")).toEqual(["New note here", "New folder here", "Rename", "Encrypt", "Move to trash"]);
-  expect(await items("Welcome")).toEqual(["Rename", "Encrypt", "Move to trash"]);
-  expect(await items("Sketch.svg")).toEqual(["Rename", "Move to trash"]);
+  expect(await items("Projects")).toEqual(["New note here", "New folder here", "Rename", "Move to…", "Encrypt", "Move to trash"]);
+  expect(await items("Welcome")).toEqual(["Rename", "Move to…", "Encrypt", "Move to trash"]);
+  expect(await items("Sketch.svg")).toEqual(["Rename", "Move to…", "Move to trash"]);
 });
 
 test("new note here creates a note in that folder and opens it", async () => {
@@ -416,4 +416,18 @@ test("a renamed folder stays open", async () => {
   await user.clear(screen.getByRole("textbox", { name: "New name" }));
   await user.type(screen.getByRole("textbox", { name: "New name" }), "Work{Enter}");
   await waitFor(() => expect(JSON.parse(localStorage.getItem("wandika.openFolders")!)).toContain("Work"));
+});
+
+test("Move to… puts a note in the folder picked from a list, and follows it if open", async () => {
+  const user = userEvent.setup();
+  app.open("Welcome.md");
+  renderTree();
+  await user.click(screen.getByRole("button", { name: "Actions for Welcome" }));
+  await user.click(screen.getByRole("menuitem", { name: "Move to…" }));
+  const picker = await screen.findByRole("dialog", { name: "Move “Welcome” to" });
+  expect(within(picker).queryByRole("button", { name: "Top of the vault" })).not.toBeInTheDocument();
+  await user.click(within(picker).getByRole("button", { name: "Projects" }));
+  await waitFor(() => expect(app.current).toBe("Projects/Welcome.md"));
+  expect(await within(tree()).findByRole("button", { name: /^Welcome$/ })).toBeInTheDocument();
+  await waitFor(() => expect(app.toast).toBe("Moved to Projects."));
 });

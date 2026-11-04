@@ -352,6 +352,53 @@ pub fn rename(root: &Path, from: &str, new_name: &str, crypto: &Crypto, index: &
     Ok(to)
 }
 
+/// Moves a note, file or folder into `folder` ("" is the top of the vault), keeping its name.
+/// Links written with a folder (`[[Projects/Plan]]`) follow it; bare `[[Plan]]` links still work.
+pub fn move_entry(root: &Path, from: &str, folder: &str, crypto: &Crypto, index: &mut Index) -> Result<String> {
+    let src = safe(root, from)?;
+    let folder = folder.trim_matches('/');
+    let name = from.rsplit('/').next().unwrap_or(from);
+    let to = join(folder, name);
+    if to == from {
+        return Ok(to);
+    }
+    let is_dir = src.is_dir();
+    if is_dir && (folder == from || folder.starts_with(&format!("{from}/"))) {
+        return Err(msg("A folder can't go inside itself."));
+    }
+    let dst = safe(root, &to)?;
+    if dst.exists() {
+        return Err(msg(format!("“{}” already exists there.", name.trim_end_matches(".age").trim_end_matches(".md"))));
+    }
+    if let Some(parent) = dst.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let stem = |p: &str| p.trim_end_matches(".age").trim_end_matches(".md").to_string();
+    let (from_stem, to_stem) = (stem(from), stem(&to));
+    let title = title_of(from);
+    std::fs::rename(&src, &dst)?;
+    if is_dir {
+        move_encrypted_folders(root, crypto, from, Some(&to))?;
+        return Ok(to);
+    }
+    index.refresh(root, crypto);
+    for note in index.notes_linking_to(&title) {
+        let Ok(text) = read_note(root, &note, crypto) else { continue };
+        let updated = WIKILINK.replace_all(&text, |c: &regex::Captures| {
+            let target = c[1].trim();
+            if target.contains('/') && target.eq_ignore_ascii_case(&from_stem) {
+                format!("[[{to_stem}{}{}]]", c.get(2).map_or("", |m| m.as_str()), c.get(3).map_or("", |m| m.as_str()))
+            } else {
+                c[0].to_string()
+            }
+        });
+        if updated != text {
+            write_note(root, &note, &updated, crypto)?;
+        }
+    }
+    Ok(to)
+}
+
 /// Keeps the list of encrypted folders in step when a folder is renamed (`Some`) or trashed (`None`).
 fn move_encrypted_folders(root: &Path, crypto: &Crypto, from: &str, to: Option<&str>) -> Result<()> {
     let Some(mut cfg) = crypto.config.clone() else { return Ok(()) };
@@ -1393,6 +1440,26 @@ mod tests {
         assert_eq!(moment_format("YYYY-MM-DD [Daily]", d), "2026-11-02 Daily");
         assert_eq!(moment_format("[Week of] MMM D", d), "Week of Nov 2");
         assert_eq!(moment_format("YYYY [", d), "2026 [");
+    }
+
+    #[test]
+    fn moving_a_note_keeps_folder_links_pointing_at_it() {
+        let root = std::env::temp_dir().join(format!("wandika-move-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("Projects")).unwrap();
+        std::fs::create_dir_all(root.join("Archive")).unwrap();
+        std::fs::write(root.join("Projects/Plan.md"), "# Plan\n").unwrap();
+        std::fs::write(root.join("Home.md"), "See [[Projects/Plan|the plan]] and [[Plan]].\n").unwrap();
+        let crypto = Crypto::load(&root, &crate::secrets::Secrets::new(root.clone()), "test/move");
+        let mut index = Index::default();
+        assert_eq!(move_entry(&root, "Projects/Plan.md", "Archive", &crypto, &mut index).unwrap(), "Archive/Plan.md");
+        assert!(root.join("Archive/Plan.md").exists() && !root.join("Projects/Plan.md").exists());
+        assert_eq!(std::fs::read_to_string(root.join("Home.md")).unwrap(), "See [[Archive/Plan|the plan]] and [[Plan]].\n");
+        assert!(move_entry(&root, "Archive", "Archive/Sub", &crypto, &mut index).is_err(), "not into itself");
+        std::fs::write(root.join("Plan.md"), "other").unwrap();
+        assert!(move_entry(&root, "Archive/Plan.md", "", &crypto, &mut index).is_err(), "no overwriting");
+        assert_eq!(move_entry(&root, "Archive", "Projects", &crypto, &mut index).unwrap(), "Projects/Archive");
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

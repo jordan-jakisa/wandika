@@ -114,6 +114,7 @@ const calls: [string, (a: Api["api"]) => Promise<unknown>, string, Record<string
   ["eventToNote", (a) => a.eventToNote(event), "event_to_note", { event }],
   ["agendaToDaily", (a) => a.agendaToDaily([event], "2026-11-03"), "agenda_to_daily", { events: [event], date: "2026-11-03" }],
   ["notePrint", (a) => a.notePrint("Trip"), "note_print", { title: "Trip" }],
+  ["entryMove", (a) => a.entryMove("A.md", "Projects"), "entry_move", { path: "A.md", folder: "Projects" }],
   ["voiceStart", (a) => a.voiceStart(() => {}), "voice_start", { onEvent: { onmessage: expect.any(Function) } }],
   ["voiceStop", (a) => a.voiceStop(), "voice_stop", undefined],
   ["capturesImport", (a) => a.capturesImport(), "captures_import", undefined],

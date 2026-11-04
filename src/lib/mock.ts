@@ -421,6 +421,21 @@ const handlers: Record<string, (a: Args) => unknown> = {
     return path;
   },
   folder_create: () => undefined,
+  entry_move: ({ path, folder }) => {
+    const p = String(path);
+    const into = String(folder).replace(/^\/+|\/+$/g, "");
+    const to = (into ? `${into}/` : "") + p.split("/").pop();
+    if (to === p) return to;
+    if (into === p || into.startsWith(`${p}/`)) throw "A folder can't go inside itself.";
+    if ([...notes.keys(), ...files.keys()].some(within(to))) throw `“${titleOf(to)}” already exists there.`;
+    for (const map of [notes, files] as Map<string, unknown>[])
+      for (const k of [...map.keys()].filter(within(p))) {
+        const v = map.get(k);
+        map.delete(k);
+        map.set(to + k.slice(p.length), v);
+      }
+    return to;
+  },
   entry_rename: ({ path, name }) => {
     const clean = cleanName(name);
     const dir = path.includes("/") ? path.slice(0, path.lastIndexOf("/") + 1) : "";

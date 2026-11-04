@@ -171,6 +171,8 @@ export const api = {
     call<string>("note_create", { folder, title, body }),
   folderCreate: (path: string) => call<void>("folder_create", { path }),
   entryRename: (path: string, name: string) => call<string>("entry_rename", { path, name }),
+  /** Moves a note, file or folder into `folder` ("" is the top of the vault); returns where it went. */
+  entryMove: (path: string, folder: string) => call<string>("entry_move", { path, folder }),
   entryTrash: (path: string) => call<void>("entry_trash", { path }),
   noteTitles: () => call<NoteMeta[]>("note_titles"),
   search: (query: string) => call<SearchHit[]>("search", { query }),

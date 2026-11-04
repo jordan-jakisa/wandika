@@ -87,6 +87,7 @@ pub fn run() {
             commands::entry_rename,
             commands::entry_trash,
             commands::entry_restore,
+            commands::entry_move,
             commands::note_titles,
             commands::search,
             commands::backlinks,

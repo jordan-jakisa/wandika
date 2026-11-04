@@ -384,6 +384,16 @@ pub async fn entry_rename(app: S<'_>, path: String, name: String) -> Result<Stri
     Ok(to)
 }
 
+/// Moves a note, file or folder into another folder ("" for the top of the vault).
+#[tauri::command]
+pub async fn entry_move(app: S<'_>, path: String, folder: String) -> Result<String> {
+    let (root, crypto) = (app.root()?, app.crypto()?);
+    let mut index = app.index.lock().unwrap();
+    let to = vault::move_entry(&root, &path, &folder, &crypto, &mut index)?;
+    index.mark_stale();
+    Ok(to)
+}
+
 #[tauri::command]
 pub async fn entry_restore(app: S<'_>, path: String) -> Result<()> {
     vault::restore(&app.root()?, &path)?;

@@ -2,7 +2,7 @@
   import { touch } from "../tips";
   import { haptic } from "../haptics";
   import { tick, untrack } from "svelte";
-  import { ChevronRight, FileText, Folder, FolderPlus, Lock, LockOpen, Pencil, Plus, Trash2, File, Image as ImageIcon } from "@lucide/svelte";
+  import { ChevronRight, FileText, Folder, FolderInput, FolderPlus, Lock, LockOpen, Pencil, Plus, Trash2, File, Image as ImageIcon } from "@lucide/svelte";
   import { api } from "../api";
   import { app } from "../app.svelte";
   import { isImage } from "../attachments";
@@ -170,6 +170,29 @@
     }
   }
 
+  /** Moves a row into a folder picked from a list, the keyboard's way to do what dragging would. */
+  async function moveEntry(e: Entry) {
+    const here = e.path.includes("/") ? e.path.slice(0, e.path.lastIndexOf("/")) : "";
+    const inside = (p: string) => e.kind === "folder" && (p === e.path || p.startsWith(`${e.path}/`));
+    const folders = app.tree.filter((x) => x.kind === "folder" && x.path !== here && !inside(x.path)).map((x) => x.path);
+    const choices = [...(here ? [{ label: "Top of the vault", value: "/" }] : []), ...folders.map((p) => ({ label: p, value: p }))];
+    if (!choices.length) return app.say("There's no other folder to move it to. Make one with New folder.");
+    const pick = await app.ask({ title: `Move “${e.name.replace(/\.md(\.age)?$/, "")}” to`, confirm: "", choices });
+    if (!pick) return;
+    try {
+      await app.flush();
+      const to = await api.entryMove(e.path, pick === "/" ? "" : pick);
+      if (app.current === e.path) app.current = to;
+      else if (app.current?.startsWith(e.path + "/")) app.current = to + app.current.slice(e.path.length);
+      if (pick !== "/" && !openFolders.has(pick)) toggle(pick);
+      await app.refreshFiles();
+      app.edited();
+      app.say(`Moved to ${pick === "/" ? "the top of the vault" : pick}.`);
+    } catch (err) {
+      app.say((err as Error).message);
+    }
+  }
+
   async function encrypt(e: Entry, on: boolean) {
     const enc = app.status?.encryption;
     if (!enc?.set_up || !enc.unlocked) {
@@ -271,6 +294,7 @@
                     <button role="menuitem" onclick={() => newFolder(e.path)}><FolderPlus size={16} /> New folder here</button>
                   {/if}
                   <button role="menuitem" onclick={() => startRename(e)}><Pencil size={16} /> Rename</button>
+                  <button role="menuitem" onclick={() => moveEntry(e)}><FolderInput size={16} /> Move to…</button>
                   {#if e.kind !== "file"}
                     {#if e.kind === "folder" ? folderEncrypted(e.path) : e.encrypted}
                       <button role="menuitem" onclick={() => encrypt(e, false)}><LockOpen size={16} /> Decrypt</button>
