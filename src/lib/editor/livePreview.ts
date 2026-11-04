@@ -14,6 +14,19 @@ import {
 } from "@codemirror/view";
 
 const hide = Decoration.replace({});
+/** A web address typed without https:// or www., like google.com or wandika.app/download. The
+ *  endings are real top-level domains; .md and .sh are left out, as they name files in notes. */
+const BARE =
+  /(^|[\s(])((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:com|org|net|io|dev|app|co|ai|me|edu|gov|info|biz|xyz|tech|so|gg|tv|fm|ly|to|us|uk|ug|ke|tz|rw|ng|za|de|fr|nl|es|it|ca|au|in|jp|ch|se|no|fi|dk|pl|eu|ie|nz|br|mx|link|page|site|blog|news|shop|store)(?::\d+)?(?:\/[^\s)<>]*)?)(?=$|[\s),.!?;:])/gi;
+
+/** Whether `pos` is already part of a Markdown link, address or image. */
+function inLink(state: EditorState, pos: number) {
+  for (let n: ReturnType<typeof syntaxTree>["topNode"] | null = syntaxTree(state).resolveInner(pos, 1); n; n = n.parent) {
+    if (n.name === "Link" || n.name === "URL" || n.name === "Image" || n.name === "Autolink") return true;
+  }
+  return false;
+}
+
 const WIKILINK = /\[\[([^\]\n]+?)\]\]/g;
 const TAG = /(^|\s)(#[A-Za-z][\p{Alphabetic}\p{M}\p{Nd}\p{Pc}\p{Join_Control}/-]*)/gu;
 
@@ -269,6 +282,15 @@ function build(view: EditorView): DecorationSet {
           if (alias !== undefined) out.push(hide.range(start + 2, start + 2 + target.length + 1));
           out.push(hide.range(end - 2, end));
         }
+      }
+      for (const m of line.text.matchAll(BARE)) {
+        const start = line.from + m.index! + m[1].length;
+        // A sentence's full stop or comma isn't part of the address.
+        const address = m[2].replace(/[.,!?;:]+$/, "");
+        if (inLink(state, start) || inInlineCode(state, start) || /\[\[[^\]]*$/.test(line.text.slice(0, m.index!))) continue;
+        out.push(
+          Decoration.mark({ class: "cm-md-link", attributes: { "data-href": `https://${address}` } }).range(start, start + address.length),
+        );
       }
       for (const m of line.text.matchAll(TAG)) {
         if (/^#+\s/.test(line.text) && m.index === 0) continue;

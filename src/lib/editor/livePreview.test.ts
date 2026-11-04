@@ -412,3 +412,14 @@ test("⌘Return opens the link or tag under the cursor; elsewhere it does what i
   assert.deepEqual(heard.mock.calls, [["https://x.org"]]);
   assert.equal(press(setup("Plain ‸text").view), false);
 });
+
+test("a plain address like google.com is a link; file names, emails and code are not", () => {
+  const links = (doc: string) =>
+    decorations(viewOf(doc, [md(), livePreview(vi.fn(), vi.fn())]))
+      .filter((d) => d.kind === "cm-md-link")
+      .map((d) => d.text);
+  assert.deepEqual(links("Search on google.com, or see wandika.app/download."), ["google.com", "wandika.app/download"]);
+  assert.deepEqual(links("Open Plan.md and mail ana@example.com"), []);
+  assert.deepEqual(links("Run `curl google.com` now"), []);
+  assert.deepEqual(links("Already [a link](https://x.org) and https://google.com"), ["[a link](https://x.org)", "https://google.com"]);
+});
