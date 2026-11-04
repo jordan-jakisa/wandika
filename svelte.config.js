@@ -12,6 +12,11 @@ const config = {
     adapter: adapter({
       fallback: "index.html",
     }),
+    // The web demo on jordanjakisa.me lives under a path (`npm run build:demo`); the app itself
+    // loads from the root, with relative asset paths as before.
+    paths: process.env.WANDIKA_BASE
+      ? { base: process.env.WANDIKA_BASE, relative: false }
+      : {},
   },
 };
 

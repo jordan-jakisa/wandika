@@ -83,8 +83,14 @@ if (BIG_NOTES) {
 let encryption = { set_up: true, unlocked: false, folders: ["Private"] };
 /** The demo vault puts new notes beside the open one, as Obsidian's "Same folder as current file". */
 let newNotes: NewNoteLocation = { location: "current", folder: "" };
+/**
+ * The public web demo on jordanjakisa.me (`npm run build:demo`): opens straight into the sample
+ * vault, shows mail as the downloadable builds do (Outlook, no Gmail) and no connection errors.
+ */
+const DEMO = import.meta.env.VITE_WANDIKA_DEMO === "1";
 // `?mock=vault` opens straight into a vault, for checking screens after a reload.
-const startInVault = typeof location !== "undefined" && new URLSearchParams(location.search).get("mock") === "vault";
+const startInVault =
+  DEMO || (typeof location !== "undefined" && new URLSearchParams(location.search).get("mock") === "vault");
 let signedIn = startInVault;
 type Vault = NonNullable<Status["vault"]>;
 const githubVault: Vault = { id: "github/jordan-jakisa/notes", name: "notes", folder: null, remote: { owner: "jordan-jakisa", repo: "notes", branch: "main" } };
@@ -116,8 +122,9 @@ export function changeOutside(path: string, content: string) {
   outside.push({ path, at: Date.now() });
 }
 
-/** The mock inbox's first email, the flight booking. */
-const FLIGHT = "18c2f0a1b2c3d4e5";
+/** The mock inbox's first email, a lease to sign (made-up sender). */
+const LEASE = "18c2f0a1b2c3d4e5";
+const LEASE_SUBJECT = "Lease renewal: please sign by Friday";
 
 /** A task's line no longer holds the task shown, as the core says it. */
 const STALE = { code: "stale_task", message: "That task changed in its note, so the list is updated. Try again." };
@@ -250,13 +257,13 @@ const voice: { on: ((e: unknown) => void) | null; text: string; timers: ReturnTy
 
 const handlers: Record<string, (a: Args) => unknown> = {
   status: () => ({
-    configured: { github: true, google: true, microsoft: true, apple: true, gmail: true },
+    configured: { github: true, google: true, microsoft: true, apple: true, gmail: !DEMO },
     user: signedIn ? { login: "jordan-jakisa", name: "Jordan", avatar_url: "" } : null,
     vault,
     known,
     last_sync: lastSync,
     encryption: vault ? encryption : null,
-    connectors: { google: "jordan@example.com", microsoft: null, apple_calendar: "granted", apple_reminders: "not_asked" },
+    connectors: { google: "jordan@example.com", microsoft: DEMO ? "jordan@example.com" : null, apple_calendar: "granted", apple_reminders: "not_asked" },
   }),
   github_start_login: () => ({ device_code: "d", user_code: "WDKA-2611", verification_uri: "https://github.com/login/device", expires_in: 900, interval: 1 }),
   github_poll_login: () => {
@@ -574,13 +581,13 @@ const handlers: Record<string, (a: Args) => unknown> = {
     return path;
   },
   mail_read: ({ id }) => ({
-    subject: id === FLIGHT ? "Your flight to Nairobi is confirmed" : "Re: Wandika sync design",
-    from: id === FLIGHT ? "Uganda Airlines <bookings@ugandaairlines.com>" : "Amina Okello <amina@example.com>",
+    subject: id === LEASE ? LEASE_SUBJECT : "Re: Wandika sync design",
+    from: id === LEASE ? "Kato Properties <rent@example.com>" : "Amina Okello <amina@example.com>",
     to: "jordan@example.com",
     date: at(7, 12),
-    text: "Booking reference UR8K2.\n\nCheck-in opens 24 hours before departure.",
-    html: id === FLIGHT ? '<h1>You are going to Nairobi</h1><p>Booking reference <b>UR8K2</b>.</p><p><a href="https://example.com/checkin">Check in</a></p><img src="https://tracker.example.com/pixel.gif" alt="">' : null,
-    url: `https://mail.google.com/mail/u/0/#all/${id}`,
+    text: "The new lease is attached.\n\nPlease sign it and send it back by Friday.",
+    html: id === LEASE ? '<h1>Your lease renewal</h1><p>The new lease is attached. Please sign it and send it back by <b>Friday</b>.</p><p><a href="https://example.com/lease">View the lease</a></p><img src="https://tracker.example.com/pixel.gif" alt="">' : null,
+    url: DEMO ? `https://outlook.office.com/mail/inbox/id/${id}` : `https://mail.google.com/mail/u/0/#all/${id}`,
   }),
   external_changes: () => outside,
   daily_note: ({ date }) => daily(date),
@@ -609,19 +616,19 @@ const handlers: Record<string, (a: Args) => unknown> = {
     return {
       events,
       mail: [
-        { id: "18c2f0a1b2c3d4e5", source: "google", subject: "Your flight to Nairobi is confirmed", from: "Uganda Airlines", date: at(7, 12), snippet: "Booking reference UR8K2. Check-in opens 24 hours before departure.", url: "https://mail.google.com/mail/u/0/#inbox/18c2f0a1b2c3d4e5", unread: true },
-        { id: "18c2f0a1b2c3d4e6", source: "google", subject: "Re: Wandika sync design", from: "Amina Okello", date: at(6, 40), snippet: "Three-way merge sounds right. What happens when both sides edit the same line?", url: null, unread: false },
+        { id: LEASE, source: DEMO ? "microsoft" : "google", subject: LEASE_SUBJECT, from: "Kato Properties", date: at(7, 12), snippet: "The new lease is attached. Please sign it and send it back by Friday.", url: DEMO ? null : "https://mail.google.com/mail/u/0/#inbox/18c2f0a1b2c3d4e5", unread: true },
+        { id: "18c2f0a1b2c3d4e6", source: DEMO ? "microsoft" : "google", subject: "Re: Wandika sync design", from: "Amina Okello", date: at(6, 40), snippet: "Three-way merge sounds right. What happens when both sides edit the same line?", url: null, unread: false },
       ],
       tasks: tasks().filter((t) => !t.done),
       remote_tasks: [{ id: "r1", source: "google", list_id: "l", list: "My Tasks", title: "Renew domain", done: false, due: iso(today) }],
-      errors: {
+      errors: DEMO ? {} : {
         "Outlook Mail": { code: "provider_auth", message: "Outlook needs you to sign in again. Reconnect it in Settings, under Connections." },
         "Outlook Calendar": { code: "provider_auth", message: "Outlook needs you to sign in again. Reconnect it in Settings, under Connections." },
       },
     };
   },
   remote_task_toggle: () => undefined,
-  mail_to_note: ({ id }) => handlers.note_create({ folder: "Mail", title: id === FLIGHT ? "Your flight to Nairobi is confirmed" : "Re Wandika sync design", body: "# Email\n" }),
+  mail_to_note: ({ id }) => handlers.note_create({ folder: "Mail", title: id === LEASE ? "Lease renewal please sign by Friday" : "Re Wandika sync design", body: "# Email\n" }),
   event_to_note: ({ event }) => handlers.note_create({ folder: "Meetings", title: `${iso(today)} ${event.title}`, body: `# ${event.title}\n\n## Notes\n\n` }),
   agenda_to_daily: ({ date }) => daily(date),
 };

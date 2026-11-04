@@ -630,7 +630,7 @@ describe("appearance and connections", () => {
 
   test("mail and events become notes", async () => {
     const { run } = await fresh();
-    expect(await run("mail_to_note", { source: "google", id: "18c2f0a1b2c3d4e5" })).toBe("Mail/Your flight to Nairobi is confirmed.md");
+    expect(await run("mail_to_note", { source: "google", id: "18c2f0a1b2c3d4e5" })).toBe("Mail/Lease renewal please sign by Friday.md");
     expect(await run("mail_to_note", { source: "google", id: "b" })).toBe("Mail/Re Wandika sync design.md");
     const event = { title: "Standup" };
     expect(await run("event_to_note", { event })).toBe("Meetings/2026-11-03 Standup.md");
