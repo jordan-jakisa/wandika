@@ -81,8 +81,17 @@
     if (document.documentElement.classList.contains("resizing")) saveTimer = setTimeout(save, 250);
     else save();
   }
-  // On a narrow window the sidebar gives way first, so the note always keeps room.
-  const sidebarW = $derived(cols.sidebarOpen ? Math.max(SIDEBAR.min, Math.min(cols.sidebar, width - MAIN_MIN)) : 0);
+  // Column widths. The note always keeps MAIN_MIN. Today, when it's on and the view has it (a
+  // board and the whole-vault graph take the full width), fits beside the sidebar at its smallest;
+  // each column then takes what it can of the width you gave it, and the sidebar the rest. So a
+  // drag or a narrower window shrinks columns smoothly; Today only leaves when even its smallest
+  // size can't fit, never because the sidebar is a few pixels wider.
+  const viewHasToday = $derived(!boardOpen && !(app.tab === "graph" && !app.current));
+  const todayRoom = $derived(width - MAIN_MIN - (cols.sidebarOpen ? SIDEBAR.min : 0));
+  const roomForToday = $derived(viewHasToday && todayRoom >= TODAY.min);
+  const todayW = $derived(app.showToday && roomForToday ? Math.max(TODAY.min, Math.min(cols.today, TODAY.max, todayRoom)) : 0);
+  const sidebarMax = $derived(Math.max(SIDEBAR.min, Math.min(SIDEBAR.max, width - MAIN_MIN - todayW)));
+  const sidebarW = $derived(cols.sidebarOpen ? Math.max(SIDEBAR.min, Math.min(cols.sidebar, sidebarMax)) : 0);
   const toggleSidebar = () => setCols({ sidebarOpen: !cols.sidebarOpen });
 
   /** Moves the keyboard to the file list, the note or Today, showing it first if it's hidden. */
@@ -111,9 +120,6 @@
       { id: "focus-today", label: "Go to Today", run: () => focusRegion("today") },
       { id: "cycle", label: "Next of the file list, the note and Today", run: () => cycleRegion(false) },
     ]),
-  );
-  const roomForToday = $derived(
-    width - sidebarW - cols.today >= MAIN_MIN && !boardOpen && !(app.tab === "graph" && !app.current),
   );
   // The Mac's window puts the traffic lights over the page; columns leave them room.
 
@@ -436,14 +442,14 @@
     class:mac={isMac}
     class:with-today={app.showToday && roomForToday}
     class:collapsed={!cols.sidebarOpen}
-    style="--sidebar: {sidebarW}px; --today: {cols.today}px"
+    style="--sidebar: {sidebarW}px; --today: {todayW}px"
   >
     <aside class="sidebar" aria-label="Vault" hidden={!cols.sidebarOpen}>
       <Resizer
         edge="right"
         value={sidebarW}
         min={SIDEBAR.min}
-        max={SIDEBAR.max}
+        max={sidebarMax}
         initial={SIDEBAR.initial}
         label="Resize the sidebar"
         onchange={(w) => setCols({ sidebar: w })}
@@ -524,7 +530,7 @@
         {#if isMac}<div class="drag-strip" data-tauri-drag-region></div>{/if}
         <Resizer
           edge="left"
-          value={cols.today}
+          value={todayW}
           min={TODAY.min}
           max={Math.min(TODAY.max, width - sidebarW - MAIN_MIN)}
           initial={TODAY.initial}
@@ -682,11 +688,17 @@
     grid-template-columns: var(--sidebar) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) auto;
     height: 100dvh;
-    transition: grid-template-columns var(--dur-base) var(--ease-out);
   }
-  /* While a column is dragged it follows the pointer, without easing. */
-  :global(html.resizing) .shell {
-    transition: none;
+  /* Columns change width at once: easing the grid would lay out the whole app, the note
+     included, on every frame. A column that appears fades in instead, which costs nothing. */
+  .sidebar:not([hidden]),
+  .today-col {
+    animation: fade-in var(--dur-quick) var(--ease-out);
+  }
+  /* A drag isn't an appearance. */
+  :global(html.resizing) .sidebar,
+  :global(html.resizing) .today-col {
+    animation: none;
   }
   .shell.with-today {
     grid-template-columns: var(--sidebar) minmax(0, 1fr) var(--today);

@@ -40,10 +40,30 @@
     dragging = true;
   }
 
+  /** The edge moves once per screen frame however fast the pointer reports, so the app lays out
+   *  at most once a frame while you drag. */
+  let frame = 0;
+  let lastX = 0;
   function move(e: PointerEvent) {
     if (!dragging) return;
+    lastX = e.clientX;
+    if (frame) return;
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      if (!dragging) return;
+      const dx = lastX - startX;
+      onchange(clamp(startW + (edge === "right" ? dx : -dx)));
+    });
+  }
+
+  function up(e: PointerEvent) {
+    if (!dragging) return;
+    // The last position counts, even if its frame hadn't come yet.
+    cancelAnimationFrame(frame);
+    frame = 0;
     const dx = e.clientX - startX;
-    onchange(clamp(startW + (edge === "right" ? dx : -dx)));
+    if (e.type === "pointerup" && dx) onchange(clamp(startW + (edge === "right" ? dx : -dx)));
+    dragging = false;
   }
 
   function key(e: KeyboardEvent) {
@@ -76,8 +96,8 @@
   title="Drag to resize. Double-click to reset."
   onpointerdown={down}
   onpointermove={move}
-  onpointerup={() => (dragging = false)}
-  onpointercancel={() => (dragging = false)}
+  onpointerup={up}
+  onpointercancel={up}
   ondblclick={() => onchange(initial)}
   onkeydown={key}
 ></div>
