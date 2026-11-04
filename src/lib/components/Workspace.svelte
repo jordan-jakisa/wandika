@@ -19,6 +19,7 @@
     FolderPlus,
     RefreshCw,
     Minimize2,
+    Mic,
   } from "@lucide/svelte";
   import { api } from "../api";
   import Menu from "./Menu.svelte";
@@ -109,9 +110,16 @@
     } else if (k === "k" || k === "o") {
       e.preventDefault();
       app.switcherOpen = !app.switcherOpen;
+    } else if (k === "n" && e.altKey) {
+      e.preventDefault();
+      app.newVoiceNote();
     } else if (k === "n" && !e.shiftKey) {
       e.preventDefault();
       void app.newNote();
+    } else if (k === "p" && app.current) {
+      // The open note listens for this and exports itself.
+      e.preventDefault();
+      window.dispatchEvent(new Event("wandika-export-pdf"));
     } else if (k === "s") {
       e.preventDefault();
       void app.sync(true);
@@ -302,8 +310,14 @@
     typing = el.isContentEditable || /^(INPUT|TEXTAREA)$/.test(el.tagName);
   }
 
+  // Voice notes made from the Lock Screen while the app was closed go into their daily notes.
+  $effect(() => untrack(() => void app.importCaptures()));
+
   function onVisibility() {
-    if (document.visibilityState === "visible") void app.sync();
+    if (document.visibilityState === "visible") {
+      void app.sync();
+      void app.importCaptures();
+    }
     else void app.flush();
   }
 
@@ -558,6 +572,7 @@
                   <button role="menuitem" onclick={() => app.showGraph()}><Network size={18} /> Graph</button>
                   <button role="menuitem" onclick={() => (app.tab = "projects")}><Columns3 size={18} /> Projects</button>
                   <button role="menuitem" onclick={() => app.newDrawing()}><PenLine size={18} /> New drawing</button>
+                  <button role="menuitem" onclick={() => app.newVoiceNote()}><Mic size={18} /> New voice note</button>
                   {#if app.synced}
                     <button role="menuitem" onclick={() => app.sync(true)}><RefreshCw size={18} /> Sync now</button>
                   {/if}

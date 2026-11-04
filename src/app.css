@@ -536,3 +536,140 @@ html:is([data-platform="ios"], [data-platform="android"]) dialog.pushes.closing 
     animation: none !important;
   }
 }
+
+/* PDF export (exportPdf.ts): only the laid-out note prints, in dark ink on white paper, whatever
+   the app's theme. The page's margins come from the system's paper setup. */
+#print-root {
+  display: none;
+}
+@media print {
+  @page {
+    margin: 18mm 16mm;
+  }
+  html,
+  body {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  body > :not(#print-root) {
+    display: none !important;
+  }
+  #print-root {
+    display: block;
+    color: #1c2320;
+    font-family: var(--font-note);
+    font-size: 11pt;
+    line-height: 1.55;
+  }
+  .print-note h1 {
+    margin: 0 0 14pt;
+    font-family: var(--font-note);
+    font-size: 22pt;
+    line-height: 1.2;
+  }
+  .print-note h2,
+  .print-note h3,
+  .print-note h4,
+  .print-note h5,
+  .print-note h6 {
+    margin: 16pt 0 6pt;
+    line-height: 1.25;
+    break-after: avoid;
+  }
+  .print-note h2 {
+    font-size: 16pt;
+  }
+  .print-note h3 {
+    font-size: 13pt;
+  }
+  .print-note h4,
+  .print-note h5,
+  .print-note h6 {
+    font-size: 11pt;
+  }
+  .print-note p,
+  .print-note ul,
+  .print-note ol,
+  .print-note pre,
+  .print-note table,
+  .print-note blockquote,
+  .print-note aside {
+    margin: 0 0 8pt;
+  }
+  .print-note ul,
+  .print-note ol {
+    padding-left: 18pt;
+  }
+  .print-note li > ul,
+  .print-note li > ol {
+    margin: 2pt 0 0;
+  }
+  /* The box hangs where the bullet would be, so nested items keep their indent. */
+  .print-note li.task {
+    list-style: none;
+  }
+  .print-note li.task > .box {
+    display: inline-block;
+    width: 14pt;
+    margin-left: -14pt;
+  }
+  .print-note li.task.done > .label {
+    color: #5d6661;
+    text-decoration: line-through;
+  }
+  .print-note a {
+    color: inherit;
+  }
+  .print-note mark {
+    background: #fff1a8;
+    color: inherit;
+  }
+  .print-note code {
+    font-family: var(--font-code);
+    font-size: 9.5pt;
+  }
+  .print-note pre {
+    padding: 8pt 10pt;
+    border: 0.5pt solid #c9cec9;
+    border-radius: 4pt;
+    white-space: pre-wrap;
+    break-inside: avoid;
+  }
+  .print-note blockquote,
+  .print-note aside {
+    padding: 2pt 0 2pt 12pt;
+    border-left: 1.5pt solid #c9cec9;
+    color: #3a423e;
+  }
+  .print-note .callout-title {
+    margin-bottom: 4pt;
+    font-weight: 600;
+  }
+  .print-note table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 10pt;
+    break-inside: avoid;
+  }
+  .print-note th,
+  .print-note td {
+    padding: 4pt 6pt;
+    border: 0.5pt solid #c9cec9;
+    text-align: left;
+    vertical-align: top;
+  }
+  .print-note img,
+  .print-note .diagram svg {
+    display: block;
+    max-width: 100%;
+    max-height: 200mm;
+    margin: 6pt 0;
+    break-inside: avoid;
+  }
+  .print-note hr {
+    border: 0;
+    border-top: 0.5pt solid #c9cec9;
+    margin: 12pt 0;
+  }
+}

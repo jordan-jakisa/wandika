@@ -246,6 +246,8 @@ const snippets = [
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+const voice: { on: ((e: unknown) => void) | null; text: string; timers: ReturnType<typeof setTimeout>[] } = { on: null, text: "", timers: [] };
+
 const handlers: Record<string, (a: Args) => unknown> = {
   status: () => ({
     configured: { github: true, google: true, microsoft: true, apple: true, gmail: true },
@@ -362,6 +364,29 @@ const handlers: Record<string, (a: Args) => unknown> = {
     return path;
   },
   claude_setup_command: () => "claude mcp add --scope user wandika -- /Applications/Wandika.app/Contents/MacOS/wandika mcp",
+  note_print: () => {
+    window.print();
+  },
+  // A short made-up dictation, so the voice sheet can be designed in a browser.
+  voice_start: ({ onEvent }) => {
+    const on = (onEvent as { onmessage: (e: unknown) => void }).onmessage;
+    voice.on = on;
+    voice.timers.forEach(clearTimeout);
+    const words = ["Pick up", "Pick up the parcel", "Pick up the parcel before six.", "Pick up the parcel before six.\nCall Ana about Saturday."];
+    voice.text = "";
+    voice.timers = words.map((w, i) =>
+      setTimeout(() => {
+        voice.text = w;
+        on({ kind: "text", text: w });
+      }, 700 * (i + 1)),
+    );
+  },
+  voice_stop: () => {
+    voice.timers.forEach(clearTimeout);
+    voice.on?.({ kind: "done", text: voice.text });
+    voice.on = null;
+  },
+  captures_import: () => [],
   drawing_write: ({ target, svg }) => {
     const name = String(target).split("/").pop()!.toLowerCase();
     const path = [...files.keys()].find((p) => p === target || p.split("/").pop()!.toLowerCase() === name);

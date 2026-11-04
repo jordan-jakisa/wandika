@@ -63,6 +63,8 @@ class AppState {
   /** The drawing open on the pad: a new one for `note`, or one to change, found the way the embed
    *  `target` in note `from` is. `saved` hears where a new drawing went, so the note can embed it. */
   drawing = $state<{ note: string; edit: { target: string; from: string } | null; saved?: (path: string) => void } | null>(null);
+  /** The voice sheet: open while it listens; `done` hears the words when you tap Done. */
+  voice = $state<{ title: string; done: (text: string) => void | Promise<void> } | null>(null);
   /** The email open in the reader; `url` opens it in the mail app on the web. */
   reading = $state<(MailRef & { url: string | null }) | null>(null);
   /** The task open in the task editor. */
@@ -521,6 +523,36 @@ class AppState {
     };
   }
 
+  /** A note made by speaking: its first words name it. */
+  newVoiceNote() {
+    this.voice = {
+      title: "New voice note",
+      done: async (text) => {
+        try {
+          await this.#create(await this.newNoteFolder(), voiceTitle(text), `${text.trim()}\n`);
+        } catch (e) {
+          this.say((e as Error).message);
+        }
+      },
+    };
+  }
+
+  /** iPhone: voice notes made from the Lock Screen or Control Center go into their daily notes. */
+  async importCaptures() {
+    try {
+      const paths = await api.capturesImport();
+      if (!paths.length) return;
+      await this.refreshFiles();
+      this.changed = { paths, at: Date.now() };
+      this.say(paths.length === 1 ? `Your voice notes are in ${titleOf(paths[0])}.` : `Your voice notes are in ${paths.length} daily notes.`, {
+        label: "Open",
+        run: () => this.open(paths[paths.length - 1]),
+      });
+    } catch (e) {
+      this.say((e as Error).message);
+    }
+  }
+
   async newBoard() {
     const name = await this.ask({ title: "New board", confirm: "Create board", input: { label: "Board name", value: "" } });
     if (!name?.trim()) return;
@@ -781,6 +813,19 @@ export function syncSummary(r: SyncReport) {
   if (came) return `${notes(came)} updated.`;
   if (r.pushed.length) return "Your changes are on GitHub.";
   return "Everything is up to date.";
+}
+
+/** A note name from what was said: the first words, up to about 60 characters, without the
+ *  characters a file name can't hold. An empty or unusable start gets the date and time. */
+export function voiceTitle(text: string, now = new Date()) {
+  const first = text.trim().split("\n")[0].replace(/[\\/:*?"<>|#^[\]]/g, "").replace(/\s+/g, " ").trim();
+  if (first.length >= 2) {
+    if (first.length <= 60) return first.replace(/[.!?,;]+$/, "");
+    const cut = first.slice(0, 60);
+    return (cut.slice(0, cut.lastIndexOf(" ")) || cut).replace(/[.!?,;]+$/, "");
+  }
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `Voice note ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}${pad(now.getMinutes())}`;
 }
 
 export function titleOf(path: string) {

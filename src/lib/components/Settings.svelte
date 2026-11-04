@@ -283,6 +283,7 @@
   const SHORTCUTS = [
     ["⌘K or ⌘O", "Search or create a note"],
     ["⌘N", "New note"],
+    ["⌥⌘N", "New voice note"],
     ["⌘D", "Today's note"],
     ["⌘S", "Sync now"],
     ["⌘,", "Settings"],
@@ -290,6 +291,7 @@
     ["⌥⌘T", "Show or hide Today"],
     ["⌘[ and ⌘]", "Back and forward between notes"],
     ["⌘F", "Find in note"],
+    ["⌘P", "Export the note as a PDF"],
     ["⌘B, ⌘I", "Bold, italic"],
     ["⌘L", "Checklist"],
     ["⌘⇧8, ⌘⇧7", "Bulleted list, numbered list"],

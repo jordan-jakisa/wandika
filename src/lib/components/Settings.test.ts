@@ -751,6 +751,7 @@ describe("About", () => {
     expect(keys).toEqual([
       ["Search or create a note", "⌘K or ⌘O"],
       ["New note", "⌘N"],
+      ["New voice note", "⌥⌘N"],
       ["Today's note", "⌘D"],
       ["Sync now", "⌘S"],
       ["Settings", "⌘,"],
@@ -758,6 +759,7 @@ describe("About", () => {
       ["Show or hide Today", "⌥⌘T"],
       ["Back and forward between notes", "⌘[ and ⌘]"],
       ["Find in note", "⌘F"],
+      ["Export the note as a PDF", "⌘P"],
       ["Bold, italic", "⌘B, ⌘I"],
       ["Checklist", "⌘L"],
       ["Bulleted list, numbered list", "⌘⇧8, ⌘⇧7"],

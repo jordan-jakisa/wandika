@@ -20,6 +20,12 @@ import type {
 
 type Args = Record<string, unknown>;
 
+/** What the voice recognizer sends: the text so far, the end with the whole text, or why it stopped. */
+export type VoiceEvent =
+  | { kind: "text"; text: string }
+  | { kind: "done"; text: string }
+  | { kind: "failed"; message: string; code: string; text?: string };
+
 /** True inside the Tauri app; false when the interface is opened in a plain browser for design work. */
 export const native = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -132,6 +138,19 @@ export const api = {
   attachmentRead: (target: string, from: string) => call<ArrayBuffer>("attachment_read", { target, from }),
   /** Mac: the Terminal line that connects Claude Code to this copy of Wandika. */
   claudeSetupCommand: () => call<string>("claude_setup_command"),
+  /** Hands the print page to the system: the Mac's print panel, the iPhone's share sheet, Android's print dialog. */
+  notePrint: (title: string) => call<void>("note_print", { title }),
+  /** Listens and turns speech into text on the device; `on` hears the text as it grows, then the end. */
+  voiceStart: async (on: (e: VoiceEvent) => void) => {
+    if (!native) return call<void>("voice_start", { onEvent: { onmessage: on } });
+    const { Channel } = await import("@tauri-apps/api/core");
+    const channel = new Channel<VoiceEvent>();
+    channel.onmessage = on;
+    return call<void>("voice_start", { onEvent: channel });
+  },
+  voiceStop: () => call<void>("voice_stop"),
+  /** iPhone: puts voice notes made from the Lock Screen into their daily notes; returns those notes. */
+  capturesImport: () => call<string[]>("captures_import"),
   /** Saves a changed drawing over the file an embed in `from` points at. */
   drawingWrite: (target: string, from: string, svg: string) => call<void>("drawing_write", { target, from, svg }),
   /** Where a new note goes, following Obsidian's "Default location for new notes". */

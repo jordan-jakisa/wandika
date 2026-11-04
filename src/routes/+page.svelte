@@ -3,6 +3,7 @@
   import Dialog from "$lib/components/Dialog.svelte";
   import ImageViewer from "$lib/components/ImageViewer.svelte";
   import Sketch from "$lib/components/Sketch.svelte";
+  import VoiceSheet from "$lib/components/VoiceSheet.svelte";
   import FocusSession from "$lib/components/FocusSession.svelte";
   import MailReader from "$lib/components/MailReader.svelte";
   import TaskEditor from "$lib/components/TaskEditor.svelte";
@@ -68,6 +69,7 @@
 <Dialog />
 <ImageViewer />
 <Sketch />
+<VoiceSheet />
 <MailReader />
 <TaskEditor />
 <FocusSession />

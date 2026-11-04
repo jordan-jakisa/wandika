@@ -1,7 +1,8 @@
 <script lang="ts">
   import { EditorState } from "@codemirror/state";
   import { EditorView } from "@codemirror/view";
-  import { ChevronLeft, Code, ImagePlus, LayoutTemplate, Columns3, Lock, LockOpen, Network, PenLine, Trash2, Link2 } from "@lucide/svelte";
+  import { ChevronLeft, Code, FileDown, ImagePlus, LayoutTemplate, Columns3, Lock, LockOpen, Mic, Network, PenLine, Trash2, Link2 } from "@lucide/svelte";
+  import { exportPdf } from "../exportPdf";
   import { onDestroy, untrack } from "svelte";
   import { api, codeOf } from "../api";
   import { app, titleOf } from "../app.svelte";
@@ -91,6 +92,34 @@
       saved: (rel) => v === view && embedAt(v, at, [`![[${rel.split("/").pop()}]]`]),
     };
   }
+
+  /** Speak into the note: the words go where the cursor is, each line on its own. */
+  function addVoice() {
+    const v = view;
+    if (!v) return;
+    const at = insertAt(v);
+    app.voice = { title: "Voice note", done: (text) => void (v === view && embedAt(v, at, text.split("\n"))) };
+  }
+
+  let exporting = false;
+  async function exportNote() {
+    if (exporting) return;
+    exporting = true;
+    try {
+      await save();
+      const text = view ? view.state.doc.toString() : (boardText ?? "");
+      await exportPdf(loadedPath ?? path, title.trim() || titleOf(path), text);
+    } catch (e) {
+      app.say(`The PDF wasn't made: ${(e as Error).message}`);
+    } finally {
+      exporting = false;
+    }
+  }
+  $effect(() => {
+    const run = () => void exportNote();
+    window.addEventListener("wandika-export-pdf", run);
+    return () => window.removeEventListener("wandika-export-pdf", run);
+  });
 
   async function insertTemplate() {
     const list = await api.templatesList().catch(() => []);
@@ -408,7 +437,11 @@
       {#if boardText === null && !locked && !error}
         <button role="menuitem" onclick={pickImages}><ImagePlus size={16} /> Add image</button>
         <button role="menuitem" onclick={addDrawing}><PenLine size={16} /> Add drawing</button>
+        <button role="menuitem" onclick={addVoice}><Mic size={16} /> Voice note</button>
         <button role="menuitem" onclick={insertTemplate}><LayoutTemplate size={16} /> Insert template</button>
+      {/if}
+      {#if !locked && !error}
+        <button role="menuitem" onclick={exportNote}><FileDown size={16} /> Export as PDF</button>
       {/if}
       <button role="menuitem" onclick={async () => { await save(); app.showGraph(true); }}><Network size={16} /> Show in graph</button>
       <button role="menuitem" onclick={toggleEncryption}>
@@ -507,7 +540,7 @@
     }}
   />
   {#if writing}
-    <KeyboardBar view={() => view} onImage={pickImages} onDrawing={addDrawing} />
+    <KeyboardBar view={() => view} onImage={pickImages} onDrawing={addDrawing} onVoice={addVoice} />
   {/if}
 </article>
 

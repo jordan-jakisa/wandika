@@ -10,6 +10,7 @@
     ListChecks,
     ListIndentDecrease,
     ListIndentIncrease,
+    Mic,
     PenLine,
     Redo2,
     Undo2,
@@ -18,7 +19,12 @@
   import * as w from "../editor/writing";
 
   /** The writing toolbar that sits on top of the phone keyboard while a note is being edited. */
-  let { view, onImage, onDrawing }: { view: () => EditorView | null; onImage: () => void; onDrawing?: () => void } = $props();
+  let {
+    view,
+    onImage,
+    onDrawing,
+    onVoice,
+  }: { view: () => EditorView | null; onImage: () => void; onDrawing?: () => void; onVoice?: () => void } = $props();
 
   /** `picker` buttons open a system picker, so the note gives up focus for it. */
   type Button = { label: string; icon: Component<any>; run: (v: EditorView) => boolean; picker?: boolean };
@@ -27,6 +33,7 @@
     { label: "Tag", icon: Hash, run: w.tag },
     { label: "Add image", icon: ImagePlus, run: () => (onImage(), true), picker: true },
     ...(onDrawing ? [{ label: "Add drawing", icon: PenLine, run: () => (onDrawing(), true), picker: true }] : []),
+    ...(onVoice ? [{ label: "Voice note", icon: Mic, run: () => (onVoice(), true), picker: true }] : []),
     { label: "Checklist", icon: ListChecks, run: (v) => w.lines(v, "task") },
     { label: "Heading", icon: Heading, run: w.heading },
     { label: "Bulleted list", icon: List, run: (v) => w.lines(v, "bullet") },
