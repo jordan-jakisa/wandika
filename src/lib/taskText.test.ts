@@ -89,6 +89,11 @@ describe("task filters", () => {
     expect(passesFilters(t("a 🔼", null), on({ high: true }), today)).toBe(false);
   });
 
+  test("a tag keeps tasks with it or a tag under it", () => {
+    expect(passesFilters(t("a #work/admin", null), on({ tag: "work" }), today)).toBe(true);
+    expect(passesFilters(t("a #home", null), on({ tag: "work" }), today)).toBe(false);
+  });
+
   test("a folder keeps its notes and its subfolders' notes; tasks from other apps drop out", () => {
     expect(passesFilters(t("a", null, "Work/Plan.md"), on({ folder: "Work" }), today)).toBe(true);
     expect(passesFilters(t("a", null, "Work/2026/Plan.md"), on({ folder: "Work" }), today)).toBe(true);

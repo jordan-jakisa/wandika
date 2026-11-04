@@ -65,7 +65,7 @@
   }
   let filters = $state<TaskFilters>(savedFilters());
   $effect(() => saveView("taskFilters", { ...filters }));
-  const filtering = $derived(filters.due !== "any" || filters.high || !!filters.folder);
+  const filtering = $derived(filters.due !== "any" || filters.high || !!filters.folder || !!filters.tag);
   const pass = (t: { text: string; due: string | null; path?: string }) => passesFilters(t, filters, clock.today);
   /** Every folder that holds a task, the top of the vault first. */
   const folders = $derived.by(() => {
@@ -75,17 +75,12 @@
   const visible = $derived(tasks.filter((t) => (showDone || !t.done) && matchesTask(t, query) && pass(t)));
   /** Pinned tasks sit together at the top, whatever note they live in. */
   const pinned = $derived(visible.filter((t) => parseTask(t.text).pinned).sort((a, b) => taskOrder(a.text, b.text)));
-  /** The tags on open tasks, most used first: one tap filters by them. */
+  /** The tags on open tasks, most used first, for the Tag picker. */
   const tags = $derived.by(() => {
     const count = new Map<string, number>();
     for (const t of tasks) if (!t.done) for (const tag of tagsOf(t.text)) count.set(tag, (count.get(tag) ?? 0) + 1);
-    return [...count.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 12).map(([tag]) => tag);
+    return [...count.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([tag]) => tag);
   });
-  const words = $derived(query.trim().toLowerCase().split(/\s+/).filter(Boolean));
-  function toggleTag(tag: string) {
-    const word = `#${tag}`;
-    query = words.includes(word) ? words.filter((w) => w !== word).join(" ") : [...words, word].join(" ");
-  }
   const byNote = $derived.by(() => {
     const groups = new Map<string, VaultTask[]>();
     for (const t of visible) {
@@ -167,22 +162,28 @@
       <label class="search">
         <Search size={16} aria-hidden="true" />
         <span class="sr-only">Search tasks</span>
-        <input type="search" class="field" bind:value={query} placeholder="Search tasks, or #tag" />
+        <input type="search" class="field" bind:value={query} placeholder="Search tasks" />
       </label>
-      <div class="tags" role="group" aria-label="Filters">
-        {#each DUE as d (d.value)}
-          {@const on = filters.due === d.value}
-          <button class="chip" class:on aria-pressed={on} onclick={() => (filters.due = on ? "any" : d.value)}>
-            {#if on}<Check size={16} />{/if}
-            {d.label}
-          </button>
-        {/each}
-        <button class="chip" class:on={filters.high} aria-pressed={filters.high} onclick={() => (filters.high = !filters.high)}>
-          {#if filters.high}<Check size={16} />{/if}
-          High priority
-        </button>
+      <!-- One row of pickers: each opens the system's own list, and shows what it's set to. -->
+      <div class="filters" role="group" aria-label="Filters">
+        <label class="chip pick" class:on={filters.due !== "any"}>
+          <span class="sr-only">Due</span>
+          <select bind:value={filters.due}>
+            <option value="any">Any date</option>
+            {#each DUE as d (d.value)}<option value={d.value}>{d.label}</option>{/each}
+          </select>
+          <ChevronDown size={14} aria-hidden="true" />
+        </label>
+        <label class="chip pick" class:on={filters.high}>
+          <span class="sr-only">Priority</span>
+          <select value={filters.high ? "high" : "any"} onchange={(e) => (filters.high = e.currentTarget.value === "high")}>
+            <option value="any">Any priority</option>
+            <option value="high">High priority</option>
+          </select>
+          <ChevronDown size={14} aria-hidden="true" />
+        </label>
         {#if folders.length > 1 || filters.folder}
-          <label class="chip folder" class:on={!!filters.folder}>
+          <label class="chip pick" class:on={!!filters.folder}>
             <span class="sr-only">Folder</span>
             <select bind:value={filters.folder}>
               <option value="">All folders</option>
@@ -193,15 +194,22 @@
             <ChevronDown size={14} aria-hidden="true" />
           </label>
         {/if}
+        {#if tags.length || filters.tag}
+          <label class="chip pick" class:on={!!filters.tag}>
+            <span class="sr-only">Tag</span>
+            <select bind:value={filters.tag}>
+              <option value="">Any tag</option>
+              {#each filters.tag && !tags.includes(filters.tag) ? [filters.tag, ...tags] : tags as t (t)}
+                <option value={t}>#{t}</option>
+              {/each}
+            </select>
+            <ChevronDown size={14} aria-hidden="true" />
+          </label>
+        {/if}
+        {#if filtering}
+          <button class="link-btn clear" onclick={() => (filters = { ...NO_FILTERS })}>Clear filters</button>
+        {/if}
       </div>
-      {#if tags.length}
-        <div class="tags" role="group" aria-label="Tags">
-          {#each tags as tag (tag)}
-            {@const on = words.includes(`#${tag}`)}
-            <button class="chip" class:on aria-pressed={on} onclick={() => toggleTag(tag)}>#{tag}</button>
-          {/each}
-        </div>
-      {/if}
     </div>
   {/if}
 
@@ -213,7 +221,6 @@
         No tasks match these filters.
       {/if}
       {#if query.trim()}<button class="link-btn" onclick={() => (query = "")}>Clear search</button>{/if}
-      {#if filtering}<button class="link-btn" onclick={() => (filters = { ...NO_FILTERS })}>Clear filters</button>{/if}
     </p>
   {/if}
 
@@ -339,16 +346,17 @@
   .search input {
     padding-left: 38px;
   }
-  .tags {
+  /* Each filter is a chip around the system picker, so phones show their own wheel or list. */
+  .filters {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: var(--space-2);
   }
-  /* The folder filter is a chip around the system picker, so phones show their own wheel or list. */
-  .folder {
+  .pick {
     padding: 0;
   }
-  .folder select {
+  .pick select {
     appearance: none;
     min-height: 30px;
     border: 0;
@@ -362,12 +370,12 @@
     color: inherit;
     cursor: pointer;
   }
-  .folder :global(svg) {
+  .pick :global(svg) {
     position: absolute;
     right: 10px;
     pointer-events: none;
   }
-  .folder:focus-within {
+  .pick:focus-within {
     outline: 2px solid var(--papyrus);
     outline-offset: 2px;
   }

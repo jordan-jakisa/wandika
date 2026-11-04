@@ -297,22 +297,20 @@ describe("search, tags and pins", () => {
     expect(screen.getAllByRole("checkbox")).toHaveLength(1);
   });
 
-  test("tag chips show the tags in use, most used first, and filter by them", async () => {
+  test("the Tag picker lists the tags in use, most used first, and filters by one", async () => {
+    localStorage.clear();
     vi.mocked(api.tasksVault).mockResolvedValue(tagged());
     const user = userEvent.setup();
     render(TasksView);
     await screen.findByText("4 open tasks in your notes.");
-    const chips = within(screen.getByRole("group", { name: "Tags" })).getAllByRole("button");
-    expect(chips.map((c) => c.textContent)).toEqual(["#setup", "#home", "#testing"]);
-    await user.click(chips[0]);
-    expect(chips[0]).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("searchbox", { name: "Search tasks" })).toHaveValue("#setup");
+    const picker = screen.getByRole("combobox", { name: "Tag" });
+    expect(within(picker).getAllByRole("option").map((o) => o.textContent)).toEqual(["Any tag", "#setup", "#home", "#testing"]);
+    await user.selectOptions(picker, "setup");
     expect(screen.getAllByRole("checkbox").map((c) => c.getAttribute("aria-label"))).toEqual([
       "Set up OAuth apps #setup",
       "Write your first note #setup",
     ]);
-    await user.click(chips[0]);
-    expect(screen.getByRole("searchbox", { name: "Search tasks" })).toHaveValue("");
+    await user.click(screen.getByRole("button", { name: "Clear filters" }));
     expect(screen.getAllByRole("checkbox")).toHaveLength(4);
   });
 
@@ -391,20 +389,19 @@ describe("filters", () => {
     vi.mocked(api.tasksVault).mockResolvedValue(dated());
   });
 
-  test("a due filter shows only those tasks; tapping it again shows them all", async () => {
+  test("the Due picker shows only those tasks; Any date shows them all", async () => {
     const user = userEvent.setup();
     render(TasksView);
     await screen.findByText("4 open tasks in your notes.");
-    const filters = within(screen.getByRole("group", { name: "Filters" }));
-    await user.click(filters.getByRole("button", { name: "Overdue" }));
+    const due = screen.getByRole("combobox", { name: "Due" });
+    await user.selectOptions(due, "overdue");
     expect(names()).toEqual(["Late report"]);
     expect(screen.getByText("1 of 4 open tasks in your notes.")).toBeInTheDocument();
-    await user.click(filters.getByRole("button", { name: "This week" }));
-    expect(filters.getByRole("button", { name: "Overdue" })).toHaveAttribute("aria-pressed", "false");
+    await user.selectOptions(due, "week");
     expect(names()).toEqual(["Call Ana", "Paint the door"]);
-    await user.click(filters.getByRole("button", { name: "No date" }));
+    await user.selectOptions(due, "none");
     expect(names()).toEqual(["Read a book"]);
-    await user.click(filters.getByRole("button", { name: "No date" }));
+    await user.selectOptions(due, "any");
     expect(names()).toHaveLength(4);
   });
 
@@ -414,7 +411,7 @@ describe("filters", () => {
     await screen.findByText("4 open tasks in your notes.");
     await user.selectOptions(screen.getByRole("combobox", { name: "Folder" }), "Work");
     expect(names()).toEqual(["Late report", "Call Ana"]);
-    await user.click(screen.getByRole("button", { name: "High priority" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Priority" }), "high");
     expect(names()).toEqual(["Call Ana"]);
   });
 
@@ -422,13 +419,13 @@ describe("filters", () => {
     const user = userEvent.setup();
     const first = render(TasksView);
     await screen.findByText("4 open tasks in your notes.");
-    await user.click(screen.getByRole("button", { name: "Today" }));
-    await user.click(screen.getByRole("button", { name: "High priority" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Due" }), "today");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Priority" }), "high");
     await user.selectOptions(screen.getByRole("combobox", { name: "Folder" }), "Vault");
     first.unmount();
     render(TasksView);
     expect(await screen.findByText("No tasks match these filters.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Today" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("combobox", { name: "Due" })).toHaveValue("today");
     await user.click(screen.getByRole("button", { name: "Clear filters" }));
     expect(names()).toHaveLength(4);
   });
@@ -438,9 +435,9 @@ describe("filters", () => {
     const user = userEvent.setup();
     render(TasksView);
     expect(await screen.findByText("Renew domain")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Overdue" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Due" }), "overdue");
     expect(screen.queryByText("Renew domain")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Today" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Due" }), "today");
     expect(screen.getByText("Renew domain")).toBeInTheDocument();
     await user.selectOptions(screen.getByRole("combobox", { name: "Folder" }), "Work");
     expect(screen.queryByText("Renew domain")).not.toBeInTheDocument();

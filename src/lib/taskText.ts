@@ -117,9 +117,11 @@ export interface TaskFilters {
   high: boolean;
   /** A folder, "Vault" for notes at the vault's top, or "" for every folder. */
   folder: string;
+  /** A tag without its #, or "" for any; #work also keeps #work/admin. */
+  tag: string;
 }
 
-export const NO_FILTERS: TaskFilters = { due: "any", high: false, folder: "" };
+export const NO_FILTERS: TaskFilters = { due: "any", high: false, folder: "", tag: "" };
 
 /** The folder a note sits in, "Vault" for the top of the vault. */
 export const folderOf = (path: string) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "Vault");
@@ -152,6 +154,10 @@ export function passesFilters(task: { text: string; due: string | null; path?: s
   if (f.high) {
     const p = parseTask(task.text).priority;
     if (p !== "high" && p !== "highest") return false;
+  }
+  if (f.tag) {
+    const t = f.tag.toLowerCase();
+    if (!tagsOf(task.text).some((x) => x === t || x.startsWith(`${t}/`))) return false;
   }
   if (f.folder) {
     if (task.path === undefined) return false;
