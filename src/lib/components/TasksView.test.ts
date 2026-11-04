@@ -446,3 +446,22 @@ describe("filters", () => {
     expect(screen.queryByText("Renew domain")).not.toBeInTheDocument();
   });
 });
+
+test("notes with something due come first, then the notes changed most recently", async () => {
+  clock.today = "2026-11-04";
+  localStorage.clear();
+  vi.mocked(api.tasksVault).mockResolvedValue([
+    task("Archive/Old.md", 1, "Old idea"),
+    task("Daily/2026-11-04.md", 3, "Enable account deletion"),
+    task("Work/Late.md", 2, "Send the report 📅 2026-11-01", { due: "2026-11-01" }),
+  ]);
+  app.titles = [
+    { path: "Archive/Old.md", title: "Old", modified: 1 },
+    { path: "Daily/2026-11-04.md", title: "2026-11-04", modified: 3 },
+    { path: "Work/Late.md", title: "Late", modified: 2 },
+  ] as typeof app.titles;
+  render(TasksView);
+  await screen.findByText("3 open tasks in your notes.");
+  const heads = [...document.querySelectorAll(".group h3")].map((h) => h.textContent?.trim());
+  expect(heads).toEqual(["Late", "2026-11-04", "Old"]);
+});

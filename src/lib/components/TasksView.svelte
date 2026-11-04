@@ -95,7 +95,16 @@
     }
     // Inside a note, tasks keep the note's order.
     for (const items of groups.values()) items.sort((a, b) => a.line - b.line);
-    return [...groups.entries()];
+    // Notes with something due by today come first, soonest first; then the notes changed most
+    // recently, so tasks just written (in today's note, say) are at the top, not pages down.
+    const changed = new Map(app.titles.map((n) => [n.path, n.modified]));
+    const today = clock.today;
+    const dueBy = (items: VaultTask[]) =>
+      items.reduce<string | null>((min, t) => (!t.done && t.due && t.due <= today && (!min || t.due < min) ? t.due : min), null);
+    return [...groups.entries()]
+      .map(([path, items]) => ({ path, items, due: dueBy(items), at: changed.get(path) ?? 0 }))
+      .sort((a, b) => (a.due && b.due ? a.due.localeCompare(b.due) : a.due ? -1 : b.due ? 1 : 0) || b.at - a.at)
+      .map((g) => [g.path, g.items] as [string, VaultTask[]]);
   });
   const byList = $derived.by(() => {
     const groups = new Map<string, RemoteTask[]>();
