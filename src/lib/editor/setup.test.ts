@@ -101,7 +101,7 @@ test("the editor asks for spellcheck, autocorrect and sentence capitals", () => 
 
 test("an empty note shows how to start", () => {
   const { view } = setup("‸");
-  assert.equal(view.dom.querySelector(".cm-placeholder")!.textContent, "Start writing. Type [[ to link a note.");
+  assert.equal(view.dom.querySelector(".cm-placeholder")!.textContent, "Start writing. Type / for commands, or [[ to link a note.");
 });
 
 test("several cursors are allowed", () => {

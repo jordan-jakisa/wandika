@@ -266,6 +266,7 @@
           onChange,
           getPath: () => loadedPath ?? path,
           onFiles: addFiles,
+          slash: { image: pickImages, drawing: addDrawing, voice: addVoice, template: () => void insertTemplate() },
         }),
         // Screen readers name the field, as they do the title above it.
         EditorView.contentAttributes.of({ "aria-label": "Note text" }),

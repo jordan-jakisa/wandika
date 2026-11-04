@@ -1,6 +1,7 @@
 import { autocompletion, type Completion, type CompletionContext } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { fold } from "../fold";
+import { slashCommands, type SlashActions } from "./slash";
 import { smartListKeymap } from "./smartLists";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
@@ -96,10 +97,12 @@ const theme = EditorView.theme({
   ".cm-hr-line": { display: "inline-block", width: "100%", borderTop: "1px solid var(--rule)", verticalAlign: "middle" },
   ".cm-placeholder": { color: "var(--graphite)" },
   ".cm-tooltip": { background: "var(--sheet)", border: "1px solid var(--rule)", borderRadius: "var(--radius)" },
-  ".cm-tooltip-autocomplete > ul": { fontFamily: "var(--font-ui)", fontSize: "var(--ui-size)", maxHeight: "16em" },
+  ".cm-tooltip.cm-tooltip-autocomplete > ul": { fontFamily: "var(--font-ui)", fontSize: "var(--ui-size)", maxHeight: "16em" },
   ".cm-tooltip-autocomplete > ul > li": { padding: "6px 10px !important" },
   ".cm-tooltip-autocomplete > ul > li[aria-selected]": { background: "var(--papyrus)", color: "var(--on-papyrus)" },
   ".cm-completionDetail": { opacity: "0.7", fontStyle: "normal", marginLeft: "0.6em" },
+  // Slash command groups ("Text", "Insert"): a quiet label, not a heading.
+  ".cm-tooltip-autocomplete completion-section": { display: "list-item", padding: "6px 10px 2px", color: "var(--graphite)", fontSize: "var(--small)", borderBottom: "0" },
   ".cm-panels": { background: "var(--sheet)", color: "var(--ink)", borderColor: "var(--rule)" },
   ".cm-searchMatch": { background: "color-mix(in srgb, var(--amber) 30%, transparent)" },
 });
@@ -145,6 +148,8 @@ export function extensions(opts: {
   onChange: (doc: string) => void;
   getPath: () => string;
   onFiles: (files: File[], view: EditorView, pos: number) => void;
+  /** What the slash commands for a picture, a drawing, a voice note and a template do. */
+  slash?: SlashActions;
 }): Extension[] {
   return [
     history(),
@@ -155,11 +160,11 @@ export function extensions(opts: {
     syntaxHighlighting(highlight),
     search({ top: true }),
     highlightSelectionMatches(),
-    autocompletion({ override: [wikilinks(opts.getTitles)], icons: false }),
+    autocompletion({ override: [wikilinks(opts.getTitles), slashCommands(opts.slash ?? {})], icons: false }),
     formatting,
     smartListKeymap,
     keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
-    placeholder("Start writing. Type [[ to link a note."),
+    placeholder("Start writing. Type / for commands, or [[ to link a note."),
     embeds(opts.getPath, opts.onOpenLink),
     fileDrops(opts.onFiles),
     livePreview(opts.onOpenLink, opts.onTag),
