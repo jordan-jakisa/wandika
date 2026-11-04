@@ -107,6 +107,8 @@ class AppState {
   snippets = $state<Snippet[]>([]);
   /** Counts for the open note, shown in the status bar. `cards` is set for boards. */
   noteStats = $state({ words: 0, chars: 0, cards: null as number | null, backlinks: 0, encrypted: false });
+  /** Vim's mode in the open note ("normal", "insert", "visual line"…), or null when Vim keys are off. */
+  vimMode = $state<string | null>(null);
   #todayAt = 0;
   #todayLoading: Promise<void> | null = null;
   #todayFull = false;

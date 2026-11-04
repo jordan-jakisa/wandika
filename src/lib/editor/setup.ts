@@ -105,6 +105,23 @@ const theme = EditorView.theme({
   // Slash command groups ("Text", "Insert"): a quiet label, not a heading.
   ".cm-tooltip-autocomplete completion-section": { display: "list-item", padding: "6px 10px 2px", color: "var(--graphite)", fontSize: "var(--small)", borderBottom: "0" },
   ".cm-panels": { background: "var(--sheet)", color: "var(--ink)", borderColor: "var(--rule)" },
+  // The editor is as tall as its note, so a panel stuck to its bottom would sit mid-window on a
+  // short note. Vim's : command line floats just above the window's status bar instead.
+  ".cm-panels.cm-panels-bottom": {
+    position: "fixed",
+    // The middle of the note's column: the workspace sets --sidebar and --today to their widths.
+    left: "calc(var(--sidebar, 0px) + (100vw - var(--sidebar, 0px) - var(--today, 0px)) / 2)",
+    bottom: "calc(26px + var(--space-3) + var(--safe-bottom))",
+    transform: "translateX(-50%)",
+    width: "min(520px, calc(100vw - 32px))",
+    border: "1px solid var(--rule)",
+    borderRadius: "var(--radius)",
+    boxShadow: "var(--shadow-pop)",
+    zIndex: "30",
+    overflow: "hidden",
+  },
+  ".cm-vim-panel": { padding: "6px 10px", fontFamily: "var(--font-code)", fontSize: "var(--ui-size)" },
+  ".cm-vim-panel input": { border: "0", outline: "0", background: "transparent", color: "inherit", font: "inherit" },
   ".cm-searchMatch": { background: "color-mix(in srgb, var(--amber) 30%, transparent)" },
 });
 

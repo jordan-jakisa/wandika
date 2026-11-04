@@ -19,6 +19,7 @@
   </div>
   {#if stats}
     <div class="right">
+      {#if app.vimMode}<span class="item vim" aria-label={`Vim: ${app.vimMode} mode`}>{app.vimMode.toUpperCase()}</span>{/if}
       {#if stats.encrypted}<span class="item"><Lock size={12} /> Encrypted</span>{/if}
       {#if stats.backlinks}<span class="item"><Link2 size={12} /> Linked from {n(stats.backlinks)}</span>{/if}
       {#if stats.cards !== null}
@@ -53,6 +54,11 @@
     align-items: center;
     gap: 16px;
     min-width: 0;
+  }
+  /* Vim's mode, as a Vim user looks for it: short, in capitals. */
+  .vim {
+    font-family: var(--font-code);
+    color: var(--ink);
   }
   .status :global(.sync) {
     font-size: var(--text-xs);
