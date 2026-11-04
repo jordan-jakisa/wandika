@@ -211,7 +211,7 @@ describe("on a desktop", () => {
 
   test("without room, Today is a view in the sidebar instead of a column", async () => {
     const user = userEvent.setup();
-    setWidth(1000);
+    setWidth(940);
     renderWorkspace();
     expect(screen.queryByRole("complementary", { name: "Today" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Hide Today" })).not.toBeInTheDocument();
@@ -224,7 +224,7 @@ describe("on a desktop", () => {
     setWidth(1600);
     renderWorkspace();
     expect(screen.getByRole("complementary", { name: "Today" })).toBeInTheDocument();
-    setWidth(1000);
+    setWidth(940);
     await waitFor(() => expect(screen.queryByRole("complementary", { name: "Today" })).not.toBeInTheDocument());
     setWidth(1600);
     await waitFor(() => expect(screen.getByRole("complementary", { name: "Today" })).toBeInTheDocument());

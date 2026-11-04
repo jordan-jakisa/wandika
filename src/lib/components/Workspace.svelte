@@ -82,14 +82,16 @@
     else save();
   }
   // Column widths. The note always keeps MAIN_MIN. Today, when it's on and the view has it (a
-  // board and the whole-vault graph take the full width), fits beside the sidebar at its smallest;
-  // each column then takes what it can of the width you gave it, and the sidebar the rest. So a
-  // drag or a narrower window shrinks columns smoothly; Today only leaves when even its smallest
-  // size can't fit, never because the sidebar is a few pixels wider.
+  // board and the whole-vault graph take the full width), keeps the width you gave it, and the
+  // sidebar takes what's left up to its own. As the window narrows the sidebar gives way first;
+  // Today becomes a view in the sidebar only when it can't fit beside the smallest sidebar.
+  // Widening the sidebar stops where Today begins, so a drag never makes the columns jump.
   const viewHasToday = $derived(!boardOpen && !(app.tab === "graph" && !app.current));
   const todayRoom = $derived(width - MAIN_MIN - (cols.sidebarOpen ? SIDEBAR.min : 0));
-  const roomForToday = $derived(viewHasToday && todayRoom >= TODAY.min);
-  const todayW = $derived(app.showToday && roomForToday ? Math.max(TODAY.min, Math.min(cols.today, TODAY.max, todayRoom)) : 0);
+  /** Today's own width, as you last left it. */
+  const todayPick = $derived(Math.max(TODAY.min, Math.min(cols.today, TODAY.max)));
+  const roomForToday = $derived(viewHasToday && todayRoom >= todayPick);
+  const todayW = $derived(app.showToday && roomForToday ? todayPick : 0);
   const sidebarMax = $derived(Math.max(SIDEBAR.min, Math.min(SIDEBAR.max, width - MAIN_MIN - todayW)));
   const sidebarW = $derived(cols.sidebarOpen ? Math.max(SIDEBAR.min, Math.min(cols.sidebar, sidebarMax)) : 0);
   const toggleSidebar = () => setCols({ sidebarOpen: !cols.sidebarOpen });

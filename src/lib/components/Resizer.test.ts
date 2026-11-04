@@ -5,6 +5,9 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, test, vi } from "vitest";
 import Resizer from "./Resizer.svelte";
 
+/** Moves land once per screen frame. */
+const frame = () => new Promise((r) => requestAnimationFrame(() => r(null)));
+
 function setup(over: Partial<{ edge: "left" | "right"; value: number }> = {}) {
   const onchange = vi.fn();
   const props = { edge: "right" as const, value: 260, min: 200, max: 400, initial: 260, label: "Resize the sidebar", onchange, ...over };
@@ -86,8 +89,10 @@ describe("pointer", () => {
     const { handle, onchange } = setup();
     await fireEvent.pointerDown(handle, { pointerId: 1, clientX: 100 });
     await fireEvent.pointerMove(handle, { pointerId: 1, clientX: 140 });
+    await frame();
     expect(onchange).toHaveBeenLastCalledWith(300);
     await fireEvent.pointerMove(handle, { pointerId: 1, clientX: 70 });
+    await frame();
     expect(onchange).toHaveBeenLastCalledWith(230);
   });
 
@@ -95,6 +100,7 @@ describe("pointer", () => {
     const { handle, onchange } = setup({ edge: "left" });
     await fireEvent.pointerDown(handle, { pointerId: 1, clientX: 500 });
     await fireEvent.pointerMove(handle, { pointerId: 1, clientX: 450 });
+    await frame();
     expect(onchange).toHaveBeenLastCalledWith(310);
   });
 
@@ -102,8 +108,10 @@ describe("pointer", () => {
     const { handle, onchange } = setup();
     await fireEvent.pointerDown(handle, { pointerId: 1, clientX: 100 });
     await fireEvent.pointerMove(handle, { pointerId: 1, clientX: 900 });
+    await frame();
     expect(onchange).toHaveBeenLastCalledWith(400);
     await fireEvent.pointerMove(handle, { pointerId: 1, clientX: -900 });
+    await frame();
     expect(onchange).toHaveBeenLastCalledWith(200);
   });
 
@@ -117,10 +125,12 @@ describe("pointer", () => {
   test("moving without pressing, or after letting go, changes nothing", async () => {
     const { handle, onchange } = setup();
     await fireEvent.pointerMove(handle, { pointerId: 1, clientX: 140 });
+    await frame();
     expect(onchange).not.toHaveBeenCalled();
     await fireEvent.pointerDown(handle, { pointerId: 1, clientX: 100 });
     await fireEvent.pointerUp(handle, { pointerId: 1, clientX: 100 });
     await fireEvent.pointerMove(handle, { pointerId: 1, clientX: 160 });
+    await frame();
     expect(onchange).not.toHaveBeenCalled();
   });
 
@@ -129,6 +139,7 @@ describe("pointer", () => {
     await fireEvent.pointerDown(handle, { pointerId: 1, clientX: 100 });
     await fireEvent.pointerCancel(handle, { pointerId: 1 });
     await fireEvent.pointerMove(handle, { pointerId: 1, clientX: 160 });
+    await frame();
     expect(onchange).not.toHaveBeenCalled();
   });
 
