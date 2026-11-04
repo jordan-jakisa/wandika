@@ -2,7 +2,7 @@
   import { touch } from "../tips";
   import { readView, saveView } from "../viewPrefs";
   import { untrack } from "svelte";
-  import { Check, ChevronDown, Search } from "@lucide/svelte";
+  import { Check, ChevronDown, Plus, Search } from "@lucide/svelte";
   import { api } from "../api";
   import { app } from "../app.svelte";
   import { focus } from "../focus.svelte";
@@ -131,6 +131,7 @@
 <section class="tasks" aria-labelledby="tasks-title">
   <header>
     <h2 id="tasks-title">Tasks</h2>
+    <button class="btn new" onclick={() => app.newTask()}><Plus size={16} /> New task</button>
     <button class="chip" aria-pressed={showDone} class:on={showDone} onclick={() => (showDone = !showDone)}>
       {#if showDone}<Check size={16} />{/if} Show done
     </button>
@@ -285,6 +286,10 @@
     align-items: baseline;
     justify-content: space-between;
     gap: 12px;
+  }
+  /* The title, then New task beside Show done at the end. */
+  .new {
+    margin-left: auto;
   }
   h2 {
     margin: 0;

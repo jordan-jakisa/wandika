@@ -680,6 +680,11 @@ class AppState {
     void openUrl(url);
   }
 
+  /** Opens the task sheet empty: Save adds the task to today's daily note, with its tag. */
+  newTask() {
+    this.editingTask = { path: "", title: "", line: -1, text: "", done: false, due: null, details: "" };
+  }
+
   /** Adds a task to today's note and says where it went. */
   async addTask(text: string) {
     try {

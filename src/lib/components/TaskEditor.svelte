@@ -6,7 +6,8 @@
   import { focus } from "../focus.svelte";
   import { isIOS } from "../platform";
   import { sheetOpened } from "../backstack";
-  import { PRIORITIES, composeTask, parseTask, type Priority } from "../taskText";
+  import { PRIORITIES, composeTask, parseTask, tagsOf, type Priority } from "../taskText";
+  import { readView, saveView } from "../viewPrefs";
   import { closeSheet } from "../motion";
   import type { VaultTask } from "../types";
 
@@ -25,6 +26,11 @@
 
   /** The task on screen; it stays while the sheet leaves, after app.editingTask is cleared. */
   let task = $state<VaultTask | null>(null);
+  /** A task not written yet (New task): Save adds it to today's daily note, tagged. */
+  const isNew = $derived(task?.path === "");
+  /** The tag a new task gets, so Tasks can filter by it; the last one used is remembered. */
+  let tag = $state(readView("newTask", { tag: "inbox" }).tag);
+  let nameEl = $state<HTMLInputElement>();
   /** On iPhone a form sheet from the bottom, as iOS edits an item; elsewhere a centred dialog. */
   const ios = isIOS;
   let start = { name: "", due: "", priority: "" as Priority | "", pinned: false, details: "" };
@@ -47,6 +53,10 @@
       error = null;
       dialogEl.showModal();
       release = sheetOpened(() => void dismiss());
+      if (t.path === "") {
+        tag = readView("newTask", { tag: "inbox" }).tag;
+        queueMicrotask(() => nameEl?.focus());
+      }
     } else if (!t && dialogEl.open && !dialogEl.classList.contains("closing")) {
       closeSheet(dialogEl, () => (task = null));
       release();
@@ -62,6 +72,7 @@
       error = "Give the task a name.";
       return;
     }
+    if (t.path === "") return add();
     const text = composeTask(t.text, { name, due: due || null, priority: priority || null, pinned });
     saving = true;
     try {
@@ -78,6 +89,25 @@
       app.edited();
       app.changed = { paths: [t.path], at: Date.now() };
       app.editingTask = null;
+    } catch (err) {
+      error = (err as Error).message;
+    } finally {
+      saving = false;
+    }
+  }
+
+  async function add() {
+    const word = tag.trim().replace(/^#+/, "").replace(/\s+/g, "-");
+    const named = word && !tagsOf(name).includes(word.toLowerCase()) ? `${name.trim()} #${word}` : name.trim();
+    const text = composeTask("", { name: named, due: due || null, priority: priority || null, pinned });
+    saving = true;
+    try {
+      const path = await api.taskAdd(text);
+      saveView("newTask", { tag: word });
+      app.edited();
+      app.changed = { paths: [path], at: Date.now() };
+      app.editingTask = null;
+      app.say("Added to today's note.", { label: "Open", run: () => app.open(path) });
     } catch (err) {
       error = (err as Error).message;
     } finally {
@@ -137,8 +167,17 @@
 {#snippet nameField()}
   <label class="block">
     <span>Task</span>
-    <input class="field" bind:value={name} placeholder="What needs doing? Add #tags" />
+    <input class="field" bind:this={nameEl} bind:value={name} placeholder="What needs doing? Add #tags" />
   </label>
+{/snippet}
+{#snippet tagField()}
+  <div class="block">
+    <label class="block">
+      <span>Tag</span>
+      <input class="field" bind:value={tag} placeholder="inbox" aria-describedby="tag-hint" autocapitalize="none" autocomplete="off" spellcheck="false" />
+    </label>
+    <span class="hint" id="tag-hint">Filter by it in Tasks. The task goes into today's daily note.</span>
+  </div>
 {/snippet}
 {#snippet dueField()}
   <label class="block">
@@ -198,20 +237,23 @@
       <header class="bar" onpointerdown={sheetDown} onpointermove={sheetMove} onpointerup={sheetUp} onpointercancel={sheetUp}>
         <span class="grabber" aria-hidden="true"></span>
         <button type="button" class="bar-btn" onclick={dismiss}>Cancel</button>
-        <h2 id="task-editor-h">Edit task</h2>
-        <button class="bar-btn save" disabled={saving}>Save</button>
+        <h2 id="task-editor-h">{isNew ? "New task" : "Edit task"}</h2>
+        <button class="bar-btn save" disabled={saving}>{isNew ? "Add" : "Save"}</button>
       </header>
       <div class="groups">
-        <div class="group">{@render nameField()}</div>
+        <div class="group">
+          {@render nameField()}
+          {#if isNew}{@render tagField()}{/if}
+        </div>
         <div class="group">
           {@render dueField()}
           {@render quickDates()}
           {@render priorityField()}
           {@render pinField()}
         </div>
-        <div class="group">{@render notesField()}</div>
+        {#if !isNew}<div class="group">{@render notesField()}</div>{/if}
         {#if error}<p class="error" role="alert">{error}</p>{/if}
-        {#if !task.done}
+        {#if !task.done && !isNew}
           <div class="group">
             <button type="button" class="row-btn" onclick={startFocus}><Timer size={18} /> Focus</button>
           </div>
@@ -220,8 +262,9 @@
     </form>
   {:else if task}
     <form onsubmit={save}>
-      <h2 id="task-editor-h">Edit task</h2>
+      <h2 id="task-editor-h">{isNew ? "New task" : "Edit task"}</h2>
       {@render nameField()}
+      {#if isNew}{@render tagField()}{/if}
       <div class="pair">
         <div class="due">
           {@render dueField()}
@@ -230,15 +273,15 @@
         {@render priorityField()}
       </div>
       {@render pinField()}
-      {@render notesField()}
+      {#if !isNew}{@render notesField()}{/if}
       {#if error}<p class="error" role="alert">{error}</p>{/if}
       <div class="buttons">
-        {#if !task.done}
+        {#if !task.done && !isNew}
           <button type="button" class="btn quiet" onclick={startFocus}><Timer size={16} /> Focus</button>
         {/if}
         <span class="spacer"></span>
         <button type="button" class="btn" onclick={dismiss}>Cancel</button>
-        <button class="btn primary" disabled={saving}>Save</button>
+        <button class="btn primary" disabled={saving}>{isNew ? "Add task" : "Save"}</button>
       </div>
     </form>
   {/if}
@@ -263,6 +306,10 @@
   form {
     display: grid;
     gap: var(--space-4);
+  }
+  .hint {
+    color: var(--graphite);
+    font-size: var(--small);
   }
   h2 {
     margin: 0;

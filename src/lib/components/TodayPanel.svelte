@@ -211,7 +211,10 @@
   <section class="due" aria-labelledby="tasks-h">
     <div class="section-head">
       <h3 id="tasks-h">{hasOverdue ? "Due and overdue" : "Due today"}</h3>
-      <button class="link-btn" onclick={() => app.showTasks()}>All tasks</button>
+      <span class="links">
+        <button class="link-btn" onclick={() => app.newTask()}>New task</button>
+        <button class="link-btn" onclick={() => app.showTasks()}>All tasks</button>
+      </span>
     </div>
     {#if dueTasks.length || remoteDue.length}
       <ul class="tasks">
@@ -325,6 +328,10 @@
   header {
     display: grid;
     gap: 12px;
+  }
+  .links {
+    display: flex;
+    gap: var(--space-4);
   }
   .title-row {
     display: flex;

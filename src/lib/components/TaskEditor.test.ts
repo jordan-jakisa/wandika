@@ -139,3 +139,61 @@ test("a task whose words changed in its note says to open it again", async () =>
   await user.click(screen.getByRole("button", { name: "Save" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("This task changed in its note. Close this and open it again to edit what it says now.");
 });
+
+function openNew() {
+  const user = userEvent.setup();
+  render(Dialog);
+  render(TaskEditor);
+  app.newTask();
+  flushSync();
+  return user;
+}
+
+test("New task opens empty, with the tag field and no notes or Focus", () => {
+  localStorage.clear();
+  openNew();
+  expect(screen.getByRole("dialog", { name: "New task" })).toBeInTheDocument();
+  expect(screen.getByLabelText("Task")).toHaveValue("");
+  expect(screen.getByLabelText("Tag")).toHaveValue("inbox");
+  expect(screen.queryByLabelText("Notes")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Focus" })).not.toBeInTheDocument();
+});
+
+test("Add task puts it in today's note with its tag, due date and priority, and remembers the tag", async () => {
+  localStorage.clear();
+  const add = vi.spyOn(api, "taskAdd").mockResolvedValue("Daily/2026-11-04.md");
+  const user = openNew();
+  await user.type(screen.getByLabelText("Task"), "Call the bank");
+  await user.clear(screen.getByLabelText("Tag"));
+  await user.type(screen.getByLabelText("Tag"), "#errands");
+  await user.selectOptions(screen.getByLabelText("Priority"), "high");
+  await user.click(screen.getByRole("button", { name: "Add task" }));
+  expect(add).toHaveBeenCalledWith("Call the bank #errands ⏫");
+  expect(app.editingTask).toBeNull();
+  expect(app.toast).toBe("Added to today's note.");
+  app.newTask();
+  flushSync();
+  expect(screen.getByLabelText("Tag")).toHaveValue("errands");
+});
+
+test("a tag already in the name isn't added twice; an empty tag adds none", async () => {
+  const add = vi.spyOn(api, "taskAdd").mockResolvedValue("Daily/2026-11-04.md");
+  const user = openNew();
+  await user.type(screen.getByLabelText("Task"), "Pay rent #inbox");
+  await user.click(screen.getByRole("button", { name: "Add task" }));
+  expect(add).toHaveBeenLastCalledWith("Pay rent #inbox");
+  app.newTask();
+  flushSync();
+  await user.type(screen.getByLabelText("Task"), "Stretch");
+  await user.clear(screen.getByLabelText("Tag"));
+  await user.click(screen.getByRole("button", { name: "Add task" }));
+  expect(add).toHaveBeenLastCalledWith("Stretch");
+});
+
+test("a new task without a name says so", async () => {
+  const add = vi.spyOn(api, "taskAdd");
+  const user = openNew();
+  await user.click(screen.getByRole("button", { name: "Add task" }));
+  expect(screen.getByRole("alert")).toHaveTextContent("Give the task a name.");
+  expect(add).not.toHaveBeenCalled();
+});
