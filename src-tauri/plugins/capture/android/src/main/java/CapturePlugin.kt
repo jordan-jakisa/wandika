@@ -14,6 +14,7 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.webkit.WebView
+import androidx.appcompat.app.AppCompatActivity
 import app.tauri.PermissionState
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
@@ -216,7 +217,7 @@ class CapturePlugin(private val activity: Activity) : Plugin(activity) {
         recognizer = null
     }
 
-    override fun onPause() {
+    override fun onPause(activity: AppCompatActivity) {
         // Leaving the app ends the note with what was said so far.
         if (listening) activity.runOnUiThread {
             listening = false
