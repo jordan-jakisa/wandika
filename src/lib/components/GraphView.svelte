@@ -448,7 +448,7 @@
       class="field"
       type="search"
       bind:value={filter}
-      placeholder="Filter notes, Return opens"
+      placeholder="Filter notes"
       aria-label="Filter notes in the graph; Return opens the best match"
       onkeydown={(e) => {
         if (e.key !== "Enter") return;
