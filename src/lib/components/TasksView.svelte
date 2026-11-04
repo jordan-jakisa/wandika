@@ -2,11 +2,23 @@
   import { touch } from "../tips";
   import { readView, saveView } from "../viewPrefs";
   import { untrack } from "svelte";
-  import { Check, Search } from "@lucide/svelte";
+  import { Check, ChevronDown, Search } from "@lucide/svelte";
   import { api } from "../api";
   import { app } from "../app.svelte";
   import { focus } from "../focus.svelte";
-  import { composeTask, matchesTask, parseTask, tagsOf, taskOrder } from "../taskText";
+  import { clock } from "../clock.svelte";
+  import {
+    composeTask,
+    folderOf,
+    matchesTask,
+    NO_FILTERS,
+    parseTask,
+    passesFilters,
+    tagsOf,
+    taskOrder,
+    type Due,
+    type TaskFilters,
+  } from "../taskText";
   import type { RemoteTask, VaultTask } from "../types";
   import TaskRow from "./TaskRow.svelte";
 
@@ -40,7 +52,27 @@
   });
 
   let query = $state("");
-  const visible = $derived(tasks.filter((t) => (showDone || !t.done) && matchesTask(t, query)));
+  const DUE: { value: Due; label: string }[] = [
+    { value: "overdue", label: "Overdue" },
+    { value: "today", label: "Today" },
+    { value: "week", label: "This week" },
+    { value: "none", label: "No date" },
+  ];
+  /** The filters stay as they were left on this device. */
+  function savedFilters(): TaskFilters {
+    const f = readView("taskFilters", NO_FILTERS);
+    return DUE.some((d) => d.value === f.due) ? f : { ...f, due: "any" };
+  }
+  let filters = $state<TaskFilters>(savedFilters());
+  $effect(() => saveView("taskFilters", { ...filters }));
+  const filtering = $derived(filters.due !== "any" || filters.high || !!filters.folder);
+  const pass = (t: { text: string; due: string | null; path?: string }) => passesFilters(t, filters, clock.today);
+  /** Every folder that holds a task, the top of the vault first. */
+  const folders = $derived.by(() => {
+    const all = [...new Set(tasks.map((t) => folderOf(t.path)))].sort((a, b) => a.localeCompare(b));
+    return all.includes("Vault") ? ["Vault", ...all.filter((f) => f !== "Vault")] : all;
+  });
+  const visible = $derived(tasks.filter((t) => (showDone || !t.done) && matchesTask(t, query) && pass(t)));
   /** Pinned tasks sit together at the top, whatever note they live in. */
   const pinned = $derived(visible.filter((t) => parseTask(t.text).pinned).sort((a, b) => taskOrder(a.text, b.text)));
   /** The tags on open tasks, most used first: one tap filters by them. */
@@ -68,7 +100,7 @@
   const byList = $derived.by(() => {
     const groups = new Map<string, RemoteTask[]>();
     for (const t of remote) {
-      if (!matchesTask({ text: t.title, title: t.list }, query)) continue;
+      if (!matchesTask({ text: t.title, title: t.list }, query) || !pass({ text: t.title, due: t.due })) continue;
       const key = `${t.source === "apple" ? "Reminders" : "Google Tasks"}: ${t.list}`;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(t);
@@ -76,6 +108,7 @@
     return [...groups.entries()];
   });
   const open = $derived(tasks.filter((t) => !t.done).length);
+  const openShown = $derived(visible.filter((t) => !t.done).length);
   const shown = $derived(visible.length + byList.reduce((n, [, items]) => n + items.length, 0));
 
   async function refresh(path: string) {
@@ -90,7 +123,6 @@
     await api.taskToggle(t.path, t.line, t.text);
     await refresh(t.path);
   };
-  const where = (path: string) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "Vault");
   /** A big vault has thousands of tasks; notes are listed a page at a time. */
   const PAGE = 40;
   let notesShown = $state(PAGE);
@@ -108,7 +140,9 @@
       ? "Gathering tasks from your notes…"
       : failed && !tasks.length
         ? "Couldn't gather your tasks."
-        : open
+        : open && filtering
+          ? `${openShown} of ${open} open ${open === 1 ? "task" : "tasks"} in your notes.`
+          : open
           ? `${open} open ${open === 1 ? "task" : "tasks"} in your notes.`
           : touch
             ? "No open tasks. In any note, tap Checklist on the writing bar to add one."
@@ -125,6 +159,31 @@
         <span class="sr-only">Search tasks</span>
         <input type="search" class="field" bind:value={query} placeholder="Search tasks, or #tag" />
       </label>
+      <div class="tags" role="group" aria-label="Filters">
+        {#each DUE as d (d.value)}
+          {@const on = filters.due === d.value}
+          <button class="chip" class:on aria-pressed={on} onclick={() => (filters.due = on ? "any" : d.value)}>
+            {#if on}<Check size={16} />{/if}
+            {d.label}
+          </button>
+        {/each}
+        <button class="chip" class:on={filters.high} aria-pressed={filters.high} onclick={() => (filters.high = !filters.high)}>
+          {#if filters.high}<Check size={16} />{/if}
+          High priority
+        </button>
+        {#if folders.length > 1 || filters.folder}
+          <label class="chip folder" class:on={!!filters.folder}>
+            <span class="sr-only">Folder</span>
+            <select bind:value={filters.folder}>
+              <option value="">All folders</option>
+              {#each filters.folder && !folders.includes(filters.folder) ? [filters.folder, ...folders] : folders as f (f)}
+                <option value={f}>{f === "Vault" ? "Top of the vault" : f}</option>
+              {/each}
+            </select>
+            <ChevronDown size={14} aria-hidden="true" />
+          </label>
+        {/if}
+      </div>
       {#if tags.length}
         <div class="tags" role="group" aria-label="Tags">
           {#each tags as tag (tag)}
@@ -136,8 +195,16 @@
     </div>
   {/if}
 
-  {#if query.trim() && !shown}
-    <p class="muted">No tasks match “{query.trim()}”. <button class="link-btn" onclick={() => (query = "")}>Clear search</button></p>
+  {#if (query.trim() || filtering) && !shown && (tasks.length || remote.length)}
+    <p class="muted">
+      {#if query.trim()}
+        No tasks match “{query.trim()}”{filtering ? " with these filters" : ""}.
+      {:else}
+        No tasks match these filters.
+      {/if}
+      {#if query.trim()}<button class="link-btn" onclick={() => (query = "")}>Clear search</button>{/if}
+      {#if filtering}<button class="link-btn" onclick={() => (filters = { ...NO_FILTERS })}>Clear filters</button>{/if}
+    </p>
   {/if}
 
   {#snippet row(t: VaultTask, place: string)}
@@ -173,7 +240,7 @@
       <h3><button onclick={() => app.open(path)}>{items[0].title}</button></h3>
       <ul>
         {#each items as t (t.line)}
-          {@render row(t, where(path))}
+          {@render row(t, folderOf(path))}
         {/each}
       </ul>
     </section>
@@ -263,7 +330,33 @@
     flex-wrap: wrap;
     gap: var(--space-2);
   }
-  /* Filter chip: 32dp, 8dp corners, check mark when on. */
+  /* The folder filter is a chip around the system picker, so phones show their own wheel or list. */
+  .folder {
+    padding: 0;
+  }
+  .folder select {
+    appearance: none;
+    min-height: 30px;
+    border: 0;
+    border-radius: inherit;
+    background: none;
+    padding: 0 28px 0 var(--space-3);
+    max-width: 24ch;
+    text-overflow: ellipsis;
+    font-size: var(--small);
+    font-weight: 500;
+    color: inherit;
+    cursor: pointer;
+  }
+  .folder :global(svg) {
+    position: absolute;
+    right: 10px;
+    pointer-events: none;
+  }
+  .folder:focus-within {
+    outline: 2px solid var(--papyrus);
+    outline-offset: 2px;
+  }
   .group {
     margin-bottom: 20px;
   }

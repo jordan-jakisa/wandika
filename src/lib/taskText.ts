@@ -107,3 +107,56 @@ export function emailTask(subject: string, from: string, url: string | null): st
   if (!url) return who ? `${name} (from ${who})` : name;
   return `${name} [email${who ? ` from ${who}` : ""}](${url})`;
 }
+
+/** When a task is due, for the Tasks filters. "week" is today and the six days after it. */
+export type Due = "any" | "overdue" | "today" | "week" | "none";
+
+export interface TaskFilters {
+  due: Due;
+  /** Only tasks marked high or highest priority. */
+  high: boolean;
+  /** A folder, "Vault" for notes at the vault's top, or "" for every folder. */
+  folder: string;
+}
+
+export const NO_FILTERS: TaskFilters = { due: "any", high: false, folder: "" };
+
+/** The folder a note sits in, "Vault" for the top of the vault. */
+export const folderOf = (path: string) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "Vault");
+
+const addDays = (day: string, n: number) => {
+  const d = new Date(`${day}T12:00:00`);
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+/**
+ * Whether a task passes every filter that is on. A task in Google Tasks or Reminders has no
+ * priority or folder, so it only shows when those filters are off.
+ */
+export function passesFilters(task: { text: string; due: string | null; path?: string }, f: TaskFilters, today: string): boolean {
+  const due = task.due;
+  switch (f.due) {
+    case "overdue":
+      if (!due || due >= today) return false;
+      break;
+    case "today":
+      if (due !== today) return false;
+      break;
+    case "week":
+      if (!due || due < today || due > addDays(today, 6)) return false;
+      break;
+    case "none":
+      if (due) return false;
+  }
+  if (f.high) {
+    const p = parseTask(task.text).priority;
+    if (p !== "high" && p !== "highest") return false;
+  }
+  if (f.folder) {
+    if (task.path === undefined) return false;
+    const folder = folderOf(task.path);
+    if (folder !== f.folder && !folder.startsWith(`${f.folder}/`)) return false;
+  }
+  return true;
+}

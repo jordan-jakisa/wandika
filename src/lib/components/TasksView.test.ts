@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api } from "../api";
 import { app } from "../app.svelte";
+import { clock } from "../clock.svelte";
 import type { RemoteTask, VaultTask } from "../types";
 import TasksView from "./TasksView.svelte";
 
@@ -372,5 +373,76 @@ describe("search, tags and pins", () => {
     await user.click(screen.getByRole("button", { name: "Actions for Write your first note #setup" }));
     await user.click(screen.getByRole("menuitem", { name: "Focus on this" }));
     expect(start).toHaveBeenCalledWith(expect.objectContaining({ text: "Write your first note #setup", task: expect.objectContaining({ line: 8 }) }));
+  });
+});
+
+describe("filters", () => {
+  const dated = (): VaultTask[] => [
+    task("Work/Plan.md", 1, "Late report 📅 2026-11-01", { due: "2026-11-01" }),
+    task("Work/Plan.md", 2, "Call Ana ⏫ 📅 2026-11-04", { due: "2026-11-04" }),
+    task("Home.md", 3, "Paint the door 📅 2026-11-08", { due: "2026-11-08" }),
+    task("Home.md", 4, "Read a book"),
+  ];
+  const names = () => screen.getAllByRole("checkbox").map((c) => c.getAttribute("aria-label"));
+
+  beforeEach(() => {
+    localStorage.clear();
+    clock.today = "2026-11-04";
+    vi.mocked(api.tasksVault).mockResolvedValue(dated());
+  });
+
+  test("a due filter shows only those tasks; tapping it again shows them all", async () => {
+    const user = userEvent.setup();
+    render(TasksView);
+    await screen.findByText("4 open tasks in your notes.");
+    const filters = within(screen.getByRole("group", { name: "Filters" }));
+    await user.click(filters.getByRole("button", { name: "Overdue" }));
+    expect(names()).toEqual(["Late report"]);
+    expect(screen.getByText("1 of 4 open tasks in your notes.")).toBeInTheDocument();
+    await user.click(filters.getByRole("button", { name: "This week" }));
+    expect(filters.getByRole("button", { name: "Overdue" })).toHaveAttribute("aria-pressed", "false");
+    expect(names()).toEqual(["Call Ana", "Paint the door"]);
+    await user.click(filters.getByRole("button", { name: "No date" }));
+    expect(names()).toEqual(["Read a book"]);
+    await user.click(filters.getByRole("button", { name: "No date" }));
+    expect(names()).toHaveLength(4);
+  });
+
+  test("filters stack: high priority in one folder", async () => {
+    const user = userEvent.setup();
+    render(TasksView);
+    await screen.findByText("4 open tasks in your notes.");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Folder" }), "Work");
+    expect(names()).toEqual(["Late report", "Call Ana"]);
+    await user.click(screen.getByRole("button", { name: "High priority" }));
+    expect(names()).toEqual(["Call Ana"]);
+  });
+
+  test("filters are remembered, and nothing matching offers to clear them", async () => {
+    const user = userEvent.setup();
+    const first = render(TasksView);
+    await screen.findByText("4 open tasks in your notes.");
+    await user.click(screen.getByRole("button", { name: "Today" }));
+    await user.click(screen.getByRole("button", { name: "High priority" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Folder" }), "Vault");
+    first.unmount();
+    render(TasksView);
+    expect(await screen.findByText("No tasks match these filters.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Today" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(names()).toHaveLength(4);
+  });
+
+  test("tasks from Google Tasks or Reminders follow the due filters and leave with a folder", async () => {
+    vi.mocked(api.today).mockResolvedValue({ ...todayFixture(), remote_tasks: [remote({ due: "2026-11-04" })] });
+    const user = userEvent.setup();
+    render(TasksView);
+    expect(await screen.findByText("Renew domain")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Overdue" }));
+    expect(screen.queryByText("Renew domain")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Today" }));
+    expect(screen.getByText("Renew domain")).toBeInTheDocument();
+    await user.selectOptions(screen.getByRole("combobox", { name: "Folder" }), "Work");
+    expect(screen.queryByText("Renew domain")).not.toBeInTheDocument();
   });
 });

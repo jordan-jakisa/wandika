@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { test } from "vitest";
-import { composeTask, emailTask, matchesTask, parseTask, tagsOf, taskOrder } from "./taskText";
+import { describe, expect, test } from "vitest";
+import { composeTask, emailTask, matchesTask, NO_FILTERS, parseTask, passesFilters, tagsOf, taskOrder, type TaskFilters } from "./taskText";
 
 test("a task line splits into its name, tags, pin, priority and due date", () => {
   assert.deepEqual(parseTask("Call Amina #home #Work/admin 📌 ⏫ 📅 2026-11-05"), {
@@ -57,4 +57,43 @@ test("an email becomes a task named after its subject with a link back", () => {
   );
   assert.equal(emailTask("  ", "amina@x.com", null), "Email (from amina@x.com)");
   assert.equal(emailTask("Hi", "", "https://x"), "Hi [email](https://x)");
+});
+
+describe("task filters", () => {
+  const today = "2026-11-04";
+  const t = (text: string, due: string | null, path?: string) => ({ text, due, path });
+  const on = (f: Partial<TaskFilters>) => ({ ...NO_FILTERS, ...f });
+
+  test("no filters let every task through", () => {
+    expect(passesFilters(t("a", null), NO_FILTERS, today)).toBe(true);
+  });
+
+  test("due filters split overdue, today, the next seven days and undated", () => {
+    expect(passesFilters(t("a", "2026-11-03"), on({ due: "overdue" }), today)).toBe(true);
+    expect(passesFilters(t("a", today), on({ due: "overdue" }), today)).toBe(false);
+    expect(passesFilters(t("a", today), on({ due: "today" }), today)).toBe(true);
+    expect(passesFilters(t("a", "2026-11-10"), on({ due: "week" }), today)).toBe(true);
+    expect(passesFilters(t("a", "2026-11-11"), on({ due: "week" }), today)).toBe(false);
+    expect(passesFilters(t("a", "2026-11-03"), on({ due: "week" }), today)).toBe(false);
+    expect(passesFilters(t("a", null), on({ due: "none" }), today)).toBe(true);
+    expect(passesFilters(t("a", today), on({ due: "none" }), today)).toBe(false);
+  });
+
+  test("the week crosses a month end", () => {
+    expect(passesFilters(t("a", "2026-12-03"), on({ due: "week" }), "2026-11-28")).toBe(true);
+  });
+
+  test("high priority keeps high and highest", () => {
+    expect(passesFilters(t("a ⏫", null), on({ high: true }), today)).toBe(true);
+    expect(passesFilters(t("a 🔺", null), on({ high: true }), today)).toBe(true);
+    expect(passesFilters(t("a 🔼", null), on({ high: true }), today)).toBe(false);
+  });
+
+  test("a folder keeps its notes and its subfolders' notes; tasks from other apps drop out", () => {
+    expect(passesFilters(t("a", null, "Work/Plan.md"), on({ folder: "Work" }), today)).toBe(true);
+    expect(passesFilters(t("a", null, "Work/2026/Plan.md"), on({ folder: "Work" }), today)).toBe(true);
+    expect(passesFilters(t("a", null, "Workshop/Plan.md"), on({ folder: "Work" }), today)).toBe(false);
+    expect(passesFilters(t("a", null, "Inbox.md"), on({ folder: "Vault" }), today)).toBe(true);
+    expect(passesFilters(t("a", null), on({ folder: "Work" }), today)).toBe(false);
+  });
 });
