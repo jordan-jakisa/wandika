@@ -30,3 +30,14 @@ test("in the note editor, ⌥-click adds a cursor and a plain click doesn't", ()
   assert.equal(adds.some((f) => f(new MouseEvent("mousedown", { altKey: true }))), true);
   assert.equal(adds.some((f) => f(new MouseEvent("mousedown"))), false);
 });
+
+test("line numbers come and go with the setting, beside the note", async () => {
+  const { numbersFor, numbersSlot } = await import("./setup.ts");
+  const view = viewOf("one\ntwo", [numbersSlot.of(numbersFor(false))]);
+  assert.equal(view.dom.querySelector(".cm-lineNumbers"), null);
+  view.dispatch({ effects: numbersSlot.reconfigure(numbersFor(true)) });
+  assert.ok(view.dom.querySelector(".cm-lineNumbers"));
+  assert.ok(view.dom.classList.contains("cm-numbered"));
+  view.dispatch({ effects: numbersSlot.reconfigure(numbersFor(false)) });
+  assert.equal(view.dom.querySelector(".cm-lineNumbers"), null);
+});

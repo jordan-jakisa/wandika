@@ -37,10 +37,12 @@ export interface Prefs {
   width: Width;
   /** Vim keys in the editor (Mac, or a keyboard with a pointer). */
   vim: boolean;
+  /** Line numbers beside the note. */
+  lineNumbers: boolean;
 }
 
 const KEY = "wandika.appearance";
-const DEFAULTS: Prefs = { theme: "system", accent: "papyrus", font: "serif", size: null, width: "normal", vim: false };
+const DEFAULTS: Prefs = { theme: "system", accent: "papyrus", font: "serif", size: null, width: "normal", vim: false, lineNumbers: false };
 /** The note size slider's range in Settings. */
 const SIZES = { min: 14, max: 24 };
 
@@ -61,6 +63,7 @@ function load(): Prefs {
     size: typeof s.size === "number" && s.size > 0 && Number.isFinite(s.size) ? Math.min(SIZES.max, Math.max(SIZES.min, Math.round(s.size))) : null,
     width: one(s.width, Object.keys(WIDTHS) as Width[], DEFAULTS.width),
     vim: s.vim === true,
+    lineNumbers: s.lineNumbers === true,
   };
 }
 
