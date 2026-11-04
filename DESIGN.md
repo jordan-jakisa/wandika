@@ -120,7 +120,9 @@ command with its keys; ⌘1, ⌘2 and ⌘3 (and F6) move between the file list, 
 ⇧F10 opens a row's menu; ⌘Return opens the link under the cursor; a sheet starts with focus inside
 and gives it back to what opened it. Every shortcut can be changed in Settings, Shortcuts (kept
 on the device), and app, note and editing keys all read one table (shortcuts.svelte.ts). Vim keys
-and several cursors (⌥-click, ⌥-drag, ⌥⌘↑/↓) are in the editor; Vim loads only when it's on.
+and several cursors (⌥-click, ⌥-drag, ⌥⌘↑/↓) are in the editor; Vim loads only when it's on,
+and its mode shows in the status bar. Line numbers are a switch in Settings, Editor; they hang in
+the margin so the text stays lined up with the title.
 Slash commands (/) turn a line into a heading or list, or insert a table, code, a callout, a
 diagram, the date, a picture, a drawing, a voice note or a template. A plain address such as
 google.com is a link.

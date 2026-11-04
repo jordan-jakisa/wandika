@@ -112,3 +112,13 @@ describe("the open note's counts", () => {
     expect(screen.queryByText("Encrypted")).not.toBeInTheDocument();
   });
 });
+
+test("with Vim keys on, the status bar shows the mode", async () => {
+  const { app } = await import("../app.svelte");
+  const { render, screen } = await import("@testing-library/svelte");
+  app.current = "A.md";
+  app.vimMode = "visual line";
+  render((await import("./StatusBar.svelte")).default);
+  expect(screen.getByLabelText("Vim: visual line mode")).toHaveTextContent("VISUAL LINE");
+  app.vimMode = null;
+});

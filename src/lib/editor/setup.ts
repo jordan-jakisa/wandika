@@ -8,7 +8,8 @@ import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
 import { EditorState, type Extension } from "@codemirror/state";
-import { crosshairCursor, drawSelection, EditorView, keymap, placeholder, rectangularSelection } from "@codemirror/view";
+import { crosshairCursor, drawSelection, EditorView, gutters, keymap, lineNumbers, placeholder, rectangularSelection } from "@codemirror/view";
+import { Compartment } from "@codemirror/state";
 import { tags as t } from "@lezer/highlight";
 import type { NoteMeta } from "../types";
 import { diagrams, diagramTheme } from "./diagrams";
@@ -105,6 +106,34 @@ const theme = EditorView.theme({
   // Slash command groups ("Text", "Insert"): a quiet label, not a heading.
   ".cm-tooltip-autocomplete completion-section": { display: "list-item", padding: "6px 10px 2px", color: "var(--graphite)", fontSize: "var(--small)", borderBottom: "0" },
   ".cm-panels": { background: "var(--sheet)", color: "var(--ink)", borderColor: "var(--rule)" },
+  // Line numbers: quiet, in the code font, aligned to the first line of each paragraph.
+  // They hang in the margin, so the text stays lined up with the title.
+  "&.cm-numbered": { marginLeft: "-3.2em" },
+  ".cm-gutters": { width: "3.2em", justifyContent: "flex-end", background: "transparent", border: "0", color: "var(--graphite)" },
+  ".cm-lineNumbers .cm-gutterElement": {
+    fontFamily: "var(--font-code)",
+    fontSize: "0.72em",
+    padding: "0 var(--space-3) 0 0",
+    minWidth: "2.5ch",
+    opacity: "0.7",
+  },
+  // The editor is as tall as its note, so a panel stuck to its bottom would sit mid-window on a
+  // short note. Vim's : command line floats just above the window's status bar instead.
+  ".cm-panels.cm-panels-bottom": {
+    position: "fixed",
+    // The middle of the note's column: the workspace sets --sidebar and --today to their widths.
+    left: "calc(var(--sidebar, 0px) + (100vw - var(--sidebar, 0px) - var(--today, 0px)) / 2)",
+    bottom: "calc(26px + var(--space-3) + var(--safe-bottom))",
+    transform: "translateX(-50%)",
+    width: "min(520px, calc(100vw - 32px))",
+    border: "1px solid var(--rule)",
+    borderRadius: "var(--radius)",
+    boxShadow: "var(--shadow-pop)",
+    zIndex: "30",
+    overflow: "hidden",
+  },
+  ".cm-vim-panel": { padding: "6px 10px", fontFamily: "var(--font-code)", fontSize: "var(--ui-size)" },
+  ".cm-vim-panel input": { border: "0", outline: "0", background: "transparent", color: "inherit", font: "inherit" },
   ".cm-searchMatch": { background: "color-mix(in srgb, var(--amber) 30%, transparent)" },
 });
 
@@ -118,6 +147,11 @@ function foldedTitles(titles: NoteMeta[]) {
   }
   return out;
 }
+
+/** Line numbers beside the note, when Settings, Editor has them on. */
+export const numbersSlot = new Compartment();
+export const numbersFor = (on: boolean) =>
+  on ? [gutters({ fixed: false }), lineNumbers(), EditorView.editorAttributes.of({ class: "cm-numbered" })] : [];
 
 function wikilinks(getTitles: () => NoteMeta[]) {
   return (ctx: CompletionContext) => {
@@ -161,10 +195,13 @@ export function extensions(opts: {
   onFiles: (files: File[], view: EditorView, pos: number) => void;
   /** What the slash commands for a picture, a drawing, a voice note and a template do. */
   slash?: SlashActions;
+  /** Line numbers to start with; Settings changes them in an open note through `numbersSlot`. */
+  lineNumbers?: boolean;
 }): Extension[] {
   return [
     // Vim keys come first so they see keys before the other keymaps; empty unless turned on.
     vimSlot.of(vimNow()),
+    numbersSlot.of(numbersFor(!!opts.lineNumbers)),
     history(),
     drawSelection(),
     // Several cursors, as in JetBrains IDEs: ⌥-click adds a cursor, ⌥-drag selects a column,

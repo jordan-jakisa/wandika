@@ -12,7 +12,7 @@
   import { pastedName } from "../attachments";
   import { plainText } from "../plain";
   import { positions, remember } from "../positions";
-  import { extensions } from "../editor/setup";
+  import { extensions, numbersFor, numbersSlot } from "../editor/setup";
   import { isBoard } from "../kanban";
   import type { SearchHit } from "../types";
   import Board from "./Board.svelte";
@@ -109,6 +109,12 @@
       { id: "trash", label: "Move this note to trash", run: trash },
     ]),
   );
+
+  // Line numbers follow Settings in the open note.
+  $effect(() => {
+    const on = prefs.value.lineNumbers;
+    untrack(() => view?.dispatch({ effects: numbersSlot.reconfigure(numbersFor(on)) }));
+  });
 
   // Vim keys follow Settings; the Vim code only loads once they're on.
   $effect(() => {
@@ -301,6 +307,7 @@
           getPath: () => loadedPath ?? path,
           onFiles: addFiles,
           slash: { image: pickImages, drawing: addDrawing, voice: addVoice, template: () => void insertTemplate() },
+          lineNumbers: prefs.value.lineNumbers,
         }),
         // Screen readers name the field, as they do the title above it.
         EditorView.contentAttributes.of({ "aria-label": "Note text" }),

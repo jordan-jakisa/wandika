@@ -584,6 +584,15 @@
               </div>
             </div>
           </div>
+          <div class="group">
+            <label class="row">
+              <span class="row-text">
+                <span class="row-label">Line numbers</span>
+                <span class="row-desc">A number beside each line of the note.</span>
+              </span>
+              <input type="checkbox" class="toggle" checked={prefs.value.lineNumbers} onchange={(e) => prefs.set({ lineNumbers: (e.currentTarget as HTMLInputElement).checked })} />
+            </label>
+          </div>
           {#if !touch}
             <h4>Keys</h4>
             <div class="group">

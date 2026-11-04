@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { storageFull } from "../test/lib";
 
 const KEY = "wandika.appearance";
-const DEFAULTS = { theme: "system", accent: "papyrus", font: "serif", size: null, width: "normal", vim: false };
+const DEFAULTS = { theme: "system", accent: "papyrus", font: "serif", size: null, width: "normal", vim: false, lineNumbers: false };
 
 /** jsdom has no matchMedia: a stand-in whose dark setting a test can flip. */
 function system(dark: boolean) {
@@ -50,7 +50,7 @@ describe("loading", () => {
   });
 
   test("saved choices come back", async () => {
-    const saved = { theme: "dark", accent: "plum", font: "mono", size: 20, width: "wide", vim: true };
+    const saved = { theme: "dark", accent: "plum", font: "mono", size: 20, width: "wide", vim: true, lineNumbers: true };
     localStorage.setItem(KEY, JSON.stringify(saved));
     const { prefs } = await fresh();
     expect(prefs.value).toEqual(saved);
@@ -236,4 +236,13 @@ describe("choices on offer", () => {
       expect(v.css).toBeTruthy();
     }
   });
+});
+
+test("line numbers are off until turned on, and then kept", async () => {
+  const { prefs } = await import("./prefs.svelte");
+  prefs.reset();
+  expect(prefs.value.lineNumbers).toBe(false);
+  prefs.set({ lineNumbers: true });
+  expect(JSON.parse(localStorage.getItem("wandika.appearance")!).lineNumbers).toBe(true);
+  prefs.reset();
 });
