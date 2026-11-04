@@ -158,6 +158,10 @@
     </ul>
   {/if}
 
+  <!-- Full screen on a wide window: the day and the inbox scroll on their own. Elsewhere the
+       wrappers leave no box, and the sections stack as one list. -->
+  <div class="cols">
+  <div class="day">
   {#if calendarConnected}
   <section class="cal" aria-labelledby="cal-h">
     <div class="section-head">
@@ -259,6 +263,7 @@
       <p class="muted">Nothing due today. Give a task a due date and it shows here.</p>
     {/if}
   </section>
+  </div>
 
   {#if mailConnected}
   <section class="inbox" aria-labelledby="mail-h">
@@ -305,6 +310,7 @@
     {/if}
   </section>
   {/if}
+  </div>
 </section>
 
 <style>
@@ -333,22 +339,40 @@
     padding: var(--space-4) var(--space-8) var(--space-8);
     column-gap: var(--space-8);
   }
+  .cols,
+  .day {
+    display: contents;
+  }
+  /* Wide: the header on top, then two columns that each scroll, so a long inbox doesn't carry
+     the calendar and tasks away. */
   @media (min-width: 960px) {
     .today.full {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      padding-bottom: 0;
+    }
+    .today.full .cols {
+      display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
-      grid-auto-flow: dense;
+      column-gap: var(--space-8);
+      flex: 1;
+      min-height: 0;
     }
-    .today.full > :not(.cal, .due, .inbox) {
-      grid-column: 1 / -1;
+    .today.full .cols:not(:has(.inbox)) {
+      grid-template-columns: minmax(0, 1fr);
     }
-    .today.full > .cal,
-    .today.full > .due {
-      grid-column: 1;
+    .today.full .day,
+    .today.full .inbox {
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding-bottom: var(--space-8);
     }
-    .today.full > .inbox {
-      grid-column: 2;
-      grid-row: span 3;
-      align-self: start;
+    .today.full .day {
+      display: grid;
+      gap: 28px;
+      align-content: start;
     }
   }
   h2 {
