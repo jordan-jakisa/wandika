@@ -115,6 +115,19 @@ Export as PDF (2026-11-04): the note is laid out as a print page (title, then th
 on white, Literata 11 pt, task boxes, tables, callouts, pictures and diagrams in place), and the
 system takes it from there: the Mac's print panel, the iPhone's share sheet, Android's print dialog.
 
+Keyboard (Jordan, 2026-11-04): everything works without a pointer. ⌘⇧P (or ">" in ⌘K) lists every
+command with its keys; ⌘1, ⌘2 and ⌘3 (and F6) move between the file list, the note and Today;
+⇧F10 opens a row's menu; ⌘Return opens the link under the cursor; a sheet starts with focus inside
+and gives it back to what opened it. Every shortcut can be changed in Settings, Shortcuts (kept
+on the device), and app, note and editing keys all read one table (shortcuts.svelte.ts). Vim keys
+and several cursors (⌥-click, ⌥-drag, ⌥⌘↑/↓) are in the editor; Vim loads only when it's on.
+Slash commands (/) turn a line into a heading or list, or insert a table, code, a callout, a
+diagram, the date, a picture, a drawing, a voice note or a template. A plain address such as
+google.com is a link.
+
+Performance (Jordan, 2026-11-04) is the overriding rule: optional parts load only when used, and
+work done on every key press stays small.
+
 Task filters (2026-11-04): filter chips under the task search (Overdue, Today, This week, No date,
 High priority) and a folder chip around the system picker. They stack, stay as left on the device,
 and the count says "3 of 12 open tasks". Search everywhere ignores accents, as Obsidian's does.
