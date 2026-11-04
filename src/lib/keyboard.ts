@@ -59,10 +59,31 @@ export function installKeyboard() {
     true,
   );
 
+  // A radio group is one Tab stop: coming in lands on the chosen option; Tab leaves the group.
+  document.addEventListener("focusin", (e) => {
+    const radio = (e.target as HTMLElement | null)?.closest?.<HTMLElement>('[role="radio"]');
+    const group = radio?.closest<HTMLElement>('[role="radiogroup"]');
+    if (!radio || !group || group.contains(e.relatedTarget as Node | null)) return;
+    const chosen = group.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]');
+    if (chosen && chosen !== radio) chosen.focus();
+  });
+
   document.addEventListener("keydown", (e) => {
     const radio = (e.target as HTMLElement | null)?.closest?.<HTMLElement>('[role="radio"]');
     const group = radio?.closest<HTMLElement>('[role="radiogroup"]');
     if (!radio || !group) return;
+    if (e.key === "Tab") {
+      const scope = group.closest("dialog[open]") ?? document;
+      const all = [...scope.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => el.offsetParent !== null || el === document.activeElement);
+      const inGroup = all.filter((el) => group.contains(el));
+      const edge = e.shiftKey ? all.indexOf(inGroup[0]) - 1 : all.indexOf(inGroup[inGroup.length - 1]) + 1;
+      const next = all[edge];
+      if (next) {
+        e.preventDefault();
+        next.focus();
+      }
+      return;
+    }
     const step = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
     if (!step) return;
     const all = [...group.querySelectorAll<HTMLElement>('[role="radio"]:not([disabled])')];

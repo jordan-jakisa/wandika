@@ -37,3 +37,18 @@ test("arrow keys move through a radio group and choose", () => {
   expect(document.activeElement?.id).toBe("b");
   expect(chosen).toBe("b");
 });
+
+test("a radio group is one Tab stop, and coming in lands on the chosen option", () => {
+  installKeyboard();
+  document.body.innerHTML =
+    '<button id="before">a</button><div role="radiogroup"><button role="radio" id="r1" aria-checked="false"></button><button role="radio" id="r2" aria-checked="true"></button><button role="radio" id="r3" aria-checked="false"></button></div><button id="after">b</button>';
+  // jsdom lays nothing out; every element counts as shown.
+  for (const el of document.querySelectorAll<HTMLElement>("button")) Object.defineProperty(el, "offsetParent", { get: () => document.body });
+  document.getElementById("r1")!.focus();
+  expect(document.activeElement?.id).toBe("r2");
+  document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }));
+  expect(document.activeElement?.id).toBe("after");
+  document.getElementById("r2")!.focus();
+  document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true, cancelable: true }));
+  expect(document.activeElement?.id).toBe("before");
+});

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { clock } from "../clock.svelte";
+  import { tick } from "svelte";
   import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, FilePlus, Pencil, Plus, Trash2, CircleCheck, X } from "@lucide/svelte";
   import { api } from "../api";
   import { app, titleOf } from "../app.svelte";
@@ -46,6 +47,11 @@
       .trim();
   }
 
+  /** After an edit ends, the keyboard lands back on what it was about, not on the page. */
+  function refocus(selector: string) {
+    void tick().then(() => document.querySelector<HTMLElement>(selector)?.focus());
+  }
+
   function startEdit(c: Card) {
     editing = c.id;
     draft = c.text;
@@ -58,6 +64,7 @@
     if (!t) lane.cards = lane.cards.filter((x) => x.id !== c.id);
     else c.text = t;
     commit();
+    refocus(t ? `[data-card-id="${c.id}"] .trigger` : `[data-lane="${lane.id}"] .add`);
   }
 
   function addCard(lane: Lane) {
@@ -221,6 +228,7 @@
     {#each board.lanes as lane (lane.id)}
       <section
         class="lane"
+        data-lane={lane.id}
         class:target={dropAt?.lane === lane.id}
         aria-label={lane.title}
         ondragover={(e) => onDragOver(e, lane)}
@@ -258,6 +266,7 @@
               {/if}
               <li
                 class="card"
+                data-card-id={card.id}
                 class:done={card.done}
                 class:dragging={dragging?.card === card.id}
                 data-card
@@ -289,6 +298,7 @@
                       }
                       if (e.key === "Escape") {
                         editing = null;
+                        refocus(`[data-card-id="${card.id}"] .trigger`);
                       }
                     }}
                   ></textarea>
@@ -370,12 +380,22 @@
                   e.preventDefault();
                   addCard(lane);
                 }
-                if (e.key === "Escape") adding = null;
+                if (e.key === "Escape") {
+                  adding = null;
+                  refocus(`[data-lane="${lane.id}"] .add`);
+                }
               }}
             ></textarea>
             <div class="add-actions">
               <button class="btn primary">Add card</button>
-              <button type="button" class="icon-btn" aria-label="Stop adding cards" onclick={() => (adding = null)}><X size={18} /></button>
+              <button
+                type="button"
+                class="icon-btn"
+                aria-label="Stop adding cards"
+                onclick={() => {
+                  adding = null;
+                  refocus(`[data-lane="${lane.id}"] .add`);
+                }}><X size={18} /></button>
             </div>
           </form>
         {:else}

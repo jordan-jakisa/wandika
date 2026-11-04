@@ -431,3 +431,22 @@ test("Move to… puts a note in the folder picked from a list, and follows it if
   expect(await within(tree()).findByRole("button", { name: /^Welcome$/ })).toBeInTheDocument();
   await waitFor(() => expect(app.toast).toBe("Moved to Projects."));
 });
+
+test("after a rename, or Escape out of one, the keyboard is back on the row", async () => {
+  const user = userEvent.setup();
+  vi.spyOn(api, "entryRename").mockResolvedValue("Hello.md");
+  vi.spyOn(app, "refreshFiles").mockImplementation(async () => {
+    app.tree = [entry("Hello.md")];
+  });
+  app.tree = [entry("Welcome.md")];
+  renderTree();
+  await user.click(screen.getByRole("button", { name: "Actions for Welcome" }));
+  await user.click(screen.getByRole("menuitem", { name: "Rename" }));
+  await user.keyboard("{Escape}");
+  await waitFor(() => expect(row(/^Welcome$/)).toHaveFocus());
+  await user.click(screen.getByRole("button", { name: "Actions for Welcome" }));
+  await user.click(screen.getByRole("menuitem", { name: "Rename" }));
+  await user.clear(screen.getByRole("textbox", { name: "New name" }));
+  await user.type(screen.getByRole("textbox", { name: "New name" }), "Hello{Enter}");
+  await waitFor(() => expect(row(/^Hello$/)).toHaveFocus());
+});

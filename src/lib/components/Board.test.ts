@@ -620,3 +620,12 @@ test("saving keeps the Kanban plugin's front matter and settings", async () => {
   expect(text.startsWith("---\n\nkanban-plugin: basic\n\n---\n")).toBe(true);
   expect(text.endsWith(SETTINGS)).toBe(true);
 });
+
+test("after editing a card, the keyboard is back on the card's menu button", async () => {
+  const { user } = setup();
+  await user.click(within(card("To do", "Set up OAuth")).getByRole("button", { name: cardMenu }));
+  await user.click(screen.getByRole("menuitem", { name: "Edit card" }));
+  await user.keyboard("{Escape}");
+  await vi.waitFor(() => expect(document.activeElement?.closest("[data-card-id]")?.textContent).toContain("Set up OAuth"));
+  expect(document.activeElement).toHaveAttribute("aria-haspopup", "menu");
+});

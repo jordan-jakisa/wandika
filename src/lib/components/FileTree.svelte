@@ -152,7 +152,7 @@
     if (renaming !== e.path) return;
     const name = renameValue.trim();
     renaming = null;
-    if (!name || name === e.name) return;
+    if (!name || name === e.name) return focusRow(e.path);
     try {
       await app.flush();
       const to = await api.entryRename(e.path, name);
@@ -165,9 +165,16 @@
       else if (app.current?.startsWith(e.path + "/")) app.current = to + app.current.slice(e.path.length);
       await app.refreshFiles();
       app.edited();
+      focusRow(to);
     } catch (err) {
       app.say((err as Error).message);
+      focusRow(e.path);
     }
+  }
+
+  /** After a rename, the keyboard stays on the row, under its new name. */
+  function focusRow(path: string) {
+    void tick().then(() => document.querySelector<HTMLElement>(`.tree button.item[data-path="${CSS.escape(path)}"]`)?.focus());
   }
 
   /** Moves a row into a folder picked from a list, the keyboard's way to do what dragging would. */
@@ -234,7 +241,10 @@
               onblur={() => commitRename(e)}
               onkeydown={(ev) => {
                 if (ev.key === "Enter") (ev.currentTarget as HTMLInputElement).blur();
-                if (ev.key === "Escape") renaming = null;
+                if (ev.key === "Escape") {
+                  renaming = null;
+                  focusRow(e.path);
+                }
               }}
               aria-label="New name"
             />
