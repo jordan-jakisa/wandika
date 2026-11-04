@@ -21,7 +21,9 @@ if otool -L "$app/Contents/MacOS/wandika" | tail -n +2 | grep -v -e "^[[:space:]
   exit 1
 fi
 
-if pgrep -f "/Applications/Wandika.app/Contents/MacOS" >/dev/null; then
+# The app itself must be closed. `wandika mcp` servers (Claude Code's connection) may keep running:
+# they go on with the old copy until their Claude Code session restarts.
+if pgrep -f "/Applications/Wandika.app/Contents/MacOS/wandika$" >/dev/null; then
   echo "Quit Wandika, then run this again to install."
   exit 1
 fi
