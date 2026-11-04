@@ -22,6 +22,7 @@
     Mic,
   } from "@lucide/svelte";
   import { api } from "../api";
+  import { registerCommands } from "../commands.svelte";
   import Menu from "./Menu.svelte";
   import { isIOS, isMac } from "../platform";
   import { push } from "../transitions";
@@ -82,6 +83,33 @@
   // On a narrow window the sidebar gives way first, so the note always keeps room.
   const sidebarW = $derived(cols.sidebarOpen ? Math.max(SIDEBAR.min, Math.min(cols.sidebar, width - MAIN_MIN)) : 0);
   const toggleSidebar = () => setCols({ sidebarOpen: !cols.sidebarOpen });
+
+  /** Moves the keyboard to the file list, the note or Today, showing it first if it's hidden. */
+  async function focusRegion(region: "tree" | "note" | "today") {
+    if (region === "tree") {
+      if (!cols.sidebarOpen) setCols({ sidebarOpen: true });
+      await tick();
+      const current = app.current ? document.querySelector<HTMLElement>(`.tree button.item[data-path="${CSS.escape(app.current)}"]`) : null;
+      (current ?? document.querySelector<HTMLElement>(".tree button.item"))?.focus();
+    } else if (region === "note") {
+      const note = document.querySelector<HTMLElement>(".cm-content");
+      if (note) note.focus();
+      else app.say("Open a note first: ⌘K finds one, ⌘N makes one.");
+    } else {
+      app.showToday = true;
+      await tick();
+      document.querySelector<HTMLElement>(".today button, .today a[href], .today input")?.focus();
+    }
+  }
+
+  $effect(() =>
+    registerCommands("workspace", [
+      { id: "sidebar", label: "Show or hide the sidebar", keys: "⌘\\", run: toggleSidebar },
+      { id: "focus-tree", label: "Go to the file list", keys: "⌘1", run: () => focusRegion("tree") },
+      { id: "focus-note", label: "Go to the note", keys: "⌘2", run: () => focusRegion("note") },
+      { id: "focus-today", label: "Go to Today", keys: "⌘3", run: () => focusRegion("today") },
+    ]),
+  );
   const roomForToday = $derived(
     width - sidebarW - cols.today >= MAIN_MIN && !boardOpen && !(app.tab === "graph" && !app.current),
   );
@@ -107,6 +135,13 @@
     } else if (k === "t" && e.altKey) {
       e.preventDefault();
       app.showToday = !app.showToday;
+    } else if (k === "p" && e.shiftKey) {
+      e.preventDefault();
+      app.paletteStart = ">";
+      app.switcherOpen = true;
+    } else if (e.key === "1" || e.key === "2" || e.key === "3") {
+      e.preventDefault();
+      void focusRegion(e.key === "1" ? "tree" : e.key === "2" ? "note" : "today");
     } else if (k === "k" || k === "o") {
       e.preventDefault();
       app.switcherOpen = !app.switcherOpen;

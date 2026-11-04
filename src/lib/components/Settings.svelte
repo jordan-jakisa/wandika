@@ -283,6 +283,8 @@
 
   const SHORTCUTS = [
     ["⌘K or ⌘O", "Search or create a note"],
+    ["⌘⇧P", "Every command"],
+    ["⌘1, ⌘2, ⌘3", "Go to the file list, the note or Today"],
     ["⌘N", "New note"],
     ["⌥⌘N", "New voice note"],
     ["⌘D", "Today's note"],

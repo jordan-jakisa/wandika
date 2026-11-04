@@ -34,3 +34,15 @@ test("on a Mac every column drags the window from its top strip", () => {
   expect(document.querySelector(".side-head[data-tauri-drag-region]")).toBeInTheDocument();
   expect(screen.getAllByText(app.vault!.name).some((e) => e.hasAttribute("data-tauri-drag-region"))).toBe(true);
 });
+
+test("⌘⇧P opens the palette on its commands; ⌘1 goes to the file list", async () => {
+  const { fireEvent } = await import("@testing-library/svelte");
+  render(Workspace);
+  await fireEvent.keyDown(window, { key: "P", metaKey: true, shiftKey: true });
+  expect(app.switcherOpen).toBe(true);
+  expect(await screen.findByRole("listbox", { name: "Commands" })).toBeInTheDocument();
+  app.switcherOpen = false;
+  await new Promise((r) => setTimeout(r, 400));
+  await fireEvent.keyDown(window, { key: "1", metaKey: true });
+  await vi.waitFor(() => expect(document.activeElement?.closest(".tree")).not.toBeNull());
+});

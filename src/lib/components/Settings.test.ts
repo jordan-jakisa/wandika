@@ -750,6 +750,8 @@ describe("About", () => {
     const keys = [...document.querySelectorAll(".pane kbd")].map((k) => [k.closest(".row")!.querySelector(".row-label")!.textContent, k.textContent]);
     expect(keys).toEqual([
       ["Search or create a note", "⌘K or ⌘O"],
+      ["Every command", "⌘⇧P"],
+      ["Go to the file list, the note or Today", "⌘1, ⌘2, ⌘3"],
       ["New note", "⌘N"],
       ["New voice note", "⌥⌘N"],
       ["Today's note", "⌘D"],

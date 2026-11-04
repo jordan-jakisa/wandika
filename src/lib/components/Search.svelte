@@ -1,6 +1,8 @@
 <script lang="ts">
   import { plainText } from "../plain";
-  import { ArrowLeft, FilePlus, FileText, Lock, Search, X } from "@lucide/svelte";
+  import { ArrowLeft, ChevronRight, FilePlus, FileText, Lock, Search, X } from "@lucide/svelte";
+  import { matchCommands } from "../commands.svelte";
+  import { untrack } from "svelte";
   import { isIOS } from "../platform";
   import { api } from "../api";
   import { app } from "../app.svelte";
@@ -11,7 +13,13 @@
   let { mode = "palette", onExit }: { mode?: "palette" | "page"; onExit?: () => void } = $props();
   let focused = $state(false);
 
-  let query = $state("");
+  // ⌘⇧P opens the palette on its commands.
+  // Read once, as the palette opens.
+  let query = $state(untrack(() => mode) === "palette" ? app.paletteStart : "");
+  app.paletteStart = "";
+  /** ">" first: the palette lists commands instead of notes. */
+  const commandMode = $derived(mode === "palette" && query.startsWith(">"));
+  const commands = $derived(commandMode ? matchCommands(query.slice(1)) : []);
   let hits = $state<SearchHit[]>([]);
   let failed = $state<string | null>(null);
   /** The query the shown results answer; "Create" waits for it, so it doesn't jump down. */
@@ -33,13 +41,13 @@
       answered === query.trim() &&
       !hits.some((h) => h.title.toLowerCase() === query.trim().toLowerCase()),
   );
-  const count = $derived(results.length + (canCreate ? 1 : 0));
+  const count = $derived(commandMode ? commands.length : results.length + (canCreate ? 1 : 0));
 
   $effect(() => {
     const q = query;
     const mine = ++seq;
     selected = 0;
-    if (!q.trim()) {
+    if (!q.trim() || (mode === "palette" && q.startsWith(">"))) {
       hits = [];
       answered = "";
       return;
@@ -77,6 +85,14 @@
   }
 
   async function choose(i: number) {
+    if (commandMode) {
+      const c = commands[i];
+      if (!c) return;
+      app.switcherOpen = false;
+      // After the palette lets go of focus, so a command that focuses something keeps it.
+      setTimeout(() => void c.run(), 0);
+      return;
+    }
     if (i < results.length) return app.open(results[i].path);
     if (canCreate) {
       try {
@@ -132,7 +148,7 @@
       bind:this={input}
       bind:value={query}
       onkeydown={onKey}
-      placeholder="Search or create a note"
+      placeholder={mode === "palette" ? "Search or create a note, or type > for commands" : "Search or create a note"}
       aria-label="Search notes"
       role="combobox"
       aria-expanded="true"
@@ -151,6 +167,28 @@
       <button class="cancel" onclick={exit}>Cancel</button>
     {/if}
   </div>
+  {#if commandMode}
+  <ul id="search-results" role="listbox" aria-label="Commands">
+    {#each commands as c, i (c.id)}
+      <li
+        id={`hit-${i}`}
+        role="option"
+        aria-selected={i === selected}
+        class:selected={i === selected}
+        class="command"
+        onclick={() => choose(i)}
+        onkeydown={() => {}}
+        onpointerenter={(e) => e.pointerType !== "touch" && (selected = i)}
+      >
+        <ChevronRight size={15} />
+        <span class="text"><span class="title">{c.label}</span></span>
+        {#if c.keys}<kbd>{c.keys}</kbd>{/if}
+      </li>
+    {:else}
+      <li class="none" role="presentation">No command matches.</li>
+    {/each}
+  </ul>
+  {:else}
   <ul id="search-results" role="listbox" aria-label={results === recent ? "Recent notes" : "Results"}>
     {#if !query.trim() && recent.length}
       <li class="heading" role="presentation">Recent</li>
@@ -195,6 +233,7 @@
       <li class="none" role="presentation">No notes yet. Type a title and press Return to create one.</li>
     {/if}
   </ul>
+  {/if}
 </div>
 
 <style>
@@ -280,6 +319,22 @@
   }
   li.selected {
     background: var(--papyrus-wash);
+  }
+  /* A command: its name, and its shortcut at the end of the row. */
+  li.command {
+    align-items: center;
+  }
+  li.command :global(svg) {
+    margin-top: 0;
+  }
+  li.command .text {
+    flex: 1;
+  }
+  li.command kbd {
+    font: inherit;
+    font-size: var(--small);
+    color: var(--graphite);
+    font-variant-numeric: tabular-nums;
   }
   .text {
     min-width: 0;

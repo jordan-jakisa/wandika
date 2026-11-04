@@ -5,6 +5,7 @@
   import { exportPdf } from "../exportPdf";
   import { prefs } from "../prefs.svelte";
   import { setVim } from "../editor/vimKeys";
+  import { registerCommands } from "../commands.svelte";
   import { onDestroy, untrack } from "svelte";
   import { api, codeOf } from "../api";
   import { app, titleOf } from "../app.svelte";
@@ -94,6 +95,20 @@
       saved: (rel) => v === view && embedAt(v, at, [`![[${rel.split("/").pop()}]]`]),
     };
   }
+
+  // The open note's own commands in the palette.
+  $effect(() =>
+    registerCommands("note", [
+      { id: "pdf", label: "Export as PDF", keys: "⌘P", run: exportNote, when: () => !locked && !error },
+      { id: "voice-here", label: "Voice note into this note", run: addVoice, when: () => !!view },
+      { id: "image", label: "Add image", run: pickImages, when: () => !!view },
+      { id: "drawing", label: "Add drawing", run: addDrawing, when: () => !!view },
+      { id: "template", label: "Insert template", run: insertTemplate, when: () => !!view },
+      { id: "in-graph", label: "Show this note in the graph", run: async () => (await save(), app.showGraph(true)) },
+      { id: "encrypt", label: "Encrypt or decrypt this note", run: toggleEncryption },
+      { id: "trash", label: "Move this note to trash", run: trash },
+    ]),
+  );
 
   // Vim keys follow Settings; the Vim code only loads once they're on.
   $effect(() => {

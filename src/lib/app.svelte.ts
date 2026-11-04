@@ -56,6 +56,8 @@ class AppState {
   tab = $state<Tab>("notes");
   showToday = $state(true);
   switcherOpen = $state(false);
+  /** What the ⌘K palette opens with: ">" opens it on the commands (⌘⇧P). */
+  paletteStart = "";
   /** Goes up each time a different note is opened; the editor is keyed on it, so a rename doesn't remount. */
   openCount = $state(0);
   /** Vault path of the image open in the viewer. */

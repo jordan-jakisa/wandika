@@ -218,3 +218,23 @@ test("the ⌘K palette has no back arrow; Escape closes it as before", () => {
   render(Search);
   expect(screen.queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
 });
+
+test("> lists commands with their shortcuts; Return runs one and closes the palette", async () => {
+  const user = userEvent.setup();
+  app.switcherOpen = true;
+  render(Search);
+  await user.type(screen.getByRole("combobox", { name: "Search notes" }), ">new t");
+  expect(screen.getByRole("listbox", { name: "Commands" })).toBeInTheDocument();
+  expect(options().map((o) => o.textContent?.trim())).toEqual(["New task"]);
+  await user.keyboard("{Enter}");
+  expect(app.switcherOpen).toBe(false);
+  await waitFor(() => expect(app.editingTask?.path).toBe(""));
+});
+
+test("the palette opens on its commands when asked to (⌘⇧P)", async () => {
+  app.paletteStart = ">";
+  render(Search);
+  expect(screen.getByRole("combobox", { name: "Search notes" })).toHaveValue(">");
+  expect(options().find((o) => o.textContent?.includes("New note"))?.textContent).toContain("⌘N");
+  expect(app.paletteStart).toBe("");
+});
