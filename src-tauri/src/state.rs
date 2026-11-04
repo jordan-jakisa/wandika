@@ -69,6 +69,22 @@ impl App {
         }
     }
 
+    /// Reads settings.json again, for a process that runs beside the app (`wandika mcp`): the
+    /// vault switched in the app is the one it serves. Returns whether the open vault changed.
+    pub fn reload_settings(&self) -> bool {
+        let Some(fresh) = std::fs::read(self.data.join("settings.json")).ok().and_then(|b| serde_json::from_slice::<Settings>(&b).ok()) else {
+            return false;
+        };
+        let mut s = self.settings.lock().unwrap();
+        let changed = s.vault.as_ref().map(|v| &v.id) != fresh.vault.as_ref().map(|v| &v.id);
+        *s = fresh;
+        drop(s);
+        if changed {
+            *self.index.lock().unwrap() = Index::default();
+        }
+        changed
+    }
+
     pub fn settings(&self) -> Settings {
         self.settings.lock().unwrap().clone()
     }

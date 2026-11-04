@@ -50,11 +50,23 @@ pub fn run() -> i32 {
 
 pub struct Server {
     app: App,
+    /// When settings.json last changed, as last seen; a change means the app switched vaults.
+    seen: std::sync::Mutex<Option<std::time::SystemTime>>,
 }
 
 impl Server {
     pub fn new(app: App) -> Self {
-        Self { app }
+        Self { app, seen: Default::default() }
+    }
+
+    /// Follows the app: the vault open there now is the one Claude reads and changes.
+    fn follow_app(&self) {
+        let now = std::fs::metadata(self.app.data.join("settings.json")).and_then(|m| m.modified()).ok();
+        let mut seen = self.seen.lock().unwrap();
+        if *seen != now {
+            *seen = now;
+            self.app.reload_settings();
+        }
     }
 
     /// One JSON-RPC message in; the reply, or None for a notification.
@@ -94,6 +106,7 @@ impl Server {
     }
 
     fn root(&self) -> Result<PathBuf> {
+        self.follow_app();
         self.app.root()
     }
 
@@ -332,6 +345,23 @@ mod tests {
     fn tool(s: &Server, name: &str, args: Value) -> (String, bool) {
         let r = call(s, 9, "tools/call", json!({ "name": name, "arguments": args }));
         (r["result"]["content"][0]["text"].as_str().unwrap().to_string(), r["result"]["isError"] == true)
+    }
+
+    #[test]
+    fn it_follows_the_vault_switched_in_the_app() {
+        let (s, data, _) = server("follow");
+        assert!(tool(&s, "read_note", json!({ "path": "Ideas.md" })).0.contains("Jinja"));
+        // The app opens another vault: it writes settings.json, which this process didn't.
+        let other = data.join("other");
+        std::fs::create_dir_all(&other).unwrap();
+        std::fs::write(other.join("Today.md"), "- [ ] Enable account deletion #papercheck\n").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        let app = App::new(data.clone());
+        app.update_settings(|st| st.vault = Some(VaultConfig { id: "local/other".into(), name: "other".into(), folder: Some(other.clone()), remote: None })).unwrap();
+        let (tasks, _) = tool(&s, "list_tasks", json!({ "query": "#papercheck" }));
+        assert!(tasks.contains("Enable account deletion"), "{tasks}");
+        assert!(tool(&s, "read_note", json!({ "path": "Ideas.md" })).1, "the old vault's notes are gone");
+        std::fs::remove_dir_all(&data).unwrap();
     }
 
     #[test]
