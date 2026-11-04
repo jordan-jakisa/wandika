@@ -35,10 +35,12 @@ export interface Prefs {
   /** Note text size in px; null keeps the platform default (18 on Mac, 17 on phones). */
   size: number | null;
   width: Width;
+  /** Vim keys in the editor (Mac, or a keyboard with a pointer). */
+  vim: boolean;
 }
 
 const KEY = "wandika.appearance";
-const DEFAULTS: Prefs = { theme: "system", accent: "papyrus", font: "serif", size: null, width: "normal" };
+const DEFAULTS: Prefs = { theme: "system", accent: "papyrus", font: "serif", size: null, width: "normal", vim: false };
 /** The note size slider's range in Settings. */
 const SIZES = { min: 14, max: 24 };
 
@@ -58,6 +60,7 @@ function load(): Prefs {
     font: one(s.font, Object.keys(FONTS) as NoteFont[], DEFAULTS.font),
     size: typeof s.size === "number" && s.size > 0 && Number.isFinite(s.size) ? Math.min(SIZES.max, Math.max(SIZES.min, Math.round(s.size))) : null,
     width: one(s.width, Object.keys(WIDTHS) as Width[], DEFAULTS.width),
+    vim: s.vim === true,
   };
 }
 

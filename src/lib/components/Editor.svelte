@@ -3,6 +3,8 @@
   import { EditorView } from "@codemirror/view";
   import { ChevronLeft, Code, FileDown, ImagePlus, LayoutTemplate, Columns3, Lock, LockOpen, Mic, Network, PenLine, Trash2, Link2 } from "@lucide/svelte";
   import { exportPdf } from "../exportPdf";
+  import { prefs } from "../prefs.svelte";
+  import { setVim } from "../editor/vimKeys";
   import { onDestroy, untrack } from "svelte";
   import { api, codeOf } from "../api";
   import { app, titleOf } from "../app.svelte";
@@ -92,6 +94,12 @@
       saved: (rel) => v === view && embedAt(v, at, [`![[${rel.split("/").pop()}]]`]),
     };
   }
+
+  // Vim keys follow Settings; the Vim code only loads once they're on.
+  $effect(() => {
+    const on = prefs.value.vim;
+    untrack(() => void setVim(() => view, on, () => void app.flush()));
+  });
 
   /** Speak into the note: the words go where the cursor is, each line on its own. */
   function addVoice() {

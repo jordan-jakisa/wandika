@@ -2,12 +2,13 @@ import { autocompletion, type Completion, type CompletionContext } from "@codemi
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { fold } from "../fold";
 import { slashCommands, type SlashActions } from "./slash";
+import { vimSlot, vimNow } from "./vimKeys";
 import { smartListKeymap } from "./smartLists";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
 import { EditorState, type Extension } from "@codemirror/state";
-import { drawSelection, EditorView, keymap, placeholder } from "@codemirror/view";
+import { crosshairCursor, drawSelection, EditorView, keymap, placeholder, rectangularSelection } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
 import type { NoteMeta } from "../types";
 import { diagrams, diagramTheme } from "./diagrams";
@@ -107,6 +108,17 @@ const theme = EditorView.theme({
   ".cm-searchMatch": { background: "color-mix(in srgb, var(--amber) 30%, transparent)" },
 });
 
+/** Folded titles and paths, worked out once per list of notes rather than on every keystroke. */
+const folded = new WeakMap<NoteMeta[], { n: NoteMeta; t: string; p: string }[]>();
+function foldedTitles(titles: NoteMeta[]) {
+  let out = folded.get(titles);
+  if (!out) {
+    out = titles.map((n) => ({ n, t: fold(n.title), p: fold(n.path) }));
+    folded.set(titles, out);
+  }
+  return out;
+}
+
 function wikilinks(getTitles: () => NoteMeta[]) {
   return (ctx: CompletionContext) => {
     const m = ctx.matchBefore(/\[\[[^\]\n|]*/);
@@ -114,8 +126,7 @@ function wikilinks(getTitles: () => NoteMeta[]) {
     // Matched here rather than by the editor, so accents don't matter: "cafe" finds "Café".
     // Titles that start with what was typed come first, then titles that contain it.
     const typed = fold(m.text.slice(2).trim());
-    const ranked = getTitles()
-      .map((n) => ({ n, t: fold(n.title), p: fold(n.path) }))
+    const ranked = foldedTitles(getTitles())
       .filter(({ t, p }) => !typed || t.includes(typed) || p.includes(typed))
       .sort(
         (a, b) =>
@@ -152,8 +163,15 @@ export function extensions(opts: {
   slash?: SlashActions;
 }): Extension[] {
   return [
+    // Vim keys come first so they see keys before the other keymaps; empty unless turned on.
+    vimSlot.of(vimNow()),
     history(),
     drawSelection(),
+    // Several cursors, as in JetBrains IDEs: ⌥-click adds a cursor, ⌥-drag selects a column,
+    // ⌥⌘↑ and ⌥⌘↓ add one above or below (the default keymap), Esc goes back to one.
+    EditorView.clickAddsSelectionRange.of((e) => e.altKey || (/Mac|iPhone|iPad/.test(navigator.platform) ? e.metaKey : e.ctrlKey)),
+    rectangularSelection(),
+    crosshairCursor(),
     EditorView.lineWrapping,
     EditorState.allowMultipleSelections.of(true),
     markdown({ base: markdownLanguage, addKeymap: true }),

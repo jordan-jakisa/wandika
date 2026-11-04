@@ -759,6 +759,8 @@ describe("About", () => {
       ["Show or hide Today", "⌥⌘T"],
       ["Back and forward between notes", "⌘[ and ⌘]"],
       ["Find in note", "⌘F"],
+      ["Add a cursor", "⌥-click"],
+      ["Add a cursor above or below", "⌥⌘↑ and ⌥⌘↓"],
       ["Export the note as a PDF", "⌘P"],
       ["Bold, italic", "⌘B, ⌘I"],
       ["Checklist", "⌘L"],

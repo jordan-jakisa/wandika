@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { storageFull } from "../test/lib";
 
 const KEY = "wandika.appearance";
-const DEFAULTS = { theme: "system", accent: "papyrus", font: "serif", size: null, width: "normal" };
+const DEFAULTS = { theme: "system", accent: "papyrus", font: "serif", size: null, width: "normal", vim: false };
 
 /** jsdom has no matchMedia: a stand-in whose dark setting a test can flip. */
 function system(dark: boolean) {
@@ -50,7 +50,7 @@ describe("loading", () => {
   });
 
   test("saved choices come back", async () => {
-    const saved = { theme: "dark", accent: "plum", font: "mono", size: 20, width: "wide" };
+    const saved = { theme: "dark", accent: "plum", font: "mono", size: 20, width: "wide", vim: true };
     localStorage.setItem(KEY, JSON.stringify(saved));
     const { prefs } = await fresh();
     expect(prefs.value).toEqual(saved);

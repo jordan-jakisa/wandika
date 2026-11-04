@@ -24,6 +24,7 @@
   import { api, listen, openUrl } from "../api";
   import { ago, app, type SettingsSection } from "../app.svelte";
   import { ACCENTS, FONTS, WIDTHS, prefs, type NoteFont, type Theme, type Width } from "../prefs.svelte";
+  import { touch } from "../tips";
   import { isIOS, isMac } from "../platform";
   import type { AppleAccess, NewNoteLocation } from "../types";
   import GitHubSignIn from "./GitHubSignIn.svelte";
@@ -291,6 +292,8 @@
     ["⌥⌘T", "Show or hide Today"],
     ["⌘[ and ⌘]", "Back and forward between notes"],
     ["⌘F", "Find in note"],
+    ["⌥-click", "Add a cursor"],
+    ["⌥⌘↑ and ⌥⌘↓", "Add a cursor above or below"],
     ["⌘P", "Export the note as a PDF"],
     ["⌘B, ⌘I", "Bold, italic"],
     ["⌘L", "Checklist"],
@@ -547,6 +550,24 @@
               </div>
             </div>
           </div>
+          {#if !touch}
+            <h4>Keys</h4>
+            <div class="group">
+              <label class="row">
+                <span class="row-text">
+                  <span class="row-label">Vim keys</span>
+                  <span class="row-desc">Normal, insert and visual modes, and : commands. :w saves the note.</span>
+                </span>
+                <input type="checkbox" class="toggle" checked={prefs.value.vim} onchange={(e) => prefs.set({ vim: (e.currentTarget as HTMLInputElement).checked })} />
+              </label>
+              <div class="row">
+                <span class="row-text">
+                  <span class="row-label">Several cursors</span>
+                  <span class="row-desc">⌥-click adds a cursor, ⌥-drag selects a column, ⌥⌘↑ or ⌥⌘↓ adds one above or below, Esc goes back to one.</span>
+                </span>
+              </div>
+            </div>
+          {/if}
           <p class="note">
             Kept on this device.
             {#if prefs.value.size}<button class="link-btn" onclick={() => prefs.set({ size: null })}>Use the default size</button>{/if}
