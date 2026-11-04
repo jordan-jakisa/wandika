@@ -459,8 +459,10 @@ pub fn set_encrypted(root: &Path, rel: &str, encrypt: bool, crypto: &mut Crypto)
 struct Cached {
     mtime: SystemTime,
     meta: NoteMeta,
+    /// The note's text, title and path as search compares them (see `fold`).
     lower: Box<str>,
     title_lower: Box<str>,
+    path_fold: Box<str>,
     path_lower: Box<str>,
     tasks: Vec<VaultTask>,
 }
@@ -513,13 +515,87 @@ fn strip_code(text: &str) -> String {
     out
 }
 
+/// The letter a search compares `c` as: lower case without its accent, so "cafe" finds "Café",
+/// "lodz" finds "Łódź" and "strasse" finds "Straße", as in Obsidian's search.
+fn push_folded(out: &mut String, c: char) {
+    let base: &str = match c {
+        'à'..='å' | 'ā' | 'ă' | 'ą' | 'ǎ' | 'ά' => "a",
+        'æ' => "ae",
+        'ç' | 'ć' | 'ĉ' | 'ċ' | 'č' => "c",
+        'ď' | 'đ' | 'ð' => "d",
+        'è'..='ë' | 'ē' | 'ĕ' | 'ė' | 'ę' | 'ě' => "e",
+        'ĝ' | 'ğ' | 'ġ' | 'ģ' => "g",
+        'ĥ' | 'ħ' => "h",
+        'ì'..='ï' | 'ĩ' | 'ī' | 'ĭ' | 'į' | 'ı' | 'ǐ' => "i",
+        'ĳ' => "ij",
+        'ĵ' => "j",
+        'ķ' => "k",
+        'ĺ' | 'ļ' | 'ľ' | 'ŀ' | 'ł' => "l",
+        'ñ' | 'ń' | 'ņ' | 'ň' => "n",
+        'ò'..='ö' | 'ø' | 'ō' | 'ŏ' | 'ő' | 'ơ' | 'ǒ' => "o",
+        'œ' => "oe",
+        'ŕ' | 'ŗ' | 'ř' => "r",
+        'ś' | 'ŝ' | 'ş' | 'š' | 'ș' | 'ſ' => "s",
+        'ß' => "ss",
+        'ţ' | 'ť' | 'ŧ' | 'ț' => "t",
+        'þ' => "th",
+        'ù'..='ü' | 'ũ' | 'ū' | 'ŭ' | 'ů' | 'ű' | 'ų' | 'ư' | 'ǔ' => "u",
+        'ŵ' => "w",
+        'ý' | 'ÿ' | 'ŷ' => "y",
+        'ź' | 'ż' | 'ž' => "z",
+        // Vietnamese letters with two marks.
+        '\u{1ea1}'..='\u{1eb7}' => "a",
+        '\u{1eb9}'..='\u{1ec7}' => "e",
+        '\u{1ec9}'..='\u{1ecb}' => "i",
+        '\u{1ecd}'..='\u{1ee3}' => "o",
+        '\u{1ee5}'..='\u{1ef1}' => "u",
+        '\u{1ef3}'..='\u{1ef9}' => "y",
+        // Greek with tonos or dialytika.
+        'έ' => "ε",
+        'ή' => "η",
+        'ί' | 'ϊ' | 'ΐ' => "ι",
+        'ό' => "ο",
+        'ύ' | 'ϋ' | 'ΰ' => "υ",
+        'ώ' => "ω",
+        // Marks written as separate characters.
+        '\u{0300}'..='\u{036f}' => "",
+        _ => {
+            out.push(c);
+            return;
+        }
+    };
+    out.push_str(base);
+}
+
+/// Text as search compares it, with where each folded byte came from in `text`.
+fn fold_with_offsets(text: &str) -> (String, Vec<(usize, usize)>) {
+    let mut out = String::with_capacity(text.len());
+    let mut map = Vec::with_capacity(text.len());
+    for (i, ch) in text.char_indices() {
+        map.push((out.len(), i));
+        for lc in ch.to_lowercase() {
+            push_folded(&mut out, lc);
+        }
+    }
+    (out, map)
+}
+
+pub fn fold(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for lc in text.chars().flat_map(char::to_lowercase) {
+        push_folded(&mut out, lc);
+    }
+    out
+}
+
 fn snippet(text: &str, needle: &str) -> String {
-    let lower = text.to_lowercase();
-    let Some(pos) = lower.find(needle) else {
+    let (folded, map) = fold_with_offsets(text);
+    let Some(pos) = folded.find(needle) else {
         return text.chars().take(140).collect::<String>().replace('\n', " ");
     };
-    // Lowercasing can change byte lengths in some scripts; then start from the top.
-    let mut s = if lower.len() == text.len() { pos.saturating_sub(60) } else { 0 };
+    // Back to the original text: the character the match starts in, then 60 bytes before it.
+    let at = map.partition_point(|&(f, _)| f <= pos).saturating_sub(1);
+    let mut s = map.get(at).map_or(0, |&(_, o)| o).saturating_sub(60);
     while s > 0 && !text.is_char_boundary(s) {
         s -= 1;
     }
@@ -620,8 +696,9 @@ impl Index {
             let meta = parse(&rel, &text, mtime_ms(mtime), encrypted, locked);
             let cached = Cached {
                 mtime,
-                lower: text.to_lowercase().into_boxed_str(),
-                title_lower: meta.title.to_lowercase().into_boxed_str(),
+                lower: fold(&text).into_boxed_str(),
+                title_lower: fold(&meta.title).into_boxed_str(),
+                path_fold: fold(&rel).into_boxed_str(),
                 path_lower: rel.to_lowercase().into_boxed_str(),
                 tasks: tasks_in(&rel, &meta.title, &text),
                 meta,
@@ -691,7 +768,7 @@ impl Index {
     }
 
     pub fn search(&self, query: &str, crypto: &Crypto) -> Vec<SearchHit> {
-        let q = query.trim().to_lowercase();
+        let q = fold(query.trim());
         if q.is_empty() {
             return Vec::new();
         }
@@ -700,7 +777,7 @@ impl Index {
             .notes
             .values()
             .filter_map(|c| {
-                let (title, path, body) = (&*c.title_lower, &*c.path_lower, &*c.lower);
+                let (title, path, body) = (&*c.title_lower, &*c.path_fold, &*c.lower);
                 if !words.iter().all(|w| title.contains(w) || path.contains(w) || body.contains(w)) {
                     return None;
                 }
@@ -1667,15 +1744,25 @@ mod tests {
     }
 
     #[test]
+    fn search_ignores_accents_as_obsidian_does() {
+        assert_eq!(fold("Café Łódź Straße Ærø Œuvre Þór İstanbul"), "cafe lodz strasse aero oeuvre thor istanbul");
+        assert_eq!(fold("Tiếng Việt"), "tieng viet");
+        assert_eq!(fold("cafe\u{301}"), "cafe", "a separate accent mark");
+        let s = snippet(&format!("{}Le Café de Flore", "mot ".repeat(30)), "cafe");
+        assert!(s.contains("Café de Flore"), "the snippet shows the original words: {s}");
+    }
+
+    #[test]
     fn snippets_show_the_match_in_context() {
         assert_eq!(snippet("first line\nsecond", "absent"), "first line second");
         let long = format!("{}needle here", "word ".repeat(40));
         let s = snippet(&long, "needle");
         assert!(s.starts_with('…') && s.contains("needle here"), "{s}");
         assert!(!snippet("needle at the start", "needle").starts_with('…'));
-        // Lowercasing İ adds a byte, so the snippet starts at the top instead of mid-character.
+        // Lowercasing İ adds a byte; the snippet still starts just before the match.
         let turkish = format!("İ{}needle", "x".repeat(100));
-        assert!(snippet(&turkish, "needle").starts_with('İ'));
+        let s = snippet(&turkish, "needle");
+        assert!(s.starts_with('…') && s.ends_with("needle"), "{s}");
         let multibyte = format!("{}needle", "日本".repeat(40));
         assert!(snippet(&multibyte, "needle").contains("needle"), "never cuts inside a character");
     }

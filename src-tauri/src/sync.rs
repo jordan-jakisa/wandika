@@ -82,11 +82,13 @@ pub struct SyncReport {
     pub at: i64,
 }
 
+/// (phase, done, total): "checking", "downloading", "uploading", "saving".
+pub type Progress = Box<dyn Fn(&str, usize, usize) + Send + Sync>;
+
 /// What a running sync tells the interface, and how it is asked to stop.
 pub struct Ctl {
     pub cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    /// (phase, done, total): "checking", "downloading", "uploading", "saving".
-    pub progress: Box<dyn Fn(&str, usize, usize) + Send + Sync>,
+    pub progress: Progress,
 }
 
 impl Ctl {

@@ -39,10 +39,10 @@ pub fn run() -> i32 {
         if line.trim().is_empty() {
             continue;
         }
-        if let Some(reply) = server.handle(&line) {
-            if writeln!(out, "{reply}").and_then(|_| out.flush()).is_err() {
-                break;
-            }
+        if let Some(reply) = server.handle(&line)
+            && writeln!(out, "{reply}").and_then(|_| out.flush()).is_err()
+        {
+            break;
         }
     }
     0
@@ -130,7 +130,7 @@ impl Server {
                 if let Some(f) = folder {
                     notes.retain(|n| n.path.to_lowercase().starts_with(&format!("{f}/")));
                 }
-                notes.sort_by(|a, b| b.modified.cmp(&a.modified));
+                notes.sort_by_key(|n| std::cmp::Reverse(n.modified));
                 let list: Vec<Value> = notes
                     .iter()
                     .take(500)
@@ -374,7 +374,7 @@ mod tests {
     fn mistakes_come_back_as_plain_tool_errors() {
         let (s, data, _) = server("errors");
         assert_eq!(tool(&s, "write_note", json!({ "path": "New.md", "content": "x" })), ("There's no note at that path. Use create_note for a new one.".into(), true));
-        assert_eq!(tool(&s, "read_note", json!({ "path": "../secrets.txt" })).1, true, "nothing outside the vault");
+        assert!(tool(&s, "read_note", json!({ "path": "../secrets.txt" })).1, "nothing outside the vault");
         assert_eq!(tool(&s, "read_note", json!({})), ("Give a “path”.".into(), true));
         assert_eq!(tool(&s, "fly", json!({})), ("Wandika has no tool called “fly”.".into(), true));
         assert_eq!(tool(&s, "daily_note", json!({ "date": "soon" })), ("Dates look like 2026-11-03.".into(), true));
