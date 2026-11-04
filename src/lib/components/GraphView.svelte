@@ -408,6 +408,27 @@
     redraw();
   }
 
+  /** Arrow keys pan, + and − zoom around the middle, 0 fits the graph again. */
+  function keys(e: KeyboardEvent) {
+    const step = e.shiftKey ? 180 : 60;
+    const pan: Record<string, [number, number]> = { ArrowLeft: [step, 0], ArrowRight: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] };
+    if (pan[e.key]) {
+      touched = true;
+      view = { ...view, x: view.x + pan[e.key][0], y: view.y + pan[e.key][1] };
+      redraw();
+    } else if (e.key === "+" || e.key === "=") {
+      touched = true;
+      zoomAt(width / 2, height / 2, 1.25);
+    } else if (e.key === "-" || e.key === "_") {
+      touched = true;
+      zoomAt(width / 2, height / 2, 0.8);
+    } else if (e.key === "0") {
+      touched = false;
+      fit();
+    } else return;
+    e.preventDefault();
+  }
+
   function wheel(e: WheelEvent) {
     e.preventDefault();
     const p = { x: e.offsetX, y: e.offsetY };
@@ -466,8 +487,18 @@
     </button>
     <button class="icon-btn" onclick={() => { touched = false; fit(); }} aria-label="Fit the graph to the window"><Maximize size={17} /></button>
   </header>
-  <div class="stage" bind:this={box}>
-    <!-- A picture to screen readers (a canvas has no role of its own, so its label went unread); notes open from search. -->
+  <!-- The stage takes focus, so the keyboard can pan and zoom; notes open from the filter. An
+       application region is an ARIA widget; Svelte's lint treats it as static. -->
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+  <div
+    class="stage"
+    bind:this={box}
+    role="application"
+    tabindex="0"
+    aria-label={`Graph of ${counts.nodes} notes and ${counts.links} links. Arrow keys pan, plus and minus zoom, 0 fits. Type in the filter and press Return to open a note.`}
+    onkeydown={keys}
+  >
+    <!-- A picture to screen readers (a canvas has no role of its own, so its label went unread). -->
     <!-- svelte-ignore a11y_no_interactive_element_to_noninteractive_role -->
     <canvas
       bind:this={canvas}

@@ -485,3 +485,18 @@ test("with motion on, the layout settles over time and stops when the view close
   expect(canvas.frames.length).toBe(n);
 });
 
+
+test("the keyboard pans and zooms the graph, and 0 fits it again", async () => {
+  render(GraphView);
+  const stage = await screen.findByRole("application", { name: /Arrow keys pan/ });
+  stage.focus();
+  expect(stage).toHaveFocus();
+  for (const key of ["ArrowLeft", "ArrowDown", "+", "-", "0"]) {
+    const e = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+    stage.dispatchEvent(e);
+    expect(e.defaultPrevented).toBe(true);
+  }
+  const other = new KeyboardEvent("keydown", { key: "a", bubbles: true, cancelable: true });
+  stage.dispatchEvent(other);
+  expect(other.defaultPrevented).toBe(false);
+});
