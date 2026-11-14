@@ -10,8 +10,15 @@ fn need(value: Option<&'static str>, what: &str) -> Result<&'static str> {
     })
 }
 
+/// The Wandika GitHub App's client ID (it starts with "Iv").
 pub fn github_client_id() -> Result<&'static str> {
     need(option_env!("WANDIKA_GITHUB_CLIENT_ID"), "GitHub sign-in")
+}
+
+/// The GitHub App's short name, from its page address github.com/apps/<name>. The interface sends
+/// people there to choose which repositories Wandika may use.
+pub fn github_app_slug() -> Option<&'static str> {
+    option_env!("WANDIKA_GITHUB_APP_SLUG").map(str::trim).filter(|v| !v.is_empty())
 }
 
 /// Google allows sensitive scopes (Calendar, Tasks) in a public app only after it has reviewed
@@ -84,6 +91,7 @@ pub fn microsoft_client_id() -> Result<&'static str> {
 pub fn configured() -> serde_json::Value {
     serde_json::json!({
         "github": github_client_id().is_ok(),
+        "github_app": github_app_slug(),
         "google": if cfg!(mobile) { google_mobile_client_id().is_ok() } else { google_desktop().is_ok() },
         "microsoft": microsoft_client_id().is_ok(),
         "apple": cfg!(any(target_os = "macos", target_os = "ios")),
@@ -132,7 +140,8 @@ mod tests {
         assert_eq!(v["google"], google_desktop().is_ok(), "the Mac uses the desktop client");
         assert_eq!(v["apple"], cfg!(any(target_os = "macos", target_os = "ios")));
         assert_eq!(v["gmail"], gmail());
-        assert_eq!(v.as_object().unwrap().len(), 5);
+        assert_eq!(v["github_app"].as_str(), github_app_slug());
+        assert_eq!(v.as_object().unwrap().len(), 6);
     }
 
     #[test]

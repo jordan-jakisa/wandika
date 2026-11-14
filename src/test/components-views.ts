@@ -185,7 +185,7 @@ export function recordCanvas() {
 }
 
 export const statusFixture = (over: Partial<Status> = {}): Status => ({
-  configured: { github: true, google: true, microsoft: true, apple: true, gmail: true },
+  configured: { github: true, github_app: "wandika", google: true, microsoft: true, apple: true, gmail: true },
   user: { login: "jordan-jakisa", name: "Jordan", avatar_url: "" },
   vault: { id: "github/jordan-jakisa/notes", name: "notes", folder: null, remote: { owner: "jordan-jakisa", repo: "notes", branch: "main" } },
   known: [],

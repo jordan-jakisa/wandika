@@ -52,7 +52,6 @@ const calls: [string, (a: Api["api"]) => Promise<unknown>, string, Record<string
   ["githubPollLogin", (a) => a.githubPollLogin("dev-1"), "github_poll_login", { deviceCode: "dev-1" }],
   ["githubSignOut", (a) => a.githubSignOut(), "github_sign_out", undefined],
   ["reposList", (a) => a.reposList(), "repos_list", undefined],
-  ["repoCreate", (a) => a.repoCreate("notes"), "repo_create", { name: "notes" }],
   ["vaultOpen", (a) => a.vaultOpen("jordan", "notes"), "vault_open", { owner: "jordan", repo: "notes" }],
   ["vaultClose", (a) => a.vaultClose(), "vault_close", undefined],
   ["vaultCreateLocal", (a) => a.vaultCreateLocal("Mine", "/Users/j/Notes"), "vault_create_local", { name: "Mine", folder: "/Users/j/Notes" }],

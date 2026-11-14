@@ -49,6 +49,8 @@ mail and tasks sit beside your notes, and everything works from the keyboard.
 **Keep it yours**
 
 - Sync through any GitHub repository you pick, or keep a vault on one device with no account.
+  Wandika signs in as a GitHub App that you install on just that repository, so it can't see the
+  rest of your account.
 - Encrypt any note or folder. Encrypted notes are standard [age](https://age-encryption.org)
   files, unreadable on GitHub.
 - Claude Code on the Mac can read and write your notes and tasks through Wandika (it never sees
@@ -168,3 +170,10 @@ cd src-tauri && cargo test --lib    # Rust tests
 ```
 
 Building for each platform, releases and signing: [docs/setup.md](docs/setup.md).
+
+## License
+
+Copyright © 2026 Jordan Mungujakisa.
+
+Wandika is open source under the [GNU Affero General Public License v3.0](LICENSE). Contributions
+are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).

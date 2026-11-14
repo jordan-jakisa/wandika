@@ -101,11 +101,10 @@ describe("accounts and vaults", () => {
     expect((await local.run<Status>("status")).vault?.name).toBe("Mine");
   });
 
-  test("repositories can be listed and created", async () => {
+  test("repositories can be listed", async () => {
     const { run } = await fresh();
     const repos = await run<{ full_name: string }[]>("repos_list");
     expect(repos.map((r) => r.full_name)).toEqual(["jordan-jakisa/notes", "jordan-jakisa/wandika", "jordan-jakisa/rowpin"]);
-    expect(await run("repo_create", { name: "journal" })).toMatchObject({ full_name: "jordan-jakisa/journal", private: true, pushed_at: null });
   });
 
   test("opening a GitHub vault pulls every note and remembers it", async () => {

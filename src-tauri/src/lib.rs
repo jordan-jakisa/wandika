@@ -57,7 +57,6 @@ pub fn run() {
             commands::github_poll_login,
             commands::github_sign_out,
             commands::repos_list,
-            commands::repo_create,
             commands::vault_open,
             commands::vault_close,
             commands::vault_create_local,

@@ -10,18 +10,34 @@ Checked against the providers' docs on 2 November 2026.
 
 ## 1. GitHub sync (optional)
 
-1. GitHub → profile picture → **Settings** → **Developer settings** → **OAuth apps** →
-   **New OAuth App**.
-2. Application name `Wandika`, Homepage URL `https://github.com/jordan-jakisa/wandika`,
-   Authorization callback URL `https://github.com/jordan-jakisa/wandika` (device flow doesn't use it,
-   but the form asks for one).
-3. Tick **Enable Device Flow**. If the form shows **Expire user access tokens**, untick it: renewing
-   an expired token needs the client secret, which an app on a phone can't keep. Then click
-   **Register application**.
-4. Copy the **Client ID** into `WANDIKA_GITHUB_CLIENT_ID`. Do not create a client secret.
+Wandika signs in as a **GitHub App**, so people choose exactly which repositories it can use, and
+it can touch only their files. (Earlier versions used an OAuth app with the `repo` scope, which
+could read every repository the account can.)
 
-Wandika asks for the `repo` scope, which covers private repositories. It reaches only the repository
-you pick, but the token itself can read any repository your account can.
+1. GitHub → profile picture → **Settings** → **Developer settings** → **GitHub Apps** →
+   **New GitHub App**.
+2. **GitHub App name** `Wandika` (or another free name). Its page address,
+   `github.com/apps/<name>`, gives the short name for step 6. **Homepage URL**
+   `https://github.com/jordan-jakisa/wandika`.
+3. **Identifying and authorizing users**: leave **Callback URL** empty, keep **Expire user
+   authorization tokens** ticked, and tick **Enable Device Flow**. Tokens last eight hours and
+   Wandika renews them itself; a device-flow sign-in needs no client secret for that.
+4. **Webhook**: untick **Active**. Wandika has no server.
+5. **Permissions** → **Repository permissions**: **Contents** read and write (**Metadata** read-only
+   is added automatically). Nothing else, and no account permissions. **Where can this GitHub App be
+   installed?** → **Any account**. Then **Create GitHub App**. Don't generate a client secret or a
+   private key; Wandika uses neither.
+6. Copy the **Client ID** (it starts with `Iv`) into `WANDIKA_GITHUB_CLIENT_ID`, and the short name
+   into `WANDIKA_GITHUB_APP_SLUG`.
+
+On the start screen, Wandika links to the app's page, where people install it on **Only select
+repositories**. GitHub doesn't let an app create a repository in a personal account, so a new vault
+starts with GitHub's own **New repository** page, filled in by Wandika; the repository opens in
+Wandika as soon as the app has access to it.
+
+Switching from the old OAuth app: once a build with the GitHub App is out, delete the old OAuth app
+(Developer settings → OAuth apps → Wandika → **Delete application**). That ends every old `repo`
+token, and Wandika asks each person to sign in again.
 
 ## 2. Google: Gmail, Calendar and Tasks (Mac and iPhone)
 

@@ -60,7 +60,7 @@ test("signed in, it lists repositories and offers to sign out", async () => {
   vi.spyOn(api, "reposList").mockResolvedValue([]);
   const signOut = vi.spyOn(app, "signOut").mockResolvedValue();
   renderStart();
-  expect(await screen.findByLabelText("New private repository")).toBeInTheDocument();
+  expect(await screen.findByLabelText("Repository name")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Sign out of GitHub (jordan-jakisa)" }));
   expect(signOut).toHaveBeenCalled();
 });

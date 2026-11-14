@@ -1,27 +1,32 @@
-//! GitHub: device-flow sign-in and the Git Data API that sync is built on.
+//! GitHub: device-flow sign-in through the Wandika GitHub App, and the REST calls sync needs.
+//!
+//! Wandika signs in as a GitHub App, not an OAuth app, so its token reaches only the repositories
+//! the person installed the app on, and only their contents. App tokens last eight hours; Wandika
+//! renews them with the refresh token it was given at sign-in.
+//! https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app
 
 use crate::config;
 use crate::error::{msg, Error, Result};
+use crate::secrets::Secrets;
 use reqwest::{Method, RequestBuilder, Response};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
-use std::collections::VecDeque;
+use serde_json::Value;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 const API: &str = "https://api.github.com";
+const TOKEN_URL: &str = "https://github.com/login/oauth/access_token";
+/// A token this close to running out is renewed before use, so a sync never starts with one that
+/// lapses halfway through.
+const RENEW_BEFORE: i64 = 10 * 60;
+/// One renewal at a time: GitHub replaces the refresh token each time, so two at once would leave
+/// one of them holding a refresh token that no longer works.
+static RENEWING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
-// GitHub's secondary limits allow 80 content-creating requests a minute and 500 an hour, and warn
-// that carrying on while limited can get an integration banned. Wandika stays under both with a
-// margin, and after a limit response it sends nothing until GitHub says it may.
+// When GitHub says to slow down, Wandika sends nothing until GitHub says it may: carrying on while
+// limited can get an integration banned.
 // https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api
-const WRITES_PER_MINUTE: usize = 70;
-const WRITES_PER_HOUR: usize = 450;
-/// GitHub's best practice for many writes: one at a time, at least a second apart.
-/// https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api
-const WRITE_GAP: Duration = Duration::from_secs(1);
-static WRITES: Mutex<VecDeque<Instant>> = Mutex::new(VecDeque::new());
 static BLOCKED_UNTIL: Mutex<Option<Instant>> = Mutex::new(None);
 
 fn limited() -> Error {
@@ -33,40 +38,6 @@ fn guard() -> Result<()> {
     match *BLOCKED_UNTIL.lock().unwrap() {
         Some(until) if Instant::now() < until => Err(limited()),
         _ => Ok(()),
-    }
-}
-
-/// How long the next write must wait, or None when it may go now (and is then counted).
-fn slot(q: &mut VecDeque<Instant>, now: Instant) -> Result<Option<Duration>> {
-    while q.front().is_some_and(|t| now.duration_since(*t) > Duration::from_secs(3600)) {
-        q.pop_front();
-    }
-    if q.len() >= WRITES_PER_HOUR {
-        return Err(limited());
-    }
-    if let Some(last) = q.back() {
-        let since = now.duration_since(*last);
-        if since < WRITE_GAP {
-            return Ok(Some(WRITE_GAP - since));
-        }
-    }
-    let in_minute: Vec<&Instant> = q.iter().filter(|t| now.duration_since(**t) < Duration::from_secs(60)).collect();
-    if in_minute.len() >= WRITES_PER_MINUTE {
-        return Ok(Some(Duration::from_secs(60).saturating_sub(now.duration_since(*in_minute[0])) + Duration::from_millis(50)));
-    }
-    q.push_back(now);
-    Ok(None)
-}
-
-/// Waits for a free slot for one content-creating request; fails when this hour's budget is spent.
-async fn pace() -> Result<()> {
-    loop {
-        guard()?;
-        let wait = slot(&mut WRITES.lock().unwrap(), Instant::now())?;
-        match wait {
-            Some(d) => tokio::time::sleep(d).await,
-            None => return Ok(()),
-        }
     }
 }
 
@@ -103,18 +74,52 @@ pub struct DeviceCode {
     pub interval: u64,
 }
 
+/// The saved sign-in. Tokens from the GitHub App expire; one saved by an earlier version, from the
+/// old OAuth app, is a plain string that doesn't.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct Tokens {
+    pub access_token: String,
+    #[serde(default)]
+    pub refresh_token: Option<String>,
+    /// Unix seconds; `None` for a token that doesn't expire.
+    #[serde(default)]
+    pub expires_at: Option<i64>,
+}
+
+impl Tokens {
+    fn from_answer(v: &Value, now: i64) -> Option<Tokens> {
+        Some(Tokens {
+            access_token: v["access_token"].as_str()?.to_string(),
+            refresh_token: v["refresh_token"].as_str().map(str::to_string),
+            expires_at: v["expires_in"].as_i64().map(|s| now + s),
+        })
+    }
+
+    /// The saved sign-in, in either form.
+    pub fn load(secrets: &Secrets, key: &str) -> Option<Tokens> {
+        secrets.get_json(key).or_else(|| {
+            secrets.get(key).map(|plain| Tokens { access_token: plain, refresh_token: None, expires_at: None })
+        })
+    }
+
+    fn fresh(&self, now: i64) -> bool {
+        self.expires_at.is_none_or(|at| at - RENEW_BEFORE > now)
+    }
+}
+
 pub enum Poll {
     Pending,
     SlowDown,
-    Done(String),
+    Done(Tokens),
 }
 
 pub async fn start_device_flow(http: &reqwest::Client) -> Result<DeviceCode> {
     let client_id = config::github_client_id()?;
+    // No scope: a GitHub App's token carries the permissions set on the app itself.
     let v: Value = http
         .post("https://github.com/login/device/code")
         .header("Accept", "application/json")
-        .form(&[("client_id", client_id), ("scope", "repo read:user")])
+        .form(&[("client_id", client_id)])
         .send()
         .await?
         .json()
@@ -134,7 +139,7 @@ fn device_code(v: Value) -> Result<DeviceCode> {
 pub async fn poll_device_flow(http: &reqwest::Client, device_code: &str) -> Result<Poll> {
     let client_id = config::github_client_id()?;
     let v: Value = http
-        .post("https://github.com/login/oauth/access_token")
+        .post(TOKEN_URL)
         .header("Accept", "application/json")
         .form(&[
             ("client_id", client_id),
@@ -156,11 +161,61 @@ fn poll_answer(v: &Value) -> Result<Poll> {
         Some("expired_token") => Err(msg("The code expired. Start sign-in again.")),
         Some("access_denied") => Err(msg("Sign-in was cancelled on GitHub.")),
         Some(_) => Err(msg("GitHub sign-in didn't finish. Start again.")),
-        None => v["access_token"]
-            .as_str()
-            .map(|t| Poll::Done(t.to_string()))
+        None => Tokens::from_answer(v, chrono::Utc::now().timestamp())
+            .map(Poll::Done)
             .ok_or_else(|| msg("GitHub didn't return a token.")),
     }
+}
+
+/// A token that is good for at least a few more minutes, renewed and saved when it isn't.
+pub async fn access_token(http: &reqwest::Client, secrets: &Secrets, key: &str) -> Result<String> {
+    let _one_at_a_time = RENEWING.lock().await;
+    let tokens = Tokens::load(secrets, key).ok_or_else(|| msg("Sign in with GitHub first."))?;
+    if tokens.fresh(chrono::Utc::now().timestamp()) {
+        return Ok(tokens.access_token);
+    }
+    let refresh_token = tokens.refresh_token.ok_or(Error::GitHubSignIn)?;
+    let renewed = renew(http, TOKEN_URL, config::github_client_id()?, &refresh_token).await?;
+    secrets.set_json(key, &renewed)?;
+    Ok(renewed.access_token)
+}
+
+/// Trades a refresh token for new tokens. A device-flow sign-in needs no client secret for this.
+/// https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/refreshing-user-access-tokens
+async fn renew(http: &reqwest::Client, url: &str, client_id: &str, refresh_token: &str) -> Result<Tokens> {
+    let v: Value = http
+        .post(url)
+        .header("Accept", "application/json")
+        .form(&[("client_id", client_id), ("grant_type", "refresh_token"), ("refresh_token", refresh_token)])
+        .send()
+        .await?
+        .json()
+        .await?;
+    renew_answer(&v, chrono::Utc::now().timestamp())
+}
+
+/// A refused renewal (the refresh token expired after six months unused, or the person removed
+/// Wandika's access) means signing in again.
+fn renew_answer(v: &Value, now: i64) -> Result<Tokens> {
+    if v.get("error").is_some() {
+        return Err(Error::GitHubSignIn);
+    }
+    Tokens::from_answer(v, now).ok_or_else(|| msg("GitHub didn't return a token."))
+}
+
+#[derive(Deserialize)]
+struct Installations {
+    installations: Vec<Installation>,
+}
+
+#[derive(Deserialize)]
+struct Installation {
+    id: u64,
+}
+
+#[derive(Deserialize)]
+struct InstallationRepos {
+    repositories: Vec<Repo>,
 }
 
 #[derive(Clone)]
@@ -225,33 +280,46 @@ impl GitHub {
         Self::json(self.req(Method::GET, "/user")).await
     }
 
+    /// The repositories Wandika may use: those on accounts where the person installed the
+    /// Wandika app, and that they chose for it. Most recently pushed first.
     pub async fn repos(&self) -> Result<Vec<Repo>> {
-        let mut all = Vec::new();
-        for page in 1..=10 {
-            let batch: Vec<Repo> = Self::json(self.req(
-                Method::GET,
-                &format!("/user/repos?per_page=100&sort=pushed&page={page}"),
-            ))
-            .await?;
-            let done = batch.len() < 100;
-            all.extend(batch);
+        let mut ids = Vec::new();
+        for page in 1..=3 {
+            let batch: Installations =
+                Self::json(self.req(Method::GET, &format!("/user/installations?per_page=100&page={page}"))).await?;
+            let done = batch.installations.len() < 100;
+            ids.extend(batch.installations.into_iter().map(|i| i.id));
             if done {
                 break;
             }
         }
+        let mut all: Vec<Repo> = Vec::new();
+        let mut pages = 0;
+        'installs: for id in ids {
+            for page in 1.. {
+                if pages == 10 {
+                    break 'installs;
+                }
+                pages += 1;
+                let batch: InstallationRepos = Self::json(self.req(
+                    Method::GET,
+                    &format!("/user/installations/{id}/repositories?per_page=100&page={page}"),
+                ))
+                .await?;
+                let done = batch.repositories.len() < 100;
+                for r in batch.repositories {
+                    if !all.iter().any(|a| a.full_name == r.full_name) {
+                        all.push(r);
+                    }
+                }
+                if done {
+                    break;
+                }
+            }
+        }
+        // ISO 8601 times sort as text; a repository never pushed to goes last.
+        all.sort_by(|a, b| b.pushed_at.cmp(&a.pushed_at));
         Ok(all)
-    }
-
-    pub async fn create_repo(&self, name: &str) -> Result<Repo> {
-        pace().await?;
-        Self::json(self.req(Method::POST, "/user/repos").json(&json!({
-            "name": name,
-            "private": true,
-            // Empty, so the first sync starts it with the Welcome note.
-            "auto_init": false,
-            "description": "Notes kept with Wandika",
-        })))
-        .await
     }
 
     pub async fn repo(&self, owner: &str, repo: &str) -> Result<Repo> {
@@ -263,15 +331,15 @@ impl GitHub {
 mod tests {
     use super::*;
     use crate::test_http::{block_on, reply, serve};
+    use serde_json::json;
 
-    /// The write budget and the rate-limit stop are shared by the whole app, so these tests take
+    /// The rate-limit stop is shared by the whole app, so these tests take
     /// turns and start from a clean slate.
     static SERIAL: Mutex<()> = Mutex::new(());
 
     fn turn() -> std::sync::MutexGuard<'static, ()> {
         let guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
         *BLOCKED_UNTIL.lock().unwrap() = None;
-        WRITES.lock().unwrap().clear();
         guard
     }
 
@@ -317,35 +385,45 @@ mod tests {
     }
 
     #[test]
-    fn lists_repositories_a_page_at_a_time_up_to_ten_pages() {
+    fn lists_the_repositories_wandika_was_given_newest_first() {
         let _t = turn();
-        let page = |n: usize, from: usize| Value::Array((from..from + n).map(|i| repo_json(&format!("r{i}"))).collect()).to_string();
-        let s = serve(vec![reply(200, page(100, 0)), reply(200, page(3, 100))]);
-        let repos = block_on(gh(&s.url).repos()).unwrap();
-        assert_eq!(repos.len(), 103);
-        assert_eq!(repos[102].full_name, "amina/r102");
+        let installs = |ids: &[u64]| json!({ "total_count": ids.len(), "installations": ids.iter().map(|i| json!({ "id": i })).collect::<Vec<_>>() }).to_string();
+        let repos = |list: Vec<Value>| json!({ "total_count": list.len(), "repositories": list }).to_string();
+        let at = |name: &str, pushed: Option<&str>| {
+            let mut r = repo_json(name);
+            r["pushed_at"] = pushed.map_or(Value::Null, |p| json!(p));
+            r
+        };
+        let s = serve(vec![
+            reply(200, installs(&[7, 9])),
+            reply(200, repos(vec![at("old", Some("2026-01-01T00:00:00Z")), at("empty", None)])),
+            reply(200, repos(vec![at("new", Some("2026-11-01T00:00:00Z")), at("old", Some("2026-01-01T00:00:00Z"))])),
+        ]);
+        let list = block_on(gh(&s.url).repos()).unwrap();
+        let names: Vec<&str> = list.iter().map(|r| r.name.as_str()).collect();
+        assert_eq!(names, ["new", "old", "empty"], "newest first, each once, never-pushed last");
         let targets: Vec<String> = s.requests().into_iter().map(|r| r.target).collect();
-        assert_eq!(targets, ["/user/repos?per_page=100&sort=pushed&page=1", "/user/repos?per_page=100&sort=pushed&page=2"]);
+        assert_eq!(
+            targets,
+            [
+                "/user/installations?per_page=100&page=1",
+                "/user/installations/7/repositories?per_page=100&page=1",
+                "/user/installations/9/repositories?per_page=100&page=1",
+            ]
+        );
 
-        let s = serve((0..11).map(|i| reply(200, page(100, i * 100))).collect());
+        let page = |n: usize, from: usize| repos((from..from + n).map(|i| repo_json(&format!("r{i}"))).collect());
+        let s = serve(vec![reply(200, installs(&[1])), reply(200, page(100, 0)), reply(200, page(3, 100))]);
+        assert_eq!(block_on(gh(&s.url).repos()).unwrap().len(), 103, "a second page when the first is full");
+
+        let mut answers = vec![reply(200, installs(&[1]))];
+        answers.extend((0..11).map(|i| reply(200, page(100, i * 100))));
+        let s = serve(answers);
         assert_eq!(block_on(gh(&s.url).repos()).unwrap().len(), 1000);
-        assert_eq!(s.requests().len(), 10, "never more than ten pages");
+        assert_eq!(s.requests().len(), 11, "never more than ten pages of repositories");
 
-        let s = serve(vec![reply(200, "[]")]);
-        assert!(block_on(gh(&s.url).repos()).unwrap().is_empty());
-    }
-
-    #[test]
-    fn creates_a_private_empty_repository_and_counts_the_write() {
-        let _t = turn();
-        let s = serve(vec![reply(201, repo_json("notes").to_string())]);
-        let repo = block_on(gh(&s.url).create_repo("notes")).unwrap();
-        assert_eq!(repo.name, "notes");
-        let req = &s.requests()[0];
-        assert_eq!((req.method.as_str(), req.target.as_str()), ("POST", "/user/repos"));
-        let body: Value = serde_json::from_str(&req.body).unwrap();
-        assert_eq!(body, json!({ "name": "notes", "private": true, "auto_init": false, "description": "Notes kept with Wandika" }));
-        assert_eq!(WRITES.lock().unwrap().len(), 1);
+        let s = serve(vec![reply(200, installs(&[]))]);
+        assert!(block_on(gh(&s.url).repos()).unwrap().is_empty(), "the app isn't installed anywhere yet");
     }
 
     #[test]
@@ -354,7 +432,6 @@ mod tests {
         let s = serve(vec![
             reply(401, r#"{"message":"Bad credentials"}"#),
             reply(404, r#"{"message":"Not Found","documentation_url":"x"}"#),
-            reply(422, r#"{"message":"Repository creation failed.","errors":[{"message":"name already exists on this account"}]}"#),
             reply(502, "<html>Bad gateway</html>"),
             reply(403, r#"{"message":"Resource not accessible by integration"}"#),
             reply(200, "not json"),
@@ -364,8 +441,6 @@ mod tests {
         assert_eq!(e.friendly().0, "github_auth");
         let e = block_on(g.repo("a", "gone")).unwrap_err();
         assert!(matches!(&e, Error::GitHub { status: 404, message } if message == "Not Found"));
-        let e = block_on(g.create_repo("taken")).unwrap_err();
-        assert_eq!(e.friendly().0, "github_name_taken");
         let e = block_on(g.user()).unwrap_err();
         assert!(matches!(&e, Error::GitHub { status: 502, message } if message == "<html>Bad gateway</html>"), "a body that isn't JSON is kept whole");
         let e = block_on(g.user()).unwrap_err();
@@ -373,24 +448,6 @@ mod tests {
         assert!(blocked_for().is_none(), "a plain refusal is not a rate limit");
         let e = block_on(g.user()).unwrap_err();
         assert_eq!(e.friendly().0, "bad_response");
-    }
-
-    #[test]
-    fn writes_go_one_a_second_and_stay_under_the_minute_and_hour_limits() {
-        let start = Instant::now();
-        let mut q = VecDeque::new();
-        assert_eq!(slot(&mut q, start).unwrap(), None);
-        let wait = slot(&mut q, start + Duration::from_millis(300)).unwrap().unwrap();
-        assert_eq!(wait, Duration::from_millis(700), "a second after the last write");
-        assert_eq!(q.len(), 1, "a write that waits isn't counted");
-        assert_eq!(slot(&mut q, start + WRITE_GAP).unwrap(), None);
-        // A second apart is at most 60 a minute, under the 70 a minute limit, which stays as a backstop.
-        let mut busy: VecDeque<Instant> = (0..WRITES_PER_MINUTE).map(|i| start + Duration::from_millis(i as u64 * 100)).collect();
-        let wait = slot(&mut busy, start + Duration::from_secs(10)).unwrap().unwrap();
-        assert!(wait > Duration::from_secs(49) && wait <= Duration::from_secs(51), "the minute's budget is spent: {wait:?}");
-        let mut full: VecDeque<Instant> = (0..WRITES_PER_HOUR).map(|i| start + Duration::from_secs(i as u64 * 7)).collect();
-        assert!(slot(&mut full, start + Duration::from_secs(3500)).is_err(), "the hour's budget is spent");
-        assert_eq!(slot(&mut full, start + Duration::from_secs(3_600 + 7 * 450)).unwrap(), None, "old writes age out");
     }
 
     #[test]
@@ -406,9 +463,7 @@ mod tests {
         let s = serve(vec![reply(200, "{}")]);
         let e = block_on(gh(&s.url).user()).unwrap_err();
         assert_eq!(e.friendly().0, "github_rate_limit");
-        assert!(block_on(gh(&s.url).create_repo("x")).is_err());
         assert!(s.requests().is_empty());
-        assert!(WRITES.lock().unwrap().is_empty(), "a refused write isn't counted");
     }
 
     #[test]
@@ -438,44 +493,6 @@ mod tests {
     }
 
     #[test]
-    fn writes_are_paced_under_github_limits() {
-        let _t = turn();
-        block_on(pace()).unwrap();
-        assert_eq!(WRITES.lock().unwrap().len(), 1);
-
-        // This hour's budget is spent: refused at once.
-        {
-            let mut q = WRITES.lock().unwrap();
-            q.clear();
-            let now = Instant::now();
-            q.extend((0..WRITES_PER_HOUR).map(|i| now - Duration::from_secs(3000) + Duration::from_millis(i as u64)));
-        }
-        assert_eq!(block_on(pace()).unwrap_err().friendly().0, "github_rate_limit");
-
-        // Writes older than an hour no longer count.
-        {
-            let mut q = WRITES.lock().unwrap();
-            q.clear();
-            let now = Instant::now();
-            q.extend((0..WRITES_PER_HOUR).map(|_| now - Duration::from_secs(3601)));
-        }
-        block_on(pace()).unwrap();
-        assert_eq!(WRITES.lock().unwrap().len(), 1);
-
-        // This minute is full: waits until the oldest is a minute old, then goes.
-        {
-            let mut q = WRITES.lock().unwrap();
-            q.clear();
-            let first = Instant::now() - Duration::from_millis(59_800);
-            q.extend((0..WRITES_PER_MINUTE).map(|_| first));
-        }
-        let t = Instant::now();
-        block_on(pace()).unwrap();
-        let waited = t.elapsed();
-        assert!(waited >= Duration::from_millis(200) && waited < Duration::from_secs(5), "{waited:?}");
-    }
-
-    #[test]
     fn device_flow_answers() {
         let code = device_code(json!({ "device_code": "dc", "user_code": "ABCD-1234", "verification_uri": "https://github.com/login/device", "expires_in": 899, "interval": 5 })).unwrap();
         assert_eq!((code.user_code.as_str(), code.interval), ("ABCD-1234", 5));
@@ -487,11 +504,58 @@ mod tests {
 
         assert!(matches!(poll_answer(&json!({ "error": "authorization_pending" })), Ok(Poll::Pending)));
         assert!(matches!(poll_answer(&json!({ "error": "slow_down", "interval": 10 })), Ok(Poll::SlowDown)));
-        assert!(matches!(poll_answer(&json!({ "access_token": "gho_x", "scope": "repo" })), Ok(Poll::Done(t)) if t == "gho_x"));
+        let done = poll_answer(&json!({ "access_token": "ghu_x", "expires_in": 28800, "refresh_token": "ghr_y", "refresh_token_expires_in": 15897600, "token_type": "bearer", "scope": "" }));
+        let Ok(Poll::Done(t)) = done else { panic!("signed in") };
+        assert_eq!((t.access_token.as_str(), t.refresh_token.as_deref()), ("ghu_x", Some("ghr_y")));
+        let left = t.expires_at.unwrap() - chrono::Utc::now().timestamp();
+        assert!((28790..=28800).contains(&left), "{left}");
+        let Ok(Poll::Done(t)) = poll_answer(&json!({ "access_token": "ghu_z" })) else { panic!("signed in") };
+        assert_eq!((t.refresh_token, t.expires_at), (None, None), "an app that opted out of expiry");
         let said = |v: Value| poll_answer(&v).err().unwrap().to_string();
         assert_eq!(said(json!({ "error": "expired_token" })), "The code expired. Start sign-in again.");
         assert_eq!(said(json!({ "error": "access_denied" })), "Sign-in was cancelled on GitHub.");
         assert_eq!(said(json!({ "error": "incorrect_device_code" })), "GitHub sign-in didn't finish. Start again.");
         assert_eq!(said(json!({ "token_type": "bearer" })), "GitHub didn't return a token.");
+    }
+
+    #[test]
+    fn tokens_are_renewed_before_they_run_out() {
+        let now = 1_000_000;
+        let t = |at: Option<i64>| Tokens { access_token: "a".into(), refresh_token: Some("r".into()), expires_at: at };
+        assert!(t(None).fresh(now), "an old OAuth token doesn't expire");
+        assert!(t(Some(now + 3600)).fresh(now));
+        assert!(!t(Some(now + 300)).fresh(now), "five minutes left: renew first");
+        assert!(!t(Some(now - 1)).fresh(now));
+    }
+
+    #[test]
+    fn a_saved_sign_in_reads_in_either_form() {
+        let dir = std::env::temp_dir().join(format!("wandika-gh-tokens-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let secrets = Secrets::new(dir.clone());
+        assert_eq!(Tokens::load(&secrets, "github"), None);
+        secrets.set("github", "gho_old").unwrap();
+        assert_eq!(Tokens::load(&secrets, "github"), Some(Tokens { access_token: "gho_old".into(), refresh_token: None, expires_at: None }));
+        let saved = Tokens { access_token: "ghu_a".into(), refresh_token: Some("ghr_b".into()), expires_at: Some(5) };
+        secrets.set_json("github", &saved).unwrap();
+        assert_eq!(Tokens::load(&secrets, "github"), Some(saved));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn renewing_trades_the_refresh_token_for_new_tokens() {
+        let s = serve(vec![
+            reply(200, r#"{"access_token":"ghu_new","expires_in":28800,"refresh_token":"ghr_new","refresh_token_expires_in":15897600,"token_type":"bearer"}"#),
+            reply(200, r#"{"error":"bad_refresh_token","error_description":"The refresh token passed is incorrect or expired."}"#),
+        ]);
+        let http = reqwest::Client::new();
+        let t = block_on(renew(&http, &s.url, "Iv23client", "ghr_old")).unwrap();
+        assert_eq!((t.access_token.as_str(), t.refresh_token.as_deref()), ("ghu_new", Some("ghr_new")));
+        let req = &s.requests()[0];
+        assert_eq!(req.method, "POST");
+        assert_eq!(req.body, "client_id=Iv23client&grant_type=refresh_token&refresh_token=ghr_old", "no client secret");
+        let e = block_on(renew(&http, &s.url, "Iv23client", "ghr_gone")).unwrap_err();
+        assert_eq!(e.friendly().0, "github_auth", "a refused renewal means signing in again");
+        assert_eq!(renew_answer(&json!({ "token_type": "bearer" }), 0).unwrap_err().to_string(), "GitHub didn't return a token.");
     }
 }
