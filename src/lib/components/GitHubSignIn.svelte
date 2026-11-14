@@ -84,7 +84,7 @@
       {starting ? "Contacting GitHub…" : "Sign in with GitHub"}
     </button>
     {#if error}<p class="error" role="alert">{error}</p>{/if}
-    <p class="muted small">Wandika asks GitHub for access to your repositories so it can read and save your notes there.</p>
+    <p class="muted small">After you sign in, you choose which repositories Wandika may use. It can read and save files only in those.</p>
   {:else}
     <p>Enter this code on GitHub to finish signing in.</p>
     <p class="code" aria-label={`Code ${code.user_code.split("").join(" ")}`}>{code.user_code}</p>

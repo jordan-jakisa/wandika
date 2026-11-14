@@ -101,8 +101,9 @@ impl App {
         crate::vault::write_atomic(&self.data.join("settings.json"), &serde_json::to_vec_pretty(&*s)?)
     }
 
-    pub fn github(&self) -> Result<GitHub> {
-        let token = self.secrets.get(GITHUB_KEY).ok_or_else(|| msg("Sign in with GitHub first."))?;
+    /// A GitHub client with a token that is good for a while yet, renewed first if need be.
+    pub async fn github(&self) -> Result<GitHub> {
+        let token = crate::github::access_token(&self.http, &self.secrets, GITHUB_KEY).await?;
         Ok(GitHub::new(self.http.clone(), token))
     }
 
@@ -164,7 +165,7 @@ mod tests {
         assert_eq!(app.vault().err().unwrap().to_string(), "Open or create a vault first.");
         assert_eq!(app.target().err().unwrap().to_string(), "Open or create a vault first.");
         assert!(app.paths().is_err() && app.root().is_err() && app.crypto().is_err());
-        assert_eq!(app.github().err().unwrap().to_string(), "Sign in with GitHub first.");
+        assert_eq!(crate::test_http::block_on(app.github()).err().unwrap().to_string(), "Sign in with GitHub first.");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -219,8 +220,16 @@ mod tests {
     fn signing_in_gives_a_github_client_with_the_token() {
         let dir = data("token");
         let app = App::new(dir.clone());
+        let block_on = crate::test_http::block_on;
         app.secrets.set(GITHUB_KEY, "gho_saved").unwrap();
-        assert_eq!(app.github().unwrap().token(), "gho_saved");
+        assert_eq!(block_on(app.github()).unwrap().token(), "gho_saved", "a token from the old OAuth app still works");
+        let later = chrono::Utc::now().timestamp() + 8 * 3600;
+        let tokens = crate::github::Tokens { access_token: "ghu_app".into(), refresh_token: Some("ghr_r".into()), expires_at: Some(later) };
+        app.secrets.set_json(GITHUB_KEY, &tokens).unwrap();
+        assert_eq!(block_on(app.github()).unwrap().token(), "ghu_app");
+        let expired = crate::github::Tokens { refresh_token: None, expires_at: Some(later - 9 * 3600), ..tokens };
+        app.secrets.set_json(GITHUB_KEY, &expired).unwrap();
+        assert_eq!(block_on(app.github()).err().unwrap().friendly().0, "github_auth", "no way to renew: sign in again");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

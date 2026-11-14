@@ -49,7 +49,7 @@ test("says it is loading, then lists your repositories", async () => {
   render(RepoPicker);
   expect(screen.getByRole("status")).toHaveTextContent("Loading your repositories…");
   answer(repos);
-  const list = await screen.findByRole("list");
+  const list = await screen.findByRole("list", { name: "Repositories" });
   expect(within(list).getAllByRole("button")).toHaveLength(3);
   expect(within(list).getByRole("button", { name: /jordan-jakisa\/notes/ })).toHaveTextContent("Everything I write down");
   expect(within(list).getByRole("button", { name: /jordan-jakisa\/notes/ })).toHaveTextContent("Updated 1 h ago");
@@ -70,21 +70,23 @@ test("the filter narrows the list and says when nothing matches", async () => {
   const user = userEvent.setup();
   vi.spyOn(api, "reposList").mockResolvedValue(repos);
   render(RepoPicker);
-  await screen.findByRole("list");
+  await screen.findByRole("list", { name: "Repositories" });
   const filter = screen.getByLabelText("Filter repositories");
   await user.type(filter, "ROW");
-  expect(within(screen.getByRole("list")).getAllByRole("button")).toHaveLength(1);
+  expect(within(screen.getByRole("list", { name: "Repositories" })).getAllByRole("button")).toHaveLength(1);
   expect(screen.getByRole("button", { name: /rowpin/ })).toBeInTheDocument();
   await user.clear(filter);
   await user.type(filter, "zzz");
   expect(screen.getByText("No repositories match “zzz”.")).toBeInTheDocument();
 });
 
-test("with no repositories it points to creating one", async () => {
+test("with no repositories it points to creating one or giving access", async () => {
   vi.spyOn(api, "reposList").mockResolvedValue([]);
   render(RepoPicker);
-  expect(await screen.findByText("You don't have any repositories yet. Create one above.")).toBeInTheDocument();
-  expect(screen.getByLabelText("New private repository")).toHaveValue("notes");
+  expect(
+    await screen.findByText("Wandika can't use any of your repositories yet. Create one above, or give it access to one you have."),
+  ).toBeInTheDocument();
+  expect(screen.getByLabelText("Repository name")).toHaveValue("notes");
 });
 
 test("a failed load shows why, and Try again loads again", async () => {
@@ -104,22 +106,26 @@ test("a failed load shows why, and Try again loads again", async () => {
 test("suggests a new repository name that isn't taken", async () => {
   vi.spyOn(api, "reposList").mockResolvedValue([repo("notes"), repo("notes-2")]);
   render(RepoPicker);
-  await waitFor(() => expect(screen.getByLabelText("New private repository")).toHaveValue("notes-3"));
-  expect(screen.getByRole("button", { name: "Create and open" })).toBeEnabled();
+  await waitFor(() => expect(screen.getByLabelText("Repository name")).toHaveValue("notes-3"));
+  expect(screen.getByRole("button", { name: "Create it on GitHub" })).toBeEnabled();
 });
 
 test("a name you already have can't be created again", async () => {
   const user = userEvent.setup();
   vi.spyOn(api, "reposList").mockResolvedValue(repos);
   render(RepoPicker);
-  await screen.findByRole("list");
-  const name = screen.getByLabelText("New private repository");
+  await screen.findByRole("list", { name: "Repositories" });
+  const name = screen.getByLabelText("Repository name");
+  const create = screen.getByRole("button", { name: "Create it on GitHub" });
   await user.clear(name);
   await user.type(name, "Rowpin");
   expect(screen.getByText(/You already have “Rowpin”/)).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Create and open" })).toBeDisabled();
+  expect(create).toBeDisabled();
   await user.clear(name);
-  expect(screen.getByRole("button", { name: "Create and open" })).toBeDisabled();
+  expect(create).toBeDisabled();
+  await user.type(name, "my notes");
+  expect(screen.getByText("Use letters, numbers, dashes, dots or underscores.")).toBeInTheDocument();
+  expect(create).toBeDisabled();
 });
 
 test("picking a repository opens it as the vault", async () => {
@@ -181,32 +187,71 @@ test("a failed open shows why and goes back to the list", async () => {
   expect(app.syncing).toBe(false);
 });
 
-test("create and open makes a private repository and opens it", async () => {
+test("Create it on GitHub opens GitHub's page, then opens the repository once Wandika can see it", async () => {
   const user = userEvent.setup();
-  vi.spyOn(api, "reposList").mockResolvedValue(repos);
-  const create = vi.spyOn(api, "repoCreate").mockResolvedValue(repo("journal"));
+  const winOpen = vi.spyOn(window, "open").mockReturnValue(null);
+  const list = vi.spyOn(api, "reposList").mockResolvedValueOnce(repos).mockResolvedValueOnce(repos).mockResolvedValue([...repos, repo("journal")]);
   const open = vi.spyOn(api, "vaultOpen").mockResolvedValue(report);
   vi.spyOn(app, "enterVault").mockResolvedValue();
   const ondone = vi.fn();
   render(RepoPicker, { props: { ondone } });
-  await screen.findByRole("list");
-  const name = screen.getByLabelText("New private repository");
+  await screen.findByRole("list", { name: "Repositories" });
+  const name = screen.getByLabelText("Repository name");
   await user.clear(name);
-  await user.type(name, "journal{Enter}");
+  await user.type(name, "journal");
+  await user.click(screen.getByRole("button", { name: "Create it on GitHub" }));
+  const url = new URL(winOpen.mock.calls[0][0] as string);
+  expect(url.origin + url.pathname).toBe("https://github.com/new");
+  expect(Object.fromEntries(url.searchParams)).toEqual({ name: "journal", visibility: "private", description: "Notes kept with Wandika" });
+  expect(screen.getByRole("status")).toHaveTextContent("Waiting for “journal”.");
+  expect(name).toBeDisabled();
+
+  // Back from GitHub before the repository exists: still waiting.
+  window.dispatchEvent(new Event("focus"));
+  await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+  expect(open).not.toHaveBeenCalled();
+  // Back again once Wandika has access: it opens.
+  window.dispatchEvent(new Event("focus"));
   await waitFor(() => expect(ondone).toHaveBeenCalled());
-  expect(create).toHaveBeenCalledWith("journal");
   expect(open).toHaveBeenCalledWith("jordan-jakisa", "journal");
 });
 
-test("a failed create shows why", async () => {
+test("waiting for a new repository can be cancelled", async () => {
   const user = userEvent.setup();
-  vi.spyOn(api, "reposList").mockResolvedValue([]);
-  vi.spyOn(api, "repoCreate").mockRejectedValue(new AppError("GitHub refused the name.", "message"));
+  vi.spyOn(window, "open").mockReturnValue(null);
+  vi.spyOn(api, "reposList").mockResolvedValue(repos);
   render(RepoPicker);
-  await screen.findByRole("list");
-  await user.click(screen.getByRole("button", { name: "Create and open" }));
-  expect(await screen.findByRole("alert")).toHaveTextContent("GitHub refused the name.");
-  expect(screen.getByRole("button", { name: "Create and open" })).toBeEnabled();
+  await screen.findByRole("list", { name: "Repositories" });
+  await user.click(screen.getByRole("button", { name: "Create it on GitHub" }));
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByText(/Waiting for/)).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Repository name")).toBeEnabled();
+});
+
+test("Give Wandika access opens the app's page on GitHub", async () => {
+  const user = userEvent.setup();
+  const winOpen = vi.spyOn(window, "open").mockReturnValue(null);
+  vi.spyOn(api, "reposList").mockResolvedValue(repos);
+  render(RepoPicker);
+  await screen.findByRole("list", { name: "Repositories" });
+  await user.click(screen.getByRole("button", { name: "Give Wandika access" }));
+  expect(winOpen).toHaveBeenLastCalledWith("https://github.com/apps/wandika/installations/new", "_blank", "noopener");
+  await user.click(screen.getByRole("button", { name: "Give Wandika access to it on GitHub" }));
+  expect(winOpen).toHaveBeenCalledTimes(2);
+
+  app.status = status({ vault: null, configured: { ...status().configured, github_app: null } });
+  await user.click(screen.getByRole("button", { name: "Give Wandika access" }));
+  expect(winOpen).toHaveBeenLastCalledWith("https://github.com/settings/installations", "_blank", "noopener");
+});
+
+test("Refresh looks for repositories again", async () => {
+  const user = userEvent.setup();
+  const list = vi.spyOn(api, "reposList").mockResolvedValueOnce([]).mockResolvedValue(repos);
+  render(RepoPicker);
+  await screen.findByText(/can't use any of your repositories yet/);
+  await user.click(screen.getByRole("button", { name: "Refresh the list" }));
+  expect(await screen.findByRole("button", { name: /jordan-jakisa\/notes/ })).toBeInTheDocument();
+  expect(list).toHaveBeenCalledTimes(2);
 });
 
 test("connect mode syncs the open vault with the repository and says so", async () => {
@@ -219,7 +264,7 @@ test("connect mode syncs the open vault with the repository and says so", async 
   const ondone = vi.fn();
   render(RepoPicker, { props: { mode: "connect", ondone } });
   expect(screen.getByText(/merged on the first sync/)).toBeInTheDocument();
-  expect(await screen.findByRole("button", { name: "Create and connect" })).toBeInTheDocument();
+  expect(await screen.findByRole("button", { name: "Create it on GitHub" })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: /jordan-jakisa\/notes/ }));
   await waitFor(() => expect(ondone).toHaveBeenCalled());
   expect(connect).toHaveBeenCalledWith("jordan-jakisa", "notes");
@@ -240,7 +285,7 @@ test("connect mode explains that nothing is deleted while it runs", async () => 
 test("works against the in-browser core", async () => {
   render(RepoPicker);
   expect(await screen.findByRole("button", { name: /jordan-jakisa\/notes/ }, { timeout: 2000 })).toBeInTheDocument();
-  expect(screen.getByLabelText("New private repository")).toHaveValue("notes-2");
+  expect(screen.getByLabelText("Repository name")).toHaveValue("notes-2");
 });
 
 test("shows the seven most recently updated; typing finds the rest", async () => {
@@ -249,7 +294,7 @@ test("shows the seven most recently updated; typing finds the rest", async () =>
   const user = userEvent.setup();
   render(RepoPicker);
   await screen.findByText("jordan-jakisa/repo-1");
-  const names = () => screen.getAllByRole("listitem").map((li) => li.querySelector(".name")?.textContent?.trim());
+  const names = () => within(screen.getByRole("list", { name: "Repositories" })).getAllByRole("listitem").map((li) => li.querySelector(".name")?.textContent?.trim());
   expect(names()).toEqual(["repo-1", "repo-2", "repo-3", "repo-4", "repo-5", "repo-6", "repo-7"].map((n) => `jordan-jakisa/${n}`));
   expect(screen.getByText(/3 more repositories\. Type its name above to find it\./)).toBeInTheDocument();
   await user.type(screen.getByLabelText("Filter repositories"), "repo-9");

@@ -194,7 +194,8 @@ fn remove_old_link(p: &Paths) {
 
 fn callbacks<'a>(remote: &'a Remote, ctl: &'a Ctl, phase: &'static str) -> RemoteCallbacks<'a> {
     let mut cb = RemoteCallbacks::new();
-    cb.credentials(move |_, _, _| Cred::userpass_plaintext(&remote.token, "x-oauth-basic"));
+    // GitHub takes any user name with a token as the password; this one suits GitHub App tokens.
+    cb.credentials(move |_, _, _| Cred::userpass_plaintext("x-access-token", &remote.token));
     cb.transfer_progress(move |p| {
         (ctl.progress)(phase, p.received_objects(), p.total_objects());
         !ctl.stopped()

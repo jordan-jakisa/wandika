@@ -42,7 +42,7 @@ After a failure, automatic syncs wait longer each time: 3, 6, 12, 24, then 48 mi
 
 | GitHub's rule | Wandika |
 |---|---|
-| REST API: 5,000 requests an hour; content-creating requests at most 80 a minute and 500 an hour; keep making requests while limited and the integration can be banned | Files travel over git, not the REST API. The API is used only to sign in, list repositories and create one; those writes are paced under 70 a minute and 450 an hour. After a limit answer, nothing is sent until GitHub's `retry-after` or reset time, and never sooner than a minute. |
+| REST API: 5,000 requests an hour; content-creating requests at most 80 a minute and 500 an hour; keep making requests while limited and the integration can be banned | Files travel over git, not the REST API. The API is used only to sign in, renew the sign-in and list repositories, and it creates nothing. After a limit answer, nothing is sent until GitHub's `retry-after` or reset time, and never sooner than a minute. |
 | Pushes: recommended at most 6 a minute per repository; 2 GB per push | At most one push per sync. A big upload's parts go 10 seconds apart, each under 100 MB. |
 | Files: warning at 50 MB, blocked at 100 MB | Files over 50 MB stay local, and the sync says which. |
 | Repositories: ideally under 1 GB, strongly recommended under 5 GB | Settings shows the synced size, and suggests `.gitignore` for big folders past 1 GB. |
@@ -56,4 +56,4 @@ Sources (read 2026-11-03):
 
 ## Sign-in
 
-Git uses the same GitHub token as the rest of the app (device-flow OAuth, `repo` scope), over HTTPS. The token stays in the system keychain.
+Git uses the same GitHub token as the rest of the app, over HTTPS. It's a GitHub App user token from the device flow: it reaches only the repositories the person gave the Wandika app, lasts eight hours, and is renewed with its refresh token before a sync starts. The tokens stay in the system keychain.

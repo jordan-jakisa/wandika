@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { Lock, Globe, Plus } from "@lucide/svelte";
-  import { api } from "../api";
+  import { Lock, Globe, ExternalLink, RefreshCw } from "@lucide/svelte";
+  import { untrack } from "svelte";
+  import { api, openUrl } from "../api";
   import { ago, app, progressText } from "../app.svelte";
   import type { Repo } from "../types";
 
@@ -12,14 +13,25 @@
   let error = $state<string | null>(null);
   let opening = $state<string | null>(null);
   let newName = $state("notes");
-  let creating = $state(false);
+  let loading = $state(false);
+  /** The name of a repository being made on GitHub: it opens as soon as Wandika can see it. */
+  let waitingFor = $state<string | null>(null);
 
   function loadRepos() {
+    if (loading) return;
+    loading = true;
     error = null;
     api
       .reposList()
       .then((r) => {
         repos = r;
+        const made = waitingFor && r.find((x) => x.name.toLowerCase() === waitingFor!.toLowerCase());
+        if (made) {
+          waitingFor = null;
+          void open(made.owner.login, made.name);
+          return;
+        }
+        if (waitingFor) return;
         // Suggest a name that isn't taken yet: notes, notes-2, notes-3…
         const taken = new Set(r.map((x) => x.name.toLowerCase()));
         if (taken.has(newName.toLowerCase())) {
@@ -28,11 +40,41 @@
           newName = `notes-${n}`;
         }
       })
-      .catch((e) => (error = (e as Error).message));
+      .catch((e) => (error = (e as Error).message))
+      .finally(() => (loading = false));
   }
-  $effect(() => loadRepos());
+  // Once, when the picker opens (loadRepos reads state that must not make this run again).
+  $effect(() => untrack(loadRepos));
 
+  // Coming back from GitHub in the browser: look again, so a repository just made or shared shows up.
+  $effect(() => {
+    const back = () => {
+      if (document.visibilityState === "visible" && !untrack(() => opening)) loadRepos();
+    };
+    window.addEventListener("focus", back);
+    document.addEventListener("visibilitychange", back);
+    return () => {
+      window.removeEventListener("focus", back);
+      document.removeEventListener("visibilitychange", back);
+    };
+  });
+
+  const nameOk = $derived(/^[A-Za-z0-9._-]+$/.test(newName.trim()));
   const nameTaken = $derived(!!repos?.some((r) => r.name.toLowerCase() === newName.trim().toLowerCase()));
+
+  /** Where people choose which repositories the Wandika GitHub App may use. */
+  const accessUrl = $derived.by(() => {
+    const slug = app.status?.configured.github_app;
+    return slug ? `https://github.com/apps/${slug}/installations/new` : "https://github.com/settings/installations";
+  });
+
+  /** GitHub can't let an app make a repository in a personal account, so GitHub's own page does it. */
+  function createOnGitHub() {
+    const name = newName.trim();
+    const q = new URLSearchParams({ name, visibility: "private", description: "Notes kept with Wandika" });
+    waitingFor = name;
+    void openUrl(`https://github.com/new?${q}`);
+  }
 
   /** The seven most recently updated; typing finds the rest. */
   const TOP = 7;
@@ -76,20 +118,6 @@
 
   const p = $derived(app.syncProgress);
   const fraction = $derived(p && p.total ? p.done / p.total : null);
-
-  async function create(e: SubmitEvent) {
-    e.preventDefault();
-    creating = true;
-    error = null;
-    try {
-      const repo = await api.repoCreate(newName);
-      await open(repo.owner.login, repo.name);
-    } catch (err) {
-      error = (err as Error).message;
-    } finally {
-      creating = false;
-    }
-  }
 </script>
 
 <div class="picker">
@@ -114,20 +142,44 @@
         : "Your notes and the repository's files are merged on the first sync. Nothing is deleted on either side."}
     </p>
 
-    <form class="create" onsubmit={create}>
-      <label for="new-repo">New private repository</label>
-      <div class="create-row">
-        <input id="new-repo" class="field" bind:value={newName} autocapitalize="off" spellcheck="false" />
-        <button class="btn primary" disabled={creating || !newName.trim() || nameTaken}>
-          <Plus size={16} />
-          {creating ? "Creating…" : mode === "open" ? "Create and open" : "Create and connect"}
-        </button>
-      </div>
-      {#if nameTaken}<p class="muted taken">You already have “{newName.trim()}”. Pick it from the list below, or choose another name.</p>{/if}
-    </form>
+    <section class="create" aria-labelledby="new-repo-title">
+      <h3 id="new-repo-title">New private repository</h3>
+      <label for="new-repo">Repository name</label>
+      <input id="new-repo" class="field" bind:value={newName} autocapitalize="off" spellcheck="false" disabled={!!waitingFor} />
+      {#if nameTaken && !waitingFor}
+        <p class="muted small">You already have “{newName.trim()}”. Pick it from the list below, or choose another name.</p>
+      {:else if newName.trim() && !nameOk}
+        <p class="muted small">Use letters, numbers, dashes, dots or underscores.</p>
+      {/if}
+      <ol class="steps">
+        <li>
+          <button class="btn primary" onclick={createOnGitHub} disabled={!nameOk || nameTaken || !!waitingFor}>
+            <ExternalLink size={16} /> Create it on GitHub
+          </button>
+          <span class="muted small">GitHub opens with the name filled in. Press Create repository there.</span>
+        </li>
+        <li>
+          <button class="btn" onclick={() => openUrl(accessUrl)}>
+            <ExternalLink size={16} /> Give Wandika access
+          </button>
+          <span class="muted small">Choose “Only select repositories” and pick the new one. Wandika sees nothing else.</span>
+        </li>
+      </ol>
+      {#if waitingFor}
+        <p class="muted small" role="status">
+          Waiting for “{waitingFor}”. It opens here as soon as Wandika has access.
+          <button class="link" onclick={() => (waitingFor = null)}>Cancel</button>
+        </p>
+      {/if}
+    </section>
 
-    <label class="sr-only" for="repo-filter">Filter repositories</label>
-    <input id="repo-filter" class="field" type="search" bind:value={filter} placeholder="Or pick one of your repositories" />
+    <div class="list-head">
+      <label class="sr-only" for="repo-filter">Filter repositories</label>
+      <input id="repo-filter" class="field" type="search" bind:value={filter} placeholder="Or pick a repository" />
+      <button class="icon-btn" onclick={loadRepos} disabled={loading} aria-label="Refresh the list">
+        <RefreshCw size={16} />
+      </button>
+    </div>
 
     {#if error}
       <p class="error" role="alert">{error}</p>
@@ -137,7 +189,7 @@
     {#if repos === null && !error}
       <p class="muted" role="status">Loading your repositories…</p>
     {:else if repos}
-      <ul>
+      <ul aria-label="Repositories">
         {#each shown as r (r.full_name)}
           <li>
             <button onclick={() => open(r.owner.login, r.name)}>
@@ -152,7 +204,7 @@
           </li>
         {:else}
           <li class="muted none">
-            {filter.trim() ? `No repositories match “${filter.trim()}”.` : "You don't have any repositories yet. Create one above."}
+            {filter.trim() ? `No repositories match “${filter.trim()}”.` : "Wandika can't use any of your repositories yet. Create one above, or give it access to one you have."}
           </li>
         {/each}
       </ul>
@@ -161,6 +213,9 @@
           {hidden === 1 ? "1 more repository." : `${hidden} more repositories.`} Type its name above to find it.
         </p>
       {/if}
+      <p class="muted more">
+        Not listed? <button class="link" onclick={() => openUrl(accessUrl)}>Give Wandika access to it on GitHub</button>, then come back.
+      </p>
     {/if}
   {/if}
 </div>
@@ -201,9 +256,39 @@
     margin: 0;
     font-variant-numeric: tabular-nums;
   }
-  .taken {
-    margin-top: 6px;
+  .small {
     font-size: var(--small);
+  }
+  h3 {
+    margin: 0;
+    font-size: inherit;
+  }
+  .steps {
+    display: grid;
+    gap: 10px;
+    margin: 6px 0 0;
+    padding-left: 1.4em;
+  }
+  .steps li {
+    display: grid;
+    justify-items: start;
+    gap: 4px;
+  }
+  .list-head {
+    display: flex;
+    gap: 8px;
+  }
+  .list-head .field {
+    flex: 1;
+  }
+  .link {
+    border: 0;
+    padding: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
   }
   .picker {
     display: grid;
@@ -224,25 +309,18 @@
     border: 1px solid var(--rule);
   }
   .create label {
-    font-weight: 600;
-  }
-  .create-row {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-  .create-row .field {
-    flex: 1 1 180px;
+    font-size: var(--small);
+    color: var(--graphite);
   }
   ul {
     list-style: none;
     margin: 0;
     padding: 0;
   }
-  li + li {
+  ul li + li {
     border-top: 1px solid var(--hairline);
   }
-  li button {
+  ul li button {
     display: grid;
     gap: 2px;
     width: 100%;
@@ -253,7 +331,7 @@
     background: none;
   }
   @media (hover: hover) {
-    li button:hover {
+    ul li button:hover {
       background: var(--papyrus-wash);
     }
   }

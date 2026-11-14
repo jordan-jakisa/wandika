@@ -70,9 +70,9 @@ pub async fn github_poll_login(app: S<'_>, device_code: String) -> Result<Option
     match github::poll_device_flow(&app.http, &device_code).await? {
         github::Poll::Pending => Ok(None),
         github::Poll::SlowDown => Ok(Some(json!({ "slow_down": true }))),
-        github::Poll::Done(token) => {
-            let user = github::GitHub::new(app.http.clone(), token.clone()).user().await?;
-            app.secrets.set(GITHUB_KEY, &token)?;
+        github::Poll::Done(tokens) => {
+            let user = github::GitHub::new(app.http.clone(), tokens.access_token.clone()).user().await?;
+            app.secrets.set_json(GITHUB_KEY, &tokens)?;
             app.update_settings(|s| s.user = Some(user.clone()))?;
             Ok(Some(json!({ "user": user })))
         }
@@ -93,20 +93,11 @@ pub async fn github_sign_out(app: S<'_>) -> Result<()> {
 
 #[tauri::command]
 pub async fn repos_list(app: S<'_>) -> Result<Vec<Repo>> {
-    app.github()?.repos().await
-}
-
-#[tauri::command]
-pub async fn repo_create(app: S<'_>, name: String) -> Result<Repo> {
-    let name = name.trim();
-    if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c)) {
-        return Err(msg("Use letters, numbers, dashes, dots or underscores for the repository name."));
-    }
-    app.github()?.create_repo(name).await
+    app.github().await?.repos().await
 }
 
 async fn remote_for(app: &App, owner: String, repo: String) -> Result<Target> {
-    let info = app.github()?.repo(&owner, &repo).await?;
+    let info = app.github().await?.repo(&owner, &repo).await?;
     Ok(Target { owner, repo, branch: info.default_branch.unwrap_or_else(|| "main".into()) })
 }
 
@@ -207,7 +198,7 @@ pub async fn vault_disconnect_remote(app: S<'_>) -> Result<()> {
 #[tauri::command]
 pub async fn sync_now(app: S<'_>, handle: AppHandle) -> Result<SyncReport> {
     let target = app.target()?;
-    let gh = app.github()?;
+    let gh = app.github().await?;
     let paths = app.paths()?;
     let Ok(_guard) = app.sync_lock.try_lock() else {
         return Err(crate::error::Error::SyncBusy);
@@ -1100,16 +1091,8 @@ mod tests {
     }
 
     #[test]
-    fn repository_names_are_checked_before_github_is_asked() {
-        let (a, dir) = app("repo-name");
-        for bad in ["", "  ", "my notes", "notes/2026", "nötes", "a:b"] {
-            assert_eq!(
-                block_on(repo_create(a.state(), bad.into())).unwrap_err().to_string(),
-                "Use letters, numbers, dashes, dots or underscores for the repository name.",
-                "{bad:?}"
-            );
-        }
-        assert_eq!(block_on(repo_create(a.state(), " my-notes_2026.v2 ".into())).unwrap_err().to_string(), "Sign in with GitHub first.");
+    fn repositories_need_a_github_sign_in() {
+        let (a, dir) = app("repo-list");
         assert_eq!(block_on(repos_list(a.state())).unwrap_err().to_string(), "Sign in with GitHub first.");
         let _ = std::fs::remove_dir_all(&dir);
     }
