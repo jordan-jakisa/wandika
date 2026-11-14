@@ -3,6 +3,8 @@ name = "wandika"
 version = "0.1.0"
 description = "Wandika: Markdown notes synced through GitHub"
 authors = ["Jordan Mungujakisa"]
+license = "AGPL-3.0-only"
+repository = "https://github.com/jordan-jakisa/wandika"
 edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
