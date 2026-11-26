@@ -25,7 +25,7 @@ afterEach(() => vi.useRealTimers());
 test("signed out, it offers to sign in and says why", () => {
   render(GitHubSignIn);
   expect(screen.getByRole("button", { name: "Sign in with GitHub" })).toBeEnabled();
-  expect(screen.getByText(/asks GitHub for access to your repositories/)).toBeInTheDocument();
+  expect(screen.getByText(/you choose which repositories Wandika may use/)).toBeInTheDocument();
 });
 
 test("signing in shows the device code to enter on GitHub", async () => {

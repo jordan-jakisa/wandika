@@ -29,7 +29,15 @@ export interface VaultConfig {
 
 export interface Status {
   /** `gmail`: false in public builds, which ask Google for Calendar and Tasks only. */
-  configured: { github: boolean; google: boolean; microsoft: boolean; apple: boolean; gmail: boolean };
+  configured: {
+    github: boolean;
+    /** The Wandika GitHub App's short name (github.com/apps/<name>), when the build has one. */
+    github_app?: string | null;
+    google: boolean;
+    microsoft: boolean;
+    apple: boolean;
+    gmail: boolean;
+  };
   user: User | null;
   vault: VaultConfig | null;
   known: VaultConfig[];

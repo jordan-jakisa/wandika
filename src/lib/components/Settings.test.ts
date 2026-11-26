@@ -160,10 +160,10 @@ describe("Vault", () => {
     await open("vault");
     expect(row("Only on this device").getByText("Connect a GitHub repository to sync this vault to your other devices.")).toBeInTheDocument();
     await user.click(pane().getByRole("button", { name: "Connect to GitHub" }));
-    expect(await pane().findByLabelText("New private repository")).toBeInTheDocument();
+    expect(await pane().findByLabelText("Repository name")).toBeInTheDocument();
     await user.click(pane().getByRole("button", { name: "Cancel" }));
     expect(pane().getByRole("button", { name: "Connect to GitHub" })).toBeInTheDocument();
-    expect(pane().queryByLabelText("New private repository")).not.toBeInTheDocument();
+    expect(pane().queryByLabelText("Repository name")).not.toBeInTheDocument();
   });
 
   test("signed out, connecting starts with GitHub sign-in", async () => {

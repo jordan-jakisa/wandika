@@ -112,7 +112,6 @@ export const api = {
     call<{ user?: User; slow_down?: boolean } | null>("github_poll_login", { deviceCode }),
   githubSignOut: () => call<void>("github_sign_out"),
   reposList: () => call<Repo[]>("repos_list"),
-  repoCreate: (name: string) => call<Repo>("repo_create", { name }),
   vaultOpen: (owner: string, repo: string) => call<SyncReport>("vault_open", { owner, repo }),
   vaultClose: () => call<void>("vault_close"),
   vaultCreateLocal: (name: string, folder?: string) => call<void>("vault_create_local", { name, folder }),

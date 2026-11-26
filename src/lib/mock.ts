@@ -257,7 +257,7 @@ const voice: { on: ((e: unknown) => void) | null; text: string; timers: ReturnTy
 
 const handlers: Record<string, (a: Args) => unknown> = {
   status: () => ({
-    configured: { github: true, google: true, microsoft: true, apple: true, gmail: !DEMO },
+    configured: { github: true, github_app: "wandika", google: true, microsoft: true, apple: true, gmail: !DEMO },
     user: signedIn ? { login: "jordan-jakisa", name: "Jordan", avatar_url: "" } : null,
     vault,
     known,
@@ -283,7 +283,6 @@ const handlers: Record<string, (a: Args) => unknown> = {
       { name: "rowpin", full_name: "jordan-jakisa/rowpin", owner: { login: "jordan-jakisa" }, private: true, default_branch: "main", description: null, pushed_at: new Date(Date.now() - 6048e5).toISOString() },
     ];
   },
-  repo_create: ({ name }) => ({ name, full_name: `jordan-jakisa/${name}`, owner: { login: "jordan-jakisa" }, private: true, default_branch: "main", description: null, pushed_at: null }),
   vault_open: async ({ owner, repo }) => {
     await sleep(900);
     vault = { id: `github/${owner}/${repo}`, name: repo, folder: null, remote: { owner, repo, branch: "main" } };

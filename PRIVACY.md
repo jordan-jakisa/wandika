@@ -11,7 +11,7 @@ which go to the GitHub repository you choose.
 | Source | What Wandika does with it |
 |---|---|
 | Your notes | Keeps them as Markdown files on your device. If you connect GitHub, it syncs them with the repository you pick. |
-| GitHub (`repo` scope) | Lists your repositories so you can pick one, creates one if you ask, and syncs the one you picked. |
+| GitHub (the Wandika GitHub App) | Reads and writes the files of only the repositories you give it access to, so you can pick one and sync it. It can't see your other repositories. |
 | Google Calendar (`calendar.readonly`) | Shows today's events. Adds them to a note when you ask. |
 | Google Tasks (`tasks`) | Shows your tasks, and marks one done when you tick it. |
 | Gmail (`gmail.readonly`) | Only in the developer's own build. The versions you can download don't ask for Gmail. |
@@ -48,7 +48,8 @@ storage on Android, which other apps can't read. They stay until you remove them
 - **Google:** https://myaccount.google.com/permissions
 - **Microsoft:** https://account.live.com/consent/Manage (personal accounts) or
   https://myapps.microsoft.com (work or school accounts).
-- **GitHub:** https://github.com/settings/applications
+- **GitHub:** https://github.com/settings/installations (uninstall the Wandika app, or remove
+  repositories from it) and https://github.com/settings/apps/authorizations
 
 Deleting the app also deletes its stored tokens. Your notes stay where you keep them: in the folder
 on your device and in your GitHub repository, which you control.
